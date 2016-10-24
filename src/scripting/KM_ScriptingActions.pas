@@ -107,6 +107,7 @@ type
     procedure PlayerAllianceChange(aPlayer1, aPlayer2: Byte; aCompliment, aAllied: Boolean);
     procedure PlayerAddDefaultGoals(aPlayer: Byte; aBuildings: Boolean);
     procedure PlayerDefeat(aPlayer: Word);
+    procedure PlayerShareBeacons(aPlayer1, aPlayer2: Word; aShare: Boolean);
     procedure PlayerShareFog(aPlayer1, aPlayer2: Word; aShare: Boolean);
     procedure PlayerWareDistribution(aPlayer, aWareType, aHouseType, aAmount: Byte);
     procedure PlayerWin(const aVictors: array of Integer; aTeamVictory: Boolean);
@@ -227,6 +228,26 @@ begin
       gHands[aPlayer].AI.Defeat
     else
       LogParamWarning('Actions.PlayerDefeat', [aPlayer]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Sets whether player A shares his beacons with player B.
+//* Sharing can still only happen between allied players, but this command lets you disable allies from sharing.
+procedure TKMScriptActions.PlayerShareBeacons(aPlayer1, aPlayer2: Word; aShare: Boolean);
+begin
+  try
+    if  InRange(aPlayer1, 0, gHands.Count - 1)
+    and InRange(aPlayer2, 0, gHands.Count - 1)
+    and (gHands[aPlayer1].Enabled)
+    and (gHands[aPlayer2].Enabled) then
+      gHands[aPlayer1].ShareBeacons[aPlayer2] := aShare
+    else
+      LogParamWarning('Actions.PlayerShareBeacons', [aPlayer1, aPlayer2, Byte(aShare)]);
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
