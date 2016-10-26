@@ -129,6 +129,8 @@ type
 
     procedure UnitBlock(aPlayer: Byte; aType: Word; aBlock: Boolean);
     function  UnitDirectionSet(aUnitID, aDirection: Integer): Boolean;
+    procedure UnitHPChange(aUnitID, aHP: Integer);
+    procedure UnitHPGodMode(aUnitID: Integer; aGod: Boolean);
     procedure UnitHungerSet(aUnitID, aHungerLevel: Integer);
     procedure UnitKill(aUnitID: Integer; aSilent: Boolean);
     function  UnitOrderWalk(aUnitID: Integer; X, Y: Word): Boolean;
@@ -2286,6 +2288,50 @@ begin
       gHands[aPlayer].Locks.UnitBlocked[UnitIndexToType[aType]] := aBlock
     else
       LogParamWarning('Actions.UnitBlock', [aPlayer, aType, Byte(aBlock)]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Heals/Wounds specified unit for aHP HP
+procedure TKMScriptActions.UnitHPChange(aUnitID: Integer; aHP: Integer);
+var
+  U: TKMUnit;
+begin
+  try
+    if aUnitID > 0 then
+    begin
+      U := fIDCache.GetUnit(aUnitID);
+      if U <> nil then
+        U.HitPointsChangeFromScript(aHP);
+    end
+    else
+      LogParamWarning('Actions.UnitHPChange', [aUnitID, aHP]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Enables/Disables GodMode for specified unit
+procedure TKMScriptActions.UnitHPGodMode(aUnitID: Integer; aGod: Boolean);
+var
+  U: TKMUnit;
+begin
+  try
+    if aUnitID > 0 then
+    begin
+      U := fIDCache.GetUnit(aUnitID);
+      if U <> nil then
+        U.GodMode := aGod;
+    end
+    else
+      LogParamWarning('Actions.UnitHPGodMode', [aUnitID, Byte(aGod)]);
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;

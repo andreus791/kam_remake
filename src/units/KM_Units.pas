@@ -102,6 +102,7 @@ type
     IsExchanging: Boolean; //Current walk is an exchange, used for sliding
     OnUnitDied: TKMUnitFromEvent;
     OnUnitTrained: TKMUnitEvent;
+    GodMode: Boolean;
 
     constructor Create(aID: Cardinal; aUnitType: TUnitType; aLoc: TKMPoint; aOwner: TKMHandIndex);
     constructor Load(LoadStream: TKMemoryStream); dynamic;
@@ -121,6 +122,7 @@ type
     property Direction: TKMDirection read fDirection write SetDirection;
 
     function HitTest(X,Y: Integer; const UT: TUnitType = ut_Any): Boolean;
+    function CurrentHitPoints: Byte;
 
     procedure SetActionAbandonWalk(aLocB: TKMPoint; aActionType: TUnitActionType = ua_Walk);
     procedure SetActionFight(aAction: TUnitActionType; aOpponent: TKMUnit);
@@ -150,6 +152,7 @@ type
     function GetUnitActText: UnicodeString;
     property Condition: Integer read fCondition write fCondition;
     procedure SetOwner(aOwner: TKMHandIndex);
+    procedure HitPointsChangeFromScript(aAmount: Integer);
     procedure HitPointsDecrease(aAmount: Byte; aAttacker: TKMUnit);
     property HitPointsMax: Byte read GetHitPointsMax;
     procedure CancelUnitTask;
@@ -1045,6 +1048,7 @@ begin
     fCondition    := Round(UNIT_MAX_CONDITION * UNIT_CONDITION_BASE);
   fHitPoints      := HitPointsMax;
   fHitPointCounter := 1;
+  GodMode := False;
 
   SetActionLockedStay(10, ua_Walk); //Must be locked for this initial pause so animals don't get pushed
   gTerrain.UnitAdd(NextPosition,Self);
@@ -1294,7 +1298,8 @@ begin
   if fHitPoints = HitPointsMax then
     fHitPointCounter := 1;
 
-  fHitPoints := Max(fHitPoints - aAmount, 0);
+  if not GodMode then
+    fHitPoints := Max(fHitPoints - aAmount, 0);
 
   gScriptEvents.ProcUnitWounded(Self, aAttacker);
 
@@ -1304,12 +1309,39 @@ begin
       KillUnit(aAttacker.Owner, True, False)
     else
       KillUnit(PLAYER_NONE, True, False)
+
+end;
+
+
+
+procedure TKMUnit.HitPointsChangeFromScript(aAmount: Integer);
+var
+  I: Integer;
+begin
+   if aAmount > 0 then;
+     for I := 1 to aAmount do
+       if fHitPoints < HitPointsMax then
+         Inc(fHitPoints);
+   if aAmount < 0 then
+     for I := 1 to -1 * aAmount do
+       if (fHitPoints > 0)
+       and (not GodMode) then
+         Dec(fHitPoints);
+   if (fHitPoints = 0) and (not IsDeadOrDying) then
+     if not GodMode then
+       KillUnit(PLAYER_NONE, True, False);
 end;
 
 
 function TKMUnit.GetHitPointsMax: Byte;
 begin
   Result := gRes.UnitDat[fUnitType].HitPoints;
+end;
+
+
+function TKMUnit.CurrentHitPoints: Byte;
+begin
+  Result := fHitPoints;
 end;
 
 

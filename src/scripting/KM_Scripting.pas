@@ -232,6 +232,7 @@ begin
       RegisterMethod('function ConnectedByRoad(X1, Y1, X2, Y2: Integer): Boolean');
       RegisterMethod('function ConnectedByWalking(X1, Y1, X2, Y2: Integer): Boolean');
 
+      RegisterMethod('function GameSpeed: Single');
       RegisterMethod('function GameTime: Cardinal');
       RegisterMethod('function KaMRandom: Single');
       RegisterMethod('function KaMRandomI(aMax:Integer): Integer');
@@ -326,6 +327,9 @@ begin
       RegisterMethod('function UnitDirection(aUnitID: Integer): Integer');
       RegisterMethod('function UnitsGroup(aUnitID: Integer): Integer');
       RegisterMethod('function UnitHome(aUnitID: Integer): Integer');
+      RegisterMethod('function UnitHPCurrent(aUnitID: Integer): Integer');
+      RegisterMethod('function UnitHPGodMode(aUnitID: Integer): Boolean');
+      RegisterMethod('function UnitHPMax(aUnitID: Integer): Integer');
       RegisterMethod('function UnitHunger(aUnitID: Integer): Integer');
       RegisterMethod('function UnitIdle(aUnitID: Integer): Boolean');
       RegisterMethod('function UnitLowHunger: Integer');
@@ -458,6 +462,8 @@ begin
 
       RegisterMethod('procedure UnitBlock(aPlayer: Byte; aType: Word; aBlock: Boolean)');
       RegisterMethod('function  UnitDirectionSet(aUnitID, aDirection: Integer): Boolean');
+      RegisterMethod('procedure UnitHPChange(aUnitID, aHP: Integer)');
+      RegisterMethod('procedure UnitHPGodMode(aUnitID: Integer; aGod: Boolean)');
       RegisterMethod('procedure UnitHungerSet(aUnitID, aHungerLevel: Integer)');
       RegisterMethod('procedure UnitKill(aUnitID: Integer; aSilent: Boolean)');
       RegisterMethod('function  UnitOrderWalk(aUnitID: Integer; X, Y: Word): Boolean');
@@ -623,6 +629,7 @@ begin
       RegisterMethod(@TKMScriptStates.ConnectedByRoad,    'CONNECTEDBYROAD');
       RegisterMethod(@TKMScriptStates.ConnectedByWalking, 'CONNECTEDBYWALKING');
 
+      RegisterMethod(@TKMScriptStates.GameSpeed,         'GAMESPEED');
       RegisterMethod(@TKMScriptStates.GameTime,          'GAMETIME');
       RegisterMethod(@TKMScriptStates.KaMRandom,         'KAMRANDOM');
       RegisterMethod(@TKMScriptStates.KaMRandomI,        'KAMRANDOMI');
@@ -717,6 +724,9 @@ begin
       RegisterMethod(@TKMScriptStates.UnitDirection,  'UNITDIRECTION');
       RegisterMethod(@TKMScriptStates.UnitsGroup,     'UNITSGROUP');
       RegisterMethod(@TKMScriptStates.UnitHome,       'UNITHOME');
+      RegisterMethod(@TKMScriptStates.UnitHPCurrent,  'UNITHPCURRENT');
+      RegisterMethod(@TKMScriptStates.UnitHPGodMode,  'UNITHPGODMODE');
+      RegisterMethod(@TKMScriptStates.UnitHPMax,      'UNITHPMAX');
       RegisterMethod(@TKMScriptStates.UnitHunger,     'UNITHUNGER');
       RegisterMethod(@TKMScriptStates.UnitIdle,       'UNITIDLE');
       RegisterMethod(@TKMScriptStates.UnitLowHunger,  'UNITLOWHUNGER');
@@ -849,6 +859,8 @@ begin
 
       RegisterMethod(@TKMScriptActions.UnitBlock,         'UNITBLOCK');
       RegisterMethod(@TKMScriptActions.UnitDirectionSet,  'UNITDIRECTIONSET');
+      RegisterMethod(@TKMScriptActions.UnitHPChange,      'UNITHPCHANGE');
+      RegisterMethod(@TKMScriptActions.UnitHPGodMode,     'UNITHPGODMODE');
       RegisterMethod(@TKMScriptActions.UnitHungerSet,     'UNITHUNGERSET');
       RegisterMethod(@TKMScriptActions.UnitKill,          'UNITKILL');
       RegisterMethod(@TKMScriptActions.UnitOrderWalk,     'UNITORDERWALK');

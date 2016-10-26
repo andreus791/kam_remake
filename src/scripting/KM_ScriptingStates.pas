@@ -22,6 +22,7 @@ type
 
     function FogRevealed(aPlayer: Byte; aX, aY: Word): Boolean;
 
+    function GameSpeed: Single;
     function GameTime: Cardinal;
 
     function GroupAt(aX, aY: Word): Integer;
@@ -115,6 +116,9 @@ type
     function UnitDead(aUnitID: Integer): Boolean;
     function UnitDirection(aUnitID: Integer): Integer;
     function UnitHome(aUnitID: Integer): Integer;
+    function UnitHPCurrent(aUnitID: Integer): Integer;
+    function UnitHPGodMode(aUnitID: Integer): Boolean;
+    function UnitHPMax(aUnitID: Integer): Integer;
     function UnitHunger(aUnitID: Integer): Integer;
     function UnitIdle(aUnitID: Integer): Boolean;
     function UnitLowHunger: Integer;
@@ -482,6 +486,20 @@ begin
       Result := 0;
       LogParamWarning('States.StatCitizenCount', [aPlayer]);
     end;
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Get the game speed
+//* Result: Game Speed
+function TKMScriptStates.GameSpeed: Single;
+begin
+  try
+    Result := gGame.GameSpeed;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -2298,6 +2316,78 @@ begin
       Result := '';
       LogParamWarning('States.WareTypeName', [aWareType]);
     end;
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Returns current hitpoints for specified unit or -1 if Unit ID invalid
+//* Result: HitPoints
+function TKMScriptStates.UnitHPCurrent(aUnitID: Integer): Integer;
+var
+  U: TKMUnit;
+begin
+  try
+    Result := -1; //-1 if unit id is invalid
+    if aUnitID > 0 then
+    begin
+      U := fIDCache.GetUnit(aUnitID);
+      if U <> nil then
+        Result := U.CurrentHitPoints;
+    end
+    else
+      LogParamWarning('States.UnitHPCurrent', [aUnitID]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* See if unit is immortal (GodMode enabled)
+//* Result: GodMode
+function TKMScriptStates.UnitHPGodMode(aUnitID: Integer): Boolean;
+var
+  U: TKMUnit;
+begin
+  try
+    Result := False;
+    if aUnitID > 0 then
+    begin
+      U := fIDCache.GetUnit(aUnitID);
+      if U <> nil then
+        Result := U.GodMode;
+    end
+    else
+      LogParamWarning('States.UnitHPGodMode', [aUnitID]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Returns max hitpoints for specified unit or -1 if Unit ID invalid
+//* Result: HitPoints
+function TKMScriptStates.UnitHPMax(aUnitID: Integer): Integer;
+var
+  U: TKMUnit;
+begin
+  try
+    Result := -1; //-1 if unit id is invalid
+    if aUnitID > 0 then
+    begin
+      U := fIDCache.GetUnit(aUnitID);
+      if U <> nil then
+        Result := gRes.UnitDat[U.UnitType].HitPoints;
+    end
+    else
+      LogParamWarning('States.UnitHPMax', [aUnitID]);
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
