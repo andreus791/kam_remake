@@ -247,6 +247,7 @@ type
         Button_Army_RotCW,Button_Army_Storm,Button_Army_RotCCW: TKMButton;
         Button_Army_ForUp,Button_Army_ForDown: TKMButton;
         ImageStack_Army: TKMImageStack;
+        Label_MembersCount: TKMLabel;
         Button_Army_Split,Button_Army_Join,Button_Army_Feed: TKMButton;
 
       Panel_Army_JoinGroups: TKMPanel;
@@ -1256,6 +1257,7 @@ begin
     Button_Army_RotCW  := TKMButton.Create(Panel_Army,124, 46, 56, 40, 24, rxGui, bsGame);
     Button_Army_ForUp  := TKMButton.Create(Panel_Army,  0, 92, 56, 40, 33, rxGui, bsGame);
     ImageStack_Army    := TKMImageStack.Create(Panel_Army, 62, 92, 56, 40, 43, 50);
+    Label_MembersCount := TKMLabel.Create(Panel_Army, 62, 106, 56, 20, '', fnt_Outline, taCenter);
     Button_Army_ForDown:= TKMButton.Create(Panel_Army,124, 92, 56, 40, 32, rxGui, bsGame);
     Button_Army_Split  := TKMButton.Create(Panel_Army,  0,138, 56, 34, 31, rxGui, bsGame);
     Button_Army_Join   := TKMButton.Create(Panel_Army, 62,138, 56, 34, 30, rxGui, bsGame);
@@ -1552,6 +1554,7 @@ begin
   if Panel_Army.Visible then
   begin
     ImageStack_Army.SetCount(Sender.Count, Sender.UnitsPerRow, Sender.UnitsPerRow div 2);
+    Label_MembersCount.Caption := IntToStr(Sender.Count);
     Army_ActivateControls(Sender);
   end;
 end;
