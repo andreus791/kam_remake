@@ -72,6 +72,7 @@ type
     function MapTileRotation(X, Y: Integer): Integer;
     function MapTileHeight(X, Y: Integer): Integer;
     function MapTileObject(X, Y: Integer): Integer;
+    function MapTilePassability(X, Y: Integer; Passability: Byte): Boolean;
     function MapWidth: Integer;
     function MapHeight: Integer;
 
@@ -1943,6 +1944,31 @@ begin
     begin
       Result := -1;
       LogParamWarning('States.MapTileObject', [X, Y]);
+    end;
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Returns true if specified tile has specified passability
+function TKMScriptStates.MapTilePassability(X, Y: Integer; Passability: Byte): Boolean;
+var
+  aPassability: TKMTerrainPassability;
+begin
+  try
+    if (gTerrain.TileInMapCoords(X, Y))
+    and (InRange(Passability, 0, 11)) then
+    begin
+      aPassability := TKMTerrainPassability(Passability);
+      Result := aPassability in gTerrain.Land[Y, X].Passability;
+    end
+    else
+    begin
+      Result := False;
+      LogParamWarning('States.MapTilePassability', [X, Y, Passability]);
     end;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
