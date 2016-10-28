@@ -22,6 +22,9 @@ type
     KMConditionBar_Unit: TKMPercentBar;
     Image_UnitPic: TKMImage;
 
+    Edit_GroupCondition: TKMNumericEdit;
+    Label_GroupCondition: TKMLabel;
+
     Panel_Army: TKMPanel;
     Button_Army_RotCW, Button_Army_RotCCW: TKMButton;
     Button_Army_ForUp, Button_Army_ForDown: TKMButton;
@@ -79,6 +82,11 @@ begin
   Button_ArmyFood.OnClick     := Unit_ArmyChange1;
   Button_ArmyInc.OnClickShift := Unit_ArmyChange2;
 
+  Edit_GroupCondition := TKMNumericEdit.Create(Panel_Unit, 65, 80, 0, UNIT_MAX_CONDITION);
+  Label_GroupCondition := TKMLabel.Create(Panel_Unit,65,55,116,0,'',fnt_Grey,taCenter);
+
+  Edit_GroupCondition.OnChange := Unit_ArmyChange1;
+
   //Group order
   //todo: Orders should be placed with a cursor (but keep numeric input as well?)
   TKMLabel.Create(Panel_Army, 0, 140, TB_WIDTH, 0, gResTexts[TX_MAPED_GROUP_ORDER], fnt_Outline, taLeft);
@@ -108,6 +116,8 @@ begin
   Label_UnitDescription.Show;
   Panel_Unit.Show;
   Panel_Army.Hide;
+  Label_GroupCondition.Hide;
+  Edit_GroupCondition.Hide;
 
   if fUnit = nil then Exit;
 
@@ -128,6 +138,9 @@ begin
   Label_UnitDescription.Hide;
   Panel_Unit.Show;
   Panel_Army.Show;
+  Label_GroupCondition.Show;
+  Edit_GroupCondition.Show;
+
 
   if fGroup = nil then Exit;
 
@@ -135,6 +148,8 @@ begin
   Image_UnitPic.TexID := gRes.UnitDat[fGroup.UnitType].GUIScroll;
   Image_UnitPic.FlagColor := gHands[fGroup.Owner].FlagColor;
   KMConditionBar_Unit.Position := fGroup.Condition / UNIT_MAX_CONDITION;
+  Edit_GroupCondition.Value := fGroup.Condition;
+  Label_GroupCondition.Caption := IntToStr(Round((100 * fGroup.Condition / UNIT_MAX_CONDITION))) + '%';
 
   //Warrior specific
   ImageStack_Army.SetCount(fGroup.MapEdCount, fGroup.UnitsPerRow, fGroup.UnitsPerRow div 2);
@@ -163,11 +178,21 @@ begin
   if Sender = Button_ArmyFood then
   begin
     if fGroup.Condition = UNIT_MAX_CONDITION then
-      fGroup.Condition := UNIT_MAX_CONDITION div 2
+      fGroup.Condition := Round(UNIT_MAX_CONDITION * (UNIT_CONDITION_BASE + KaMRandomS(UNIT_CONDITION_RANDOM)))
     else
       fGroup.Condition := UNIT_MAX_CONDITION;
     KMConditionBar_Unit.Position := fGroup.Condition / UNIT_MAX_CONDITION;
+    Edit_GroupCondition.Value := fGroup.Condition;
+    Label_GroupCondition.Caption := IntToStr(Round((100 * fGroup.Condition / UNIT_MAX_CONDITION))) + '%';
   end;
+
+  if Sender = Edit_GroupCondition then
+  begin
+    fGroup.Condition := Edit_GroupCondition.Value;
+    KMConditionBar_Unit.Position := fGroup.Condition / UNIT_MAX_CONDITION;
+    Label_GroupCondition.Caption := IntToStr(Round((100 * fGroup.Condition / UNIT_MAX_CONDITION))) + '%';
+  end;
+
 
   fGroup.MapEdOrder.Order := TKMInitialOrder(DropBox_ArmyOrder.ItemIndex);
   fGroup.MapEdOrder.Pos.Loc.X := Edit_ArmyOrderX.Value;
