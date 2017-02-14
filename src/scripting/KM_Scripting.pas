@@ -255,7 +255,9 @@ begin
       RegisterMethod('function GroupIdle(aGroupID: Integer): Boolean');
       RegisterMethod('function GroupMember(aGroupID, aMemberIndex: Integer): Integer');
       RegisterMethod('function GroupMemberCount(aGroupID: Integer): Integer');
+      RegisterMethod('function GroupOrdersBlocked(aGroupID: Integer): Boolean');
       RegisterMethod('function GroupOwner(aGroupID: Integer): Integer');
+      RegisterMethod('function GroupSelected(aPlayer: Byte): Integer');
       RegisterMethod('function GroupType(aGroupID: Integer): Integer');
 
       RegisterMethod('function HouseAt(aX, aY: Word): Integer');
@@ -276,6 +278,7 @@ begin
       RegisterMethod('function HouseRepair(aHouseID: Integer): Boolean');
       RegisterMethod('function HouseResourceAmount(aHouseID, aResource: Integer): Integer');
       RegisterMethod('function HouseSchoolQueue(aHouseID, QueueIndex: Integer): Integer');
+      RegisterMethod('function HouseSelected(aPlayer: Byte): Integer');
       RegisterMethod('function HouseSiteIsDigged(aHouseID: Integer): Boolean');
       RegisterMethod('function HouseType(aHouseID: Integer): Integer');
       RegisterMethod('function HouseTypeName(aHouseType: Byte): AnsiString');
@@ -341,6 +344,7 @@ begin
       RegisterMethod('function UnitOwner(aUnitID: Integer): Integer');
       RegisterMethod('function UnitPositionX(aHouseID: Integer): Integer');
       RegisterMethod('function UnitPositionY(aHouseID: Integer): Integer');
+      RegisterMethod('function UnitSelected(aPlayer: Byte): Integer');
       RegisterMethod('function UnitType(aUnitID: Integer): Integer');
       RegisterMethod('function UnitTypeName(aUnitType: Byte): AnsiString');
       RegisterMethod('function WareTypeName(aWareType: Byte): AnsiString');
@@ -699,14 +703,16 @@ begin
 
       RegisterMethod(@TKMScriptStates.FogRevealed,      'FOGREVEALED');
 
-      RegisterMethod(@TKMScriptStates.GroupAt,          'GROUPAT');
-      RegisterMethod(@TKMScriptStates.GroupDead,        'GROUPDEAD');
-      RegisterMethod(@TKMScriptStates.GroupIdle,        'GROUPIDLE');
-      RegisterMethod(@TKMScriptStates.GroupMember,      'GROUPMEMBER');
-      RegisterMethod(@TKMScriptStates.GroupColumnCount, 'GROUPCOLUMNCOUNT');
-      RegisterMethod(@TKMScriptStates.GroupMemberCount, 'GROUPMEMBERCOUNT');
-      RegisterMethod(@TKMScriptStates.GroupOwner,       'GROUPOWNER');
-      RegisterMethod(@TKMScriptStates.GroupType,        'GROUPTYPE');
+      RegisterMethod(@TKMScriptStates.GroupAt,            'GROUPAT');
+      RegisterMethod(@TKMScriptStates.GroupDead,          'GROUPDEAD');
+      RegisterMethod(@TKMScriptStates.GroupIdle,          'GROUPIDLE');
+      RegisterMethod(@TKMScriptStates.GroupMember,        'GROUPMEMBER');
+      RegisterMethod(@TKMScriptStates.GroupColumnCount,   'GROUPCOLUMNCOUNT');
+      RegisterMethod(@TKMScriptStates.GroupMemberCount,   'GROUPMEMBERCOUNT');
+      RegisterMethod(@TKMScriptStates.GroupOrdersBlocked, 'GROUPORDERSBLOCKED');
+      RegisterMethod(@TKMScriptStates.GroupOwner,         'GROUPOWNER');
+      RegisterMethod(@TKMScriptStates.GroupSelected,      'GROUPSELECTED');
+      RegisterMethod(@TKMScriptStates.GroupType,          'GROUPTYPE');
 
       RegisterMethod(@TKMScriptStates.HouseAt,                  'HOUSEAT');
       RegisterMethod(@TKMScriptStates.HouseBarracksRallyPointX, 'HOUSEBARRACKSRALLYPOINTX');
@@ -728,6 +734,7 @@ begin
       RegisterMethod(@TKMScriptStates.HouseTypeName,            'HOUSETYPENAME');
       RegisterMethod(@TKMScriptStates.HouseTypeToOccupantType,  'HOUSETYPETOOCCUPANTTYPE');
       RegisterMethod(@TKMScriptStates.HouseSchoolQueue,         'HOUSESCHOOLQUEUE');
+      RegisterMethod(@TKMScriptStates.HouseSelected,            'HOUSESELECTED');
       RegisterMethod(@TKMScriptStates.HouseSiteIsDigged,        'HOUSESITEISDIGGED');
       RegisterMethod(@TKMScriptStates.HouseUnlocked,            'HOUSEUNLOCKED');
       RegisterMethod(@TKMScriptStates.HouseWoodcutterChopOnly,  'HOUSEWOODCUTTERCHOPONLY');
@@ -791,6 +798,7 @@ begin
       RegisterMethod(@TKMScriptStates.UnitOwner,          'UNITOWNER');
       RegisterMethod(@TKMScriptStates.UnitPositionX,      'UNITPOSITIONX');
       RegisterMethod(@TKMScriptStates.UnitPositionY,      'UNITPOSITIONY');
+      RegisterMethod(@TKMScriptStates.UnitSelected,       'UNITSELECTED');
       RegisterMethod(@TKMScriptStates.UnitType,           'UNITTYPE');
       RegisterMethod(@TKMScriptStates.UnitTypeName,       'UNITTYPENAME');
       RegisterMethod(@TKMScriptStates.WareTypeName,       'WARETYPENAME');

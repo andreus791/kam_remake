@@ -30,7 +30,9 @@ type
     function GroupIdle(aGroupID: Integer): Boolean;
     function GroupMember(aGroupID, aMemberIndex: Integer): Integer;
     function GroupMemberCount(aGroupID: Integer): Integer;
+    function GroupOrdersBlocked(aGroupID: Integer): Boolean;
     function GroupOwner(aGroupID: Integer): Integer;
+    function GroupSelected(aPlayer: Byte): Integer;
     function GroupType(aGroupID: Integer): Integer;
 
     function HouseAt(aX, aY: Word): Integer;
@@ -51,6 +53,7 @@ type
     function HouseRepair(aHouseID: Integer): Boolean;
     function HouseResourceAmount(aHouseID, aResource: Integer): Integer;
     function HouseSchoolQueue(aHouseID, QueueIndex: Integer): Integer;
+    function HouseSelected(aPlayer: Byte): Integer;
     function HouseSiteIsDigged(aHouseID: Integer): Boolean;
     function HouseType(aHouseID: Integer): Integer;
     function HouseTypeName(aHouseType: Byte): AnsiString;
@@ -126,6 +129,7 @@ type
     function UnitOwner(aUnitID: Integer): Integer;
     function UnitPositionX(aUnitID: Integer): Integer;
     function UnitPositionY(aUnitID: Integer): Integer;
+    function UnitSelected(aPlayer: Byte): Integer;
     function UnitsGroup(aUnitID: Integer): Integer;
     function UnitType(aUnitID: Integer): Integer;
     function UnitTypeName(aUnitType: Byte): AnsiString;
@@ -1502,6 +1506,33 @@ begin
 end;
 
 
+//* Version: 7000+
+//* Returns ID of currently selected house
+//* Result: House ID
+function TKMScriptStates.HouseSelected(aPlayer: Byte): Integer;
+var
+  H: TObject;
+begin
+  try
+    Result := -1;
+    if InRange(aPlayer, 0, gHands.Count - 1)
+    and (gHands[aPlayer].Enabled)
+    and (aPlayer = gMySpectator.HandIndex) then
+    begin
+      H := gMySpectator.Selected;
+      if H is TKMHouse then
+        if H <> nil then
+          Result := TKMHouse(H).UID;
+    end
+    else
+      LogParamWarning('States.HouseSelected', [aPlayer]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
 //* Version: 6510
 //* Returns true if specified WIP house area is digged
 //* Result: Digged
@@ -2558,6 +2589,33 @@ begin
 end;
 
 
+//* Version: 7000+
+//* Returns ID of currently selected unit
+//* Result: Unit ID
+function TKMScriptStates.UnitSelected(aPlayer: Byte): Integer;
+var
+  U: TObject;
+begin
+  try
+    Result := -1;
+    if InRange(aPlayer, 0, gHands.Count - 1)
+    and (gHands[aPlayer].Enabled)
+    and (aPlayer = gMySpectator.HandIndex) then
+    begin
+      U := gMySpectator.Selected;
+      if U is TKMUnit then
+        if U <> nil then
+          Result := TKMUnit(U).UID;
+    end
+    else
+      LogParamWarning('States.UnitSelected', [aPlayer]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
 //* Version: 5057
 //* Returns the group that the specified unit (warrior) belongs to or -1 if it does not belong to a group
 //* Result: Group ID
@@ -2662,6 +2720,34 @@ begin
 end;
 
 
+//* Version: 7000+
+//* Returns ID of currently selected group
+//* Result: Group ID
+function TKMScriptStates.GroupSelected(aPlayer: Byte): Integer;
+var
+  G: TObject;
+begin
+  try
+    Result := -1;
+    if InRange(aPlayer, 0, gHands.Count - 1)
+    and (gHands[aPlayer].Enabled)
+    and (aPlayer = gMySpectator.HandIndex) then
+    begin
+      G := gMySpectator.Selected;
+      if G is TKMUnitGroup then
+        if G <> nil then
+          Result := TKMUnitGroup(G).UID;
+    end
+    else
+      LogParamWarning('States.GroupSelected', [aPlayer]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+
 //* Version: 5932
 //* Returns the type of the specified group or -1 if Group ID invalid
 //* Result: Group type
@@ -2703,6 +2789,30 @@ begin
     end
     else
       LogParamWarning('States.GroupMemberCount', [aGroupID]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* See whether orders for specified group are blocked
+//* Result: Orders block state
+function TKMScriptStates.GroupOrdersBlocked(aGroupID: Integer): Boolean;
+var
+  G: TKMUnitGroup;
+begin
+  try
+    Result := False;
+    if aGroupID > 0 then
+    begin
+      G := fIDCache.GetGroup(aGroupID);
+      if G <> nil then
+        Result := G.BlockOrders;
+    end
+    else
+      LogParamWarning('States.GroupOrdersBlocked', [aGroupID]);
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
