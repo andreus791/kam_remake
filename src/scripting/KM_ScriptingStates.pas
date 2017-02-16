@@ -1511,7 +1511,7 @@ end;
 //* Result: House ID
 function TKMScriptStates.HouseSelected(aPlayer: Byte): Integer;
 var
-  H: TObject;
+  Obj: TObject;
 begin
   try
     Result := -1;
@@ -1519,10 +1519,9 @@ begin
     and (gHands[aPlayer].Enabled)
     and (aPlayer = gMySpectator.HandIndex) then
     begin
-      H := gMySpectator.Selected;
-      if H is TKMHouse then
-        if H <> nil then
-          Result := TKMHouse(H).UID;
+      Obj := gMySpectator.Selected;
+      if Obj is TKMHouse then
+        Result := TKMHouse(Obj).UID;
     end
     else
       LogParamWarning('States.HouseSelected', [aPlayer]);
@@ -2594,7 +2593,7 @@ end;
 //* Result: Unit ID
 function TKMScriptStates.UnitSelected(aPlayer: Byte): Integer;
 var
-  U: TObject;
+  Obj: TObject;
 begin
   try
     Result := -1;
@@ -2602,10 +2601,11 @@ begin
     and (gHands[aPlayer].Enabled)
     and (aPlayer = gMySpectator.HandIndex) then
     begin
-      U := gMySpectator.Selected;
-      if U is TKMUnit then
-        if U <> nil then
-          Result := TKMUnit(U).UID;
+      Obj := gMySpectator.Selected;
+      if Obj is TKMUnit then
+        Result := TKMUnit(Obj).UID;
+      if Obj is TKMUnitGroup then
+        Result := TKMUnit(TKMUnitGroup(Obj).SelectedUnit).UID;
     end
     else
       LogParamWarning('States.UnitSelected', [aPlayer]);
@@ -2725,7 +2725,7 @@ end;
 //* Result: Group ID
 function TKMScriptStates.GroupSelected(aPlayer: Byte): Integer;
 var
-  G: TObject;
+  Obj: TObject;
 begin
   try
     Result := -1;
@@ -2733,10 +2733,9 @@ begin
     and (gHands[aPlayer].Enabled)
     and (aPlayer = gMySpectator.HandIndex) then
     begin
-      G := gMySpectator.Selected;
-      if G is TKMUnitGroup then
-        if G <> nil then
-          Result := TKMUnitGroup(G).UID;
+      Obj := gMySpectator.Selected;
+      if Obj is TKMUnitGroup then
+        Result := TKMUnitGroup(Obj).UID;
     end
     else
       LogParamWarning('States.GroupSelected', [aPlayer]);
