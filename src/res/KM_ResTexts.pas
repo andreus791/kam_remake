@@ -21,7 +21,7 @@ const
 type
   TKMTextLibraryCommon = class
   private
-    procedure LoadLIBXFile(FilePath: string; var aArray: TUnicodeStringArray);
+    procedure LoadLIBXFile(const FilePath: string; var aArray: TUnicodeStringArray);
   end;
 
 
@@ -30,7 +30,7 @@ type
     fTexts: TUnicodeStringArray;
     function GetTexts(aIndex: Word): UnicodeString;
   public
-    procedure LoadLocale(aPathTemplate: string); // Initial locale for UI strings
+    procedure LoadLocale(const aPathTemplate: string); // Initial locale for UI strings
     property Texts[aIndex: Word]: UnicodeString read GetTexts; default;
   end;
 
@@ -41,13 +41,17 @@ type
 
     fTexts: array of TUnicodeStringArray;
     function GetTexts(aIndex: Word): UnicodeString;
+    function GetDefaultTexts(aIndex: Word): UnicodeString;
     procedure InitLocaleIds;
+    function DoParseTextMarkup(const aText: UnicodeString; aTagSym: Char): UnicodeString;
   public
     constructor Create;
-    procedure LoadLocale(aPathTemplate: string); // All locales for Mission strings
-    function ParseTextMarkup(const aText: UnicodeString; aTagSym: Char): UnicodeString;
+    procedure LoadLocale(const aPathTemplate: string); // All locales for Mission strings
+    function ParseTextMarkup(const aText: UnicodeString): UnicodeString; overload;
+    function ParseTextMarkup(const aText: UnicodeString; aParams: array of const): UnicodeString; overload;
     function HasText(aIndex: Word): Boolean;
     property Texts[aIndex: Word]: UnicodeString read GetTexts; default;
+    property DefaultTexts[aIndex: Word]: UnicodeString read GetDefaultTexts;
     procedure Save(aStream: TKMemoryStream);
     procedure Load(aStream: TKMemoryStream);
   end;
@@ -61,7 +65,7 @@ implementation
 
 { TKMTextLibraryCommon }
 // LIBX files consist of lines. Each line has an index and a text. Lines without index are skipped
-procedure TKMTextLibraryCommon.LoadLIBXFile(FilePath: string; var aArray: TUnicodeStringArray);
+procedure TKMTextLibraryCommon.LoadLIBXFile(const FilePath: string; var aArray: TUnicodeStringArray);
   function TextToArray(const aText: UnicodeString): TUnicodeStringArray;
   var
     P, Start: PWideChar;
@@ -157,7 +161,7 @@ end;
 
 // Text file template, e.g.: ExeDir\text.%s.libx
 // We need locale separate to assemble Fallback and Default locales paths
-procedure TKMTextLibrarySingle.LoadLocale(aPathTemplate: string);
+procedure TKMTextLibrarySingle.LoadLocale(const aPathTemplate: string);
 begin
   // We load the English LIBX by default, then overwrite it with the selected language
   // (this way missing strings are in English)
@@ -214,8 +218,18 @@ begin
 end;
 
 
+// Returns in text default locale
+function TKMTextLibraryMulti.GetDefaultTexts(aIndex: Word): UnicodeString;
+begin
+  if (fPref[2] <> -1) and (aIndex < Length(fTexts[fPref[2]])) and (fTexts[fPref[2], aIndex] <> '') then
+    Result := fTexts[fPref[2], aIndex]
+  else
+    Result := '~~~String ' + IntToStr(aIndex) + ' out of range!~~~';
+end;
+
+
 // Path template with %s
-procedure TKMTextLibraryMulti.LoadLocale(aPathTemplate: string);
+procedure TKMTextLibraryMulti.LoadLocale(const aPathTemplate: string);
 var
   I: Integer;
 begin
@@ -228,10 +242,13 @@ end;
 
 // Dynamic Scripts should not have access to the actual strings (script variables should be identical for all MP players)
 // Take the string and replace every occurence of <$tag> with corresponding text from LibX
-function TKMTextLibraryMulti.ParseTextMarkup(const aText: UnicodeString; aTagSym: Char): UnicodeString;
+// - aTagSym says which tags should be replaced ($ for missions, % for game texts)
+function TKMTextLibraryMulti.DoParseTextMarkup(const aText: UnicodeString; aTagSym: Char): UnicodeString;
 var
   I, ID, Last: Integer;
 begin
+  Assert((aTagSym = '$') or (aTagSym = '%'));
+
   Result := '';
   I := 1;
   while I <= Length(aText) do
@@ -250,6 +267,21 @@ begin
     Result := Result + aText[I];
     Inc(I);
   end;
+end;
+
+
+function TKMTextLibraryMulti.ParseTextMarkup(const aText: UnicodeString): UnicodeString;
+begin
+  Assert(Self <> gResTexts, 'Only missions so far can do text parsing');
+
+  Result := DoParseTextMarkup(aText, '$');
+  Result := gResTexts.DoParseTextMarkup(Result, '%');
+end;
+
+
+function TKMTextLibraryMulti.ParseTextMarkup(const aText: UnicodeString; aParams: array of const): UnicodeString;
+begin
+  Result := ParseTextMarkup(Format(ParseTextMarkup(aText), aParams));
 end;
 
 

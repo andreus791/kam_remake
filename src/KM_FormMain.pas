@@ -2,10 +2,10 @@ unit KM_FormMain;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, ComCtrls, Controls, Buttons, Dialogs, ExtCtrls, Forms, Graphics, Math, Menus, StdCtrls, SysUtils, StrUtils, ShellAPI,
+  Classes, ComCtrls, Controls, Buttons, Dialogs, ExtCtrls, Forms, Graphics, Math, Menus, StdCtrls, SysUtils, StrUtils,
   KM_RenderControl, KM_Settings,
   {$IFDEF FPC} LResources, {$ENDIF}
-  {$IFDEF MSWindows} Windows, Messages; {$ENDIF}
+  {$IFDEF MSWindows} ShellAPI, Windows, Messages; {$ENDIF}
   {$IFDEF Unix} LCLIntf, LCLType; {$ENDIF}
 
 
@@ -78,6 +78,20 @@ type
     tbAngleZ: TTrackBar;
     Label7: TLabel;
     chkSelectionBuffer: TCheckBox;
+    GroupBoxLogs: TGroupBox;
+    chkLogDelivery: TCheckBox;
+    chkLogNetConnection: TCheckBox;
+    RGLogNetPackets: TRadioGroup;
+    chkLogsShowInChat: TCheckBox;
+    chkUIControlsID: TCheckBox;
+    ShowLogistics: TMenuItem;
+    UnitAnim_All: TMenuItem;
+    N3: TMenuItem;
+    Soldiers: TMenuItem;
+    Civilians1: TMenuItem;
+    SaveSettings: TMenuItem;
+    N4: TMenuItem;
+    ReloadSettings: TMenuItem;
     procedure Export_TreeAnim1Click(Sender: TObject);
     procedure MenuItem1Click(Sender: TObject);
     procedure FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -100,7 +114,6 @@ type
     procedure Export_TilesetClick(Sender: TObject);
     procedure Export_Sounds1Click(Sender: TObject);
     procedure Export_HouseAnim1Click(Sender: TObject);
-    procedure Export_UnitAnim1Click(Sender: TObject);
     procedure Export_Fonts1Click(Sender: TObject);
     procedure Export_DeliverLists1Click(Sender: TObject);
     procedure Button_StopClick(Sender: TObject);
@@ -121,12 +134,21 @@ type
     procedure RenderAreaMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
     procedure RenderAreaResize(aWidth, aHeight: Integer);
     procedure RenderAreaRender(aSender: TObject);
+    procedure ShowLogisticsClick(Sender: TObject);
+    procedure UnitAnim_AllClick(Sender: TObject);
+    procedure SoldiersClick(Sender: TObject);
+    procedure Civilians1Click(Sender: TObject);
+    procedure ReloadSettingsClick(Sender: TObject);
+    procedure SaveSettingsClick(Sender: TObject);
   private
     fUpdating: Boolean;
+    procedure FormKeyDownProc(aKey: Word; aShift: TShiftState);
+    procedure FormKeyUpProc(aKey: Word; aShift: TShiftState);
     {$IFDEF MSWindows}
     function GetWindowParams: TKMWindowParamsRecord;
     procedure WMSysCommand(var Msg: TWMSysCommand); message WM_SYSCOMMAND;
     procedure WMExitSizeMove(var Msg: TMessage) ; message WM_EXITSIZEMOVE;
+    procedure WMAppCommand(var Msg: TMessage); message WM_APPCOMMAND;
     {$ENDIF}
   public
     RenderArea: TKMRenderControl;
@@ -153,7 +175,9 @@ uses
   KM_ResSound,
   KM_Pics,
   KM_RenderPool,
-  KM_Hand;
+  KM_Hand,
+  KM_ResKeys, KM_FormLogistics,
+  KM_Log;
 
 
 //Remove VCL panel and use flicker-free TMyPanel instead
@@ -168,6 +192,8 @@ begin
   RenderArea.OnMouseUp := RenderAreaMouseUp;
   RenderArea.OnResize := RenderAreaResize;
   RenderArea.OnRender := RenderAreaRender;
+
+  chkSuperSpeed.Caption := 'Speed x' + IntToStr(DEBUG_SPEEDUP_SPEED);
 
   //Lazarus needs OnMouseWheel event to be for the panel, not the entire form
   {$IFDEF FPC} RenderArea.OnMouseWheel := RenderAreaMouseWheel; {$ENDIF}
@@ -195,20 +221,36 @@ begin
   Constraints.MinHeight := MIN_RESOLUTION_HEIGHT + BordersHeight;
 
   // We have to put it here, to proper window positioning for multimonitor systems
-  if not fMain.Settings.FullScreen then
+  if not gMain.Settings.FullScreen then
   begin
-    Left := fMain.Settings.WindowParams.Left;
-    Top := fMain.Settings.WindowParams.Top;
+    Left := gMain.Settings.WindowParams.Left;
+    Top := gMain.Settings.WindowParams.Top;
   end;
 
 end;
 
 
-//Restrict minimum Form ClientArea size to MENU_DESIGN_X/Y
+procedure TFormMain.FormKeyDownProc(aKey: Word; aShift: TShiftState);
+begin
+  if gGameApp <> nil then gGameApp.KeyDown(aKey, aShift);
+end;
+
+
+procedure TFormMain.FormKeyUpProc(aKey: Word; aShift: TShiftState);
+begin
+  if aKey = gResKeys[SC_DEBUG_WINDOW].Key then begin
+    SHOW_DEBUG_CONTROLS := not SHOW_DEBUG_CONTROLS;
+    ControlsSetVisibile(SHOW_DEBUG_CONTROLS);
+  end;
+
+  if gGameApp <> nil then gGameApp.KeyUp(aKey, aShift);
+end;
+
+
 procedure TFormMain.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   Assert(KeyPreview, 'MainForm should recieve all keys to pass them to fGame');
-  if gGameApp <> nil then gGameApp.KeyDown(Key, Shift);
+  FormKeyDownProc(Key, Shift);
 end;
 
 
@@ -223,25 +265,52 @@ procedure TFormMain.FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState
 begin
   Assert(KeyPreview, 'MainForm should recieve all keys to pass them to fGame');
 
-  if Key = VK_F11  then begin
-    SHOW_DEBUG_CONTROLS := not SHOW_DEBUG_CONTROLS;
-    ControlsSetVisibile(SHOW_DEBUG_CONTROLS);
-  end;
+  FormKeyUpProc(Key, Shift);
+end;
 
-  if gGameApp <> nil then gGameApp.KeyUp(Key, Shift);
+
+procedure TFormMain.ReloadSettingsClick(Sender: TObject);
+begin
+  gMain.Settings.ReloadSettings;
+  gGameApp.GameSettings.ReloadSettings;
 end;
 
 
 procedure TFormMain.RenderAreaMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-begin if gGameApp <> nil then gGameApp.MouseDown(Button, Shift, X, Y); end;
+begin
+  // Handle middle mouse button as Key
+  if Button = mbMiddle then
+    FormKeyDownProc(VK_MBUTTON, Shift)
+  else if gGameApp <> nil then
+    gGameApp.MouseDown(Button, Shift, X, Y);
+end;
 
 
 procedure TFormMain.RenderAreaMouseMove(Sender: TObject; Shift: TShiftState; X,Y: Integer);
-begin if gGameApp <> nil then gGameApp.MouseMove(Shift, X, Y); end;
+begin
+  if gGameApp <> nil then gGameApp.MouseMove(Shift, X, Y);
+end;
 
 
 procedure TFormMain.RenderAreaMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-begin if gGameApp <> nil then gGameApp.MouseUp(Button, Shift, X, Y); end;
+begin
+  if gGameApp <> nil then
+  begin
+    //Somehow Shift state does not contain mouse buttons ssLeft/ssRight/ssMiddle
+    if Button = mbLeft then
+      Include(Shift, ssLeft)
+    else if Button = mbRight then
+      Include(Shift, ssRight)
+    else if Button = mbMiddle then
+      Include(Shift, ssMiddle);
+
+    // Handle middle mouse button as Key
+    if Button = mbMiddle then
+      FormKeyUpProc(VK_MBUTTON, Shift)
+    else
+      gGameApp.MouseUp(Button, Shift, X, Y);
+  end;
+end;
 
 
 procedure TFormMain.FormMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
@@ -254,13 +323,13 @@ begin if gGameApp <> nil then gGameApp.MouseWheel(Shift, WheelDelta, MousePos.X,
 
 procedure TFormMain.RenderAreaResize(aWidth, aHeight: Integer);
 begin
-  fMain.Resize(aWidth, aHeight, GetWindowParams);
+  gMain.Resize(aWidth, aHeight, GetWindowParams);
 end;
 
 
 procedure TFormMain.RenderAreaRender(aSender: TObject);
 begin
-  fMain.Render;
+  gMain.Render;
 end;
 
 
@@ -289,7 +358,7 @@ end;
 //About
 procedure TFormMain.AboutClick(Sender: TObject);
 begin
-  fMain.ShowAbout;
+  gMain.ShowAbout;
 end;
 
 
@@ -365,14 +434,10 @@ begin
   gRes.ExportHouseAnim;
 end;
 
-procedure TFormMain.Export_UnitAnim1Click(Sender: TObject);
-begin
-  gRes.ExportUnitAnim;
-end;
 
 procedure TFormMain.HousesDat1Click(Sender: TObject);
 begin
-  gRes.HouseDat.ExportCSV(ExeDir + 'Export' + PathDelim + 'houses.dat.csv')
+  gRes.Houses.ExportCSV(ExeDir + 'Export' + PathDelim + 'houses.dat.csv')
 end;
 
 
@@ -397,8 +462,8 @@ end;
 procedure TFormMain.RGPlayerClick(Sender: TObject);
 begin
   if (gGameApp.Game = nil)
-  or gGameApp.Game.IsMapEditor
-  or gGameApp.Game.IsMultiplayer then
+    or gGameApp.Game.IsMapEditor
+    or gGameApp.Game.IsMultiplayer then
     Exit;
 
   if (gHands <> nil) and (RGPlayer.ItemIndex < gHands.Count) then
@@ -406,13 +471,36 @@ begin
 end;
 
 
+procedure TFormMain.SaveSettingsClick(Sender: TObject);
+begin
+  gMain.Settings.SaveSettings(True);
+  gGameApp.GameSettings.SaveSettings(True);
+end;
+
+procedure TFormMain.ShowLogisticsClick(Sender: TObject);
+begin
+  if not Assigned(FormLogistics) then
+    FormLogistics := TFormLogistics.Create(Self);
+  FormLogistics.Show;
+end;
+
+
+procedure TFormMain.SoldiersClick(Sender: TObject);
+begin
+  gRes.ExportUnitAnim(WARRIOR_MIN, WARRIOR_MAX);
+end;
+
+
 procedure TFormMain.chkSuperSpeedClick(Sender: TObject);
 begin
   if (gGameApp.Game = nil)
-  or (gGameApp.Game.IsMultiplayer and not MULTIPLAYER_SPEEDUP and not gGameApp.Game.IsReplay) then
+    or (gGameApp.Game.IsMultiplayer
+      and not gGameApp.Game.IsMPGameSpeedUpAllowed
+      and not MULTIPLAYER_SPEEDUP
+      and not gGameApp.Game.IsReplay) then
     Exit;
 
-  gGameApp.Game.SetGameSpeed(IfThen(chkSuperSpeed.Checked, 300, 1), False);
+  gGameApp.Game.SetGameSpeed(IfThen(chkSuperSpeed.Checked, DEBUG_SPEEDUP_SPEED, gGameApp.Game.GetNormalGameSpeed), False);
 end;
 
 
@@ -426,6 +514,12 @@ begin
 end;
 
 
+procedure TFormMain.Civilians1Click(Sender: TObject);
+begin
+  gRes.ExportUnitAnim(CITIZEN_MIN, CITIZEN_MAX);
+end;
+
+
 //Revert all controls to defaults (e.g. before MP session)
 procedure TFormMain.ControlsReset;
   procedure ResetGroupBox(aBox: TGroupBox);
@@ -433,14 +527,17 @@ procedure TFormMain.ControlsReset;
     I: Integer;
   begin
     for I := 0 to aBox.ControlCount - 1 do
-    if aBox.Controls[I] is TCheckBox then
-      TCheckBox(aBox.Controls[I]).Checked := False
-    else
-    if aBox.Controls[I] is TTrackBar then
-      TTrackBar(aBox.Controls[I]).Position := 0
-    else
-    if aBox.Controls[I] is TGroupBox then
-      ResetGroupBox(TGroupBox(aBox.Controls[I]));
+      if aBox.Controls[I] is TCheckBox then
+        TCheckBox(aBox.Controls[I]).Checked := aBox.Controls[I] = chkLogNetConnection
+      else
+      if aBox.Controls[I] is TTrackBar then
+        TTrackBar(aBox.Controls[I]).Position := 0
+      else
+      if aBox.Controls[I] is TRadioGroup then
+        TRadioGroup(aBox.Controls[I]).ItemIndex := 0
+      else
+      if (aBox.Controls[I] is TGroupBox) then
+        ResetGroupBox(TGroupBox(aBox.Controls[I]));
   end;
 begin
   fUpdating := True;
@@ -477,7 +574,7 @@ begin
   RenderArea.Top    := 0;
   RenderArea.Height := ClientHeight;
   RenderArea.Width  := ClientWidth;
-  fMain.Resize(RenderArea.Width, RenderArea.Height, GetWindowParams);
+  gMain.Resize(RenderArea.Width, RenderArea.Height, GetWindowParams);
 end;
 
 
@@ -522,22 +619,64 @@ begin
   //UI
   SHOW_CONTROLS_OVERLAY := chkUIControlsBounds.Checked;
   SHOW_TEXT_OUTLINES := chkUITextBounds.Checked;
+  SHOW_CONTROLS_ID := chkUIControlsID.Checked;
 
   //Graphics
   if AllowDebugChange then
   begin
     //Otherwise it could crash on the main menu
-    if fRenderPool <> nil then
+    if gRenderPool <> nil then
     begin
       RENDER_3D := False;//tbAngleX.Position + tbAngleY.Position <> 0;
       Label3.Caption := 'AngleX ' + IntToStr(tbAngleX.Position);
       Label4.Caption := 'AngleY ' + IntToStr(tbAngleY.Position);
       Label7.Caption := 'AngleZ ' + IntToStr(tbAngleZ.Position);
-      fRenderPool.SetRotation(-tbAngleX.Position, -tbAngleZ.Position, -tbAngleY.Position);
-      fMain.Render;
+      gRenderPool.SetRotation(-tbAngleX.Position, -tbAngleZ.Position, -tbAngleY.Position);
+      gMain.Render;
     end;
     HOUSE_BUILDING_STEP := tbBuildingStep.Position / tbBuildingStep.Max;
   end;
+
+  //Logs
+  SHOW_LOGS_IN_CHAT := chkLogsShowInChat.Checked;
+
+  if AllowDebugChange then
+  begin
+    if chkLogDelivery.Checked then
+      Include(gLog.MessageTypes, lmt_Delivery)
+    else
+      Exclude(gLog.MessageTypes, lmt_Delivery);
+
+    if chkLogNetConnection.Checked then
+      Include(gLog.MessageTypes, lmt_NetConnection)
+    else
+      Exclude(gLog.MessageTypes, lmt_NetConnection);
+
+    case RGLogNetPackets.ItemIndex of
+      0:    begin
+              Exclude(gLog.MessageTypes, lmt_NetPacketOther);
+              Exclude(gLog.MessageTypes, lmt_NetPacketCommand);
+              Exclude(gLog.MessageTypes, lmt_NetPacketPingFps);
+            end;
+      1:    begin
+              Include(gLog.MessageTypes, lmt_NetPacketOther);
+              Exclude(gLog.MessageTypes, lmt_NetPacketCommand);
+              Exclude(gLog.MessageTypes, lmt_NetPacketPingFps);
+            end;
+      2:    begin
+              Include(gLog.MessageTypes, lmt_NetPacketOther);
+              Include(gLog.MessageTypes, lmt_NetPacketCommand);
+              Exclude(gLog.MessageTypes, lmt_NetPacketPingFps);
+            end;
+      3:    begin
+              Include(gLog.MessageTypes, lmt_NetPacketOther);
+              Include(gLog.MessageTypes, lmt_NetPacketCommand);
+              Include(gLog.MessageTypes, lmt_NetPacketPingFps);
+            end;
+      else  raise Exception.Create('Unexpected RGLogNetPackets.ItemIndex = ' + IntToStr(RGLogNetPackets.ItemIndex));
+    end;
+  end;
+
 end;
 
 
@@ -558,16 +697,18 @@ begin
       ClientWidth  := MENU_DESIGN_X;
       ClientHeight := MENU_DESIGN_Y;
       // We've set default window params, so update them
-      fMain.UpdateWindowParams(GetWindowParams);
+      gMain.UpdateWindowParams(GetWindowParams);
       // Unset NeedResetToDefaults flag
-      fMain.Settings.WindowParams.NeedResetToDefaults := False;
+      gMain.Settings.WindowParams.NeedResetToDefaults := False;
     end else begin
       // Here we set window Width/Height and State
       // Left and Top will set on FormShow, so omit setting them here
       Position := poDesigned;
-      ClientWidth  := fMain.Settings.WindowParams.Width;
-      ClientHeight := fMain.Settings.WindowParams.Height;
-      WindowState  := fMain.Settings.WindowParams.State;
+      ClientWidth  := gMain.Settings.WindowParams.Width;
+      ClientHeight := gMain.Settings.WindowParams.Height;
+      Left := gMain.Settings.WindowParams.Left;
+      Top := gMain.Settings.WindowParams.Top;
+      WindowState  := gMain.Settings.WindowParams.State;
     end;
   end;
 
@@ -576,26 +717,39 @@ begin
 end;
 
 
+procedure TFormMain.UnitAnim_AllClick(Sender: TObject);
+begin
+  gRes.ExportUnitAnim(UNIT_MIN, UNIT_MAX, True);
+end;
+
+
 // Return current window params
 function TFormMain.GetWindowParams: TKMWindowParamsRecord;
   // FindTaskBar returns the Task Bar's position, and fills in
   // ARect with the current bounding rectangle.
   function FindTaskBar(var aRect: TRect): Integer;
+  {$IFDEF MSWINDOWS}
   var	AppData: TAppBarData;
+  {$ENDIF}
   begin
     Result := -1;
+    {$IFDEF MSWINDOWS}
     // 'Shell_TrayWnd' is the name of the task bar's window
     AppData.Hwnd := FindWindow('Shell_TrayWnd', nil);
     if AppData.Hwnd <> 0 then
     begin
       AppData.cbSize := SizeOf(TAppBarData);
       // SHAppBarMessage will return False (0) when an error happens.
-      if SHAppBarMessage(ABM_GETTASKBARPOS, AppData) <> 0 then
+      if SHAppBarMessage(ABM_GETTASKBARPOS,
+        {$IFDEF FPC}@AppData{$ENDIF}
+        {$IFDEF WDC}AppData{$ENDIF}
+        ) <> 0 then
       begin
         Result := AppData.uEdge;
         aRect := AppData.rc;
       end;
     end;
+    {$ENDIF}
   end;
 var
   Wp: TWindowPlacement;
@@ -653,13 +807,53 @@ begin
   else
     inherited;
 end;
-{$ENDIF}
+
+
+// Handle extra mouse buttons (forward/backward)
+procedure TFormMain.WMAppCommand(var Msg: TMessage);
+  // Parse DwKeys flags to get ShiftState
+  function GetShiftState(aDwKeys: Word): TShiftState;
+  begin
+    Result := [];
+    if (aDwKeys and MK_LBUTTON) <> 0 then
+      Include(Result, ssLeft)
+    else if (aDwKeys and MK_RBUTTON) <> 0 then
+      Include(Result, ssRight)
+    else if (aDwKeys and MK_MBUTTON) <> 0 then
+      Include(Result, ssMiddle)
+    else if (aDwKeys and MK_CONTROL) <> 0 then
+      Include(Result, ssCtrl)
+    else if (aDwKeys and MK_SHIFT) <> 0 then
+      Include(Result, ssShift);
+  end;
+
+var dwKeys,uDevice,cmd: Word;
+  ShiftState: TShiftState;
+begin
+  ShiftState := [];
+  {$IFDEF WDC}
+  uDevice := GET_DEVICE_LPARAM(Msg.lParam);
+  if uDevice = FAPPCOMMAND_MOUSE then
+  begin
+    dwKeys := GET_KEYSTATE_LPARAM(Msg.lParam);
+    ShiftState := GetShiftState(dwKeys);
+    cmd := GET_APPCOMMAND_LPARAM(Msg.lParam);
+    case cmd of
+       APPCOMMAND_BROWSER_FORWARD:  FormKeyUpProc(VK_XBUTTON1, ShiftState);
+       APPCOMMAND_BROWSER_BACKWARD: FormKeyUpProc(VK_XBUTTON2, ShiftState);
+       else
+         inherited;
+     end;
+  end;
+  {$ENDIF}
+end;
 
 
 procedure TFormMain.WMExitSizeMove(var Msg: TMessage) ;
 begin
-  fMain.Move(GetWindowParams);
+  gMain.Move(GetWindowParams);
 end;
+{$ENDIF}
 
 
 procedure TFormMain.Debug_ExportMenuClick(Sender: TObject);
@@ -687,14 +881,14 @@ begin
   //the menu while displaying a MessageBox otherwise it goes under the main form on some systems
   MenuHidden := (BorderStyle = bsNone) and (Menu = nil);
   if MenuHidden then Menu := MainMenu1;
-  fMain.CloseQuery(CanClose);
+  gMain.CloseQuery(CanClose);
   if MenuHidden then Menu := nil;
 end;
 
 
 procedure TFormMain.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-  fMain.Stop(Self);
+  gMain.Stop(Self);
 end;
 
 

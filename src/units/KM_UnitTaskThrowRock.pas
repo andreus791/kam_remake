@@ -62,12 +62,12 @@ end;
 
 function TTaskThrowRock.Execute: TTaskResult;
 begin
-  Result := TaskContinues;
+  Result := tr_TaskContinues;
 
   //Target could have been killed by another Tower or in a fight
   if fUnit.GetHome.IsDestroyed or ((fTarget<>nil) and fTarget.IsDeadOrDying) then
   begin
-    Result := TaskDone;
+    Result := tr_TaskDone;
     Exit;
   end;
 
@@ -75,7 +75,7 @@ begin
   case fPhase of
     0:  begin
           GetHome.SetState(hst_Work); //Set house to Work state
-          GetHome.fCurrentAction.SubActionWork(ha_Work2); //show Recruits back
+          GetHome.CurrentAction.SubActionWork(ha_Work2); //show Recruits back
           SetActionStay(2, ua_Walk); //pretend to be taking the stone
         end;
     1:  begin
@@ -90,7 +90,7 @@ begin
           GetHome.SetState(hst_Idle);
           SetActionStay(20, ua_Walk); //Idle before throwing another rock
         end;
-    else Result := TaskDone;
+    else Result := tr_TaskDone;
   end;
   Inc(fPhase);
 end;

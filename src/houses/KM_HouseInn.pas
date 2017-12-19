@@ -2,8 +2,9 @@ unit KM_HouseInn;
 {$I KaM_Remake.inc}
 interface
 uses
-  KM_CommonClasses, KM_Defaults, KM_Points,
-  KM_ResHouses, KM_ResWares, KM_Houses;
+  KM_Houses,
+  KM_ResWares, KM_ResHouses,
+  KM_CommonClasses, KM_Defaults;
 
 
 type
@@ -29,7 +30,9 @@ type
 
 implementation
 uses
-  KM_RenderPool, KM_HandsCollection, KM_Hand;
+  KM_RenderPool,
+  KM_Hand, KM_HandsCollection,
+  KM_Points;
 
 
 { TKMHouseInn }
@@ -137,7 +140,7 @@ begin
 
     AnimStep := FlagAnimStep - Eater[I].EatStep; //Delta is our AnimStep
 
-    fRenderPool.AddHouseEater(fPosition, Eater[I].UnitType, ua_Eat,
+    gRenderPool.AddHouseEater(fPosition, Eater[I].UnitType, ua_Eat,
                               AnimDir(I), AnimStep,
                               offX[I mod 3], offY[I mod 3],
                               gHands[fOwner].FlagColor);

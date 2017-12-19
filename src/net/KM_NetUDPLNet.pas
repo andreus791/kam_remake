@@ -6,11 +6,11 @@ uses
 
 
 type
-  TNotifyAddressDataEvent = procedure(aAddress: string; aData:pointer; aLength:cardinal)of object;
+  TNotifyAddressDataEvent = procedure(const aAddress: string; aData:pointer; aLength:cardinal)of object;
 
   TKMNetUDPLNet = class
   private
-    fUDP:TLUdp;
+    fUDP: TLUdp;
 
     fOnError: TGetStrProc;
     fOnRecieveData: TNotifyAddressDataEvent;
@@ -19,8 +19,8 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure SendPacket(const aAddress:string; const aPort:string; aData:pointer; aLength:cardinal);
-    procedure Listen(const aPort: string);
+    procedure SendPacket(const aAddress: string; const aPort: Word; aData: pointer; aLength: cardinal);
+    procedure Listen(const aPort: Word);
     procedure StopListening;
     procedure UpdateStateIdle;
     property OnError:TGetStrProc write fOnError;
@@ -47,10 +47,10 @@ begin
 end;
 
 
-procedure TKMNetUDPLNet.Listen(const aPort:string);
+procedure TKMNetUDPLNet.Listen(const aPort:Word);
 begin
   fUDP.OnReceive := Receive;
-  fUDP.Listen(StrToInt(aPort));
+  fUDP.Listen(aPort);
   fUDP.CallAction;
 end;
 
@@ -62,9 +62,9 @@ begin
 end;
 
 
-procedure TKMNetUDPLNet.SendPacket(const aAddress:string; const aPort:string; aData:pointer; aLength:cardinal);
+procedure TKMNetUDPLNet.SendPacket(const aAddress: string; const aPort: Word; aData: pointer; aLength: cardinal);
 begin
-  fUDP.Send(aData^, aLength, aAddress+':'+aPort);
+  fUDP.Send(aData^, aLength, aAddress + ':' + IntToStr(aPort));
 end;
 
 

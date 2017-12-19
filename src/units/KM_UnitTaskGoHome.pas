@@ -28,11 +28,11 @@ end;
 
 function TTaskGoHome.Execute: TTaskResult;
 begin
-  Result := TaskContinues;
+  Result := tr_TaskContinues;
 
   if fUnit.GetHome.IsDestroyed then
   begin
-    Result := TaskDone;
+    Result := tr_TaskDone;
     Exit;
   end;
 
@@ -40,7 +40,7 @@ begin
   case fPhase of
     0:  begin
           Thought := th_Home;
-          SetActionWalkToSpot(KMPointBelow(GetHome.GetEntrance));
+          SetActionWalkToSpot(GetHome.PointBelowEntrance);
         end;
     1:  SetActionGoIn(ua_Walk, gd_GoInside, GetHome);
     2:  begin
@@ -48,7 +48,7 @@ begin
           GetHome.SetState(hst_Idle);
           SetActionStay(5, ua_Walk);
         end;
-    else Result := TaskDone;
+    else Result := tr_TaskDone;
   end;
 
   Inc(fPhase);

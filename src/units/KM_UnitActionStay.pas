@@ -92,7 +92,7 @@ var
 begin
   if not StayStill then
   begin
-    Cycle := max(gRes.UnitDat[fUnit.UnitType].UnitAnim[ActionType, fUnit.Direction].Count, 1);
+    Cycle := max(gRes.Units[fUnit.UnitType].UnitAnim[ActionType, fUnit.Direction].Count, 1);
     Step  := fUnit.AnimStep mod Cycle;
 
     StepDone := fUnit.AnimStep mod Cycle = 0;
@@ -109,9 +109,9 @@ begin
 
   dec(TimeToStay);
   if TimeToStay<=0 then
-    Result := ActDone
+    Result := ar_ActDone
   else
-    Result := ActContinues;
+    Result := ar_ActContinues;
 end;
 
 

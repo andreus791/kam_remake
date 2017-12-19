@@ -59,7 +59,7 @@ var
   TempUnitType: TUnitType;
   TempX, TempY: Word;
 begin
-  Result := TaskContinues;
+  Result := tr_TaskContinues;
   with fUnit do
   case fPhase of
     0:    if Visible then
@@ -78,7 +78,7 @@ begin
               SetActionLockedStay(0, ua_Walk, False)
             else
             begin
-              SequenceLength := gRes.UnitDat[UnitType].UnitAnim[ua_Die, Direction].Count;
+              SequenceLength := gRes.Units[UnitType].UnitAnim[ua_Die, Direction].Count;
               SetActionLockedStay(SequenceLength, ua_Die, False);
               //Do not play sounds if unit is invisible to gMySpectator
               //We should not use KaMRandom below this line because sound playback depends on FOW and is individual for each player
@@ -104,11 +104,11 @@ begin
             //Notify the script that the unit is now gone from the game
             gScriptEvents.ProcUnitAfterDied(TempUnitType, TempOwner, TempX, TempY);
 
-            Result := TaskContinues;  //Running UpdateState will exit without further changes
+            Result := tr_TaskContinues;  //Running UpdateState will exit without further changes
             Exit;                     //Next UpdateState won't happen cos unit is "closed"
           end;
   end;
-  inc(fPhase);
+  Inc(fPhase);
 end;
 
 

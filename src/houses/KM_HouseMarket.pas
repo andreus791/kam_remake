@@ -2,9 +2,9 @@ unit KM_HouseMarket;
 {$I KaM_Remake.inc}
 interface
 uses
-  Math,
-  KM_CommonClasses, KM_Defaults,
-  KM_Houses, KM_ResHouses, KM_ResWares;
+  KM_Houses,
+  KM_ResWares, KM_ResHouses,
+  KM_CommonClasses, KM_Defaults;
 
 type
   //Marketplace
@@ -36,7 +36,7 @@ type
     function GetResTotal(aWare: TWareType): Word; overload;
     function CheckResIn(aWare: TWareType): Word; override;
     function CheckResOut(aWare: TWareType): Word; override;
-    procedure ResAddToIn(aResource: TWareType; aCount: Word=1; aFromScript: Boolean=false); override;
+    procedure ResAddToIn(aResource: TWareType; aCount: Integer = 1; aFromScript: Boolean = False); override;
     procedure ResTakeFromOut(aWare: TWareType; aCount: Word = 1; aFromScript: Boolean = False); override;
     function ResCanAddToIn(aRes: TWareType): Boolean; override;
     function ResOutputAvailable(aRes: TWareType; const aCount: Word): Boolean; override;
@@ -48,7 +48,11 @@ type
 
 implementation
 uses
-  KM_HandLogistics, KM_HandsCollection, KM_RenderPool, KM_Resource, KM_Sound, KM_ResSound, KM_ScriptingEvents, KM_Hand;
+  Math,
+  KM_RenderPool,
+  KM_Hand, KM_HandsCollection, KM_HandLogistics,
+  KM_Resource, KM_ResSound,
+  KM_ScriptingEvents, KM_Sound;
 
 
 { TKMHouseMarket }
@@ -125,29 +129,29 @@ begin
 end;
 
 
-procedure TKMHouseMarket.ResAddToIn(aResource: TWareType; aCount: Word = 1; aFromScript: Boolean = False);
+procedure TKMHouseMarket.ResAddToIn(aResource: TWareType; aCount: Integer = 1; aFromScript: Boolean = False);
 var ResRequired: Integer;
 begin
   //If user cancelled the exchange (or began new one with different resources already)
   //then incoming resourced should be added to Offer list immediately
   //We don't want Marketplace to act like a Store
   if not aFromScript then
-    dec(fMarketDeliveryCount[aResource], aCount); //We must keep track of the number ordered, which is less now because this has arrived
+    Dec(fMarketDeliveryCount[aResource], aCount); //We must keep track of the number ordered, which is less now because this has arrived
   if (aResource = fResFrom) and TradeInProgress then
   begin
-    inc(fMarketResIn[aResource], aCount); //Place the new resource in the IN list
+    Inc(fMarketResIn[aResource], aCount); //Place the new resource in the IN list
     //As we only order 10 resources at one time, we might need to order another now to fill the gap made by the one delivered
     ResRequired := fTradeAmount*RatioFrom - (fMarketResIn[aResource]+fMarketDeliveryCount[aResource]);
     if ResRequired > 0 then
     begin
-      inc(fMarketDeliveryCount[aResource], Min(aCount, ResRequired));
+      Inc(fMarketDeliveryCount[aResource], Min(aCount, ResRequired));
       gHands[fOwner].Deliveries.Queue.AddDemand(Self, nil, fResFrom, Min(aCount, ResRequired), dtOnce, diNorm);
     end;
     AttemptExchange;
   end
   else
   begin
-    inc(fMarketResOut[aResource], aCount); //Place the new resource in the OUT list
+    Inc(fMarketResOut[aResource], aCount); //Place the new resource in the OUT list
     gHands[fOwner].Deliveries.Queue.AddOffer(Self, aResource, aCount);
   end;
 end;
@@ -287,7 +291,7 @@ begin
   //Order as many as we can within our limit
   if (ResRequired > 0) and (OrdersAllowed > 0) then
   begin
-    inc(fMarketDeliveryCount[fResFrom], Min(ResRequired,OrdersAllowed));
+    Inc(fMarketDeliveryCount[fResFrom], Min(ResRequired,OrdersAllowed));
     gHands[fOwner].Deliveries.Queue.AddDemand(Self, nil, fResFrom, Min(ResRequired,OrdersAllowed), dtOnce, diNorm)
   end
   else
@@ -295,7 +299,7 @@ begin
     if (ResRequired < 0) then
     begin
       OrdersRemoved := gHands[fOwner].Deliveries.Queue.TryRemoveDemand(Self, fResFrom, -ResRequired);
-      dec(fMarketDeliveryCount[fResFrom], OrdersRemoved);
+      Dec(fMarketDeliveryCount[fResFrom], OrdersRemoved);
     end;
 end;
 
@@ -338,15 +342,15 @@ begin
   MaxCount := 0;
   MaxRes := wt_None;
   for R := WARE_MIN to WARE_MAX do
-  if fMarketResIn[R] > MaxCount then
+  if fMarketResIn[R] + fMarketResOut[R] > MaxCount then
   begin
-    MaxCount := fMarketResIn[R];
+    MaxCount := fMarketResIn[R] + fMarketResOut[R];
     MaxRes := R;
   end;
 
   if MaxCount > 0 then
     //FlagAnimStep is required for horses animation
-    fRenderPool.AddHouseMarketSupply(fPosition, MaxRes, MaxCount, FlagAnimStep);
+    gRenderPool.AddHouseMarketSupply(fPosition, MaxRes, MaxCount, FlagAnimStep);
 end;
 
 

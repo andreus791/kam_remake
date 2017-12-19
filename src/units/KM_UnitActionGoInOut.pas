@@ -39,6 +39,7 @@ type
     function GetExplanation: UnicodeString; override;
     property GetHasStarted: boolean read fHasStarted;
     property GetWaitingForPush: boolean read fWaitingForPush;
+    property Direction: TGoInDirection read fDirection;
     function GetDoorwaySlide(aCheck: TCheckAxis): Single;
     function Execute: TActionResult; override;
     procedure Save(SaveStream: TKMemoryStream); override;
@@ -110,7 +111,7 @@ begin
   and (gTerrain.Land[fUnit.NextPosition.Y,fUnit.NextPosition.X].IsUnit = fUnit) then
   begin
     gTerrain.UnitRem(fUnit.NextPosition);
-    if not KMSamePoint(fDoor, KMPoint(0,0)) then
+    if not KMSamePoint(fDoor, KMPOINT_ZERO) then
       fUnit.PositionF := KMPointF(fDoor); //Put us back inside the house
   end;
 
@@ -137,8 +138,8 @@ procedure TUnitActionGoInOut.IncDoorway;
 begin
   Assert(not fUsedDoorway, 'Inc doorway when already in use?');
 
-  if fHouse<>nil then inc(fHouse.DoorwayUse);
-  fUsedDoorway := true;
+  if fHouse <> nil then Inc(fHouse.DoorwayUse);
+  fUsedDoorway := True;
 end;
 
 
@@ -189,7 +190,7 @@ begin
     if U <> nil then
     begin
       fPushedUnit := U.GetUnitPointer;
-      fPushedUnit.SetActionWalkPushed(gTerrain.GetOutOfTheWay(U, KMPoint(0,0), tpWalk));
+      fPushedUnit.SetActionWalkPushed(gTerrain.GetOutOfTheWay(U, KMPOINT_ZERO, tpWalk));
     end;
   end;
 end;
@@ -253,9 +254,9 @@ function TUnitActionGoInOut.GetDoorwaySlide(aCheck: TCheckAxis): Single;
 var Offset: Integer;
 begin
   if aCheck = ax_X then
-    Offset := gRes.HouseDat[fHouse.HouseType].EntranceOffsetXpx - CELL_SIZE_PX div 2
+    Offset := gRes.Houses[fHouse.HouseType].EntranceOffsetXpx - CELL_SIZE_PX div 2
   else
-    Offset := gRes.HouseDat[fHouse.HouseType].EntranceOffsetYpx;
+    Offset := gRes.Houses[fHouse.HouseType].EntranceOffsetYpx;
 
   if (fHouse = nil) or not fHasStarted then
     Result := 0
@@ -267,13 +268,13 @@ end;
 function TUnitActionGoInOut.Execute: TActionResult;
 var Distance:single; U:TKMUnit;
 begin
-  Result := ActContinues;
+  Result := ar_ActContinues;
 
   if not fHasStarted then
   begin
     //Set Door and Street locations
-    fDoor := KMPoint(fUnit.GetPosition.X, fUnit.GetPosition.Y - round(fStep));
-    fStreet := KMPoint(fUnit.GetPosition.X, fUnit.GetPosition.Y + 1 - round(fStep));
+    fDoor := KMPoint(fUnit.GetPosition.X, fUnit.GetPosition.Y - Round(fStep));
+    fStreet := KMPoint(fUnit.GetPosition.X, fUnit.GetPosition.Y + 1 - Round(fStep));
 
     case fDirection of
       gd_GoInside:  WalkIn;
@@ -314,8 +315,8 @@ begin
     else
     begin //There's still some unit - we can't go outside
       if (U <> fPushedUnit) //The unit has switched places with another one, so we must start again
-      or not (U.GetUnitAction is TUnitActionWalkTo) //Unit was interupted (no longer pushed), so start again
-      or not TUnitActionWalkTo(U.GetUnitAction).WasPushed then
+        or not (U.GetUnitAction is TUnitActionWalkTo) //Unit was interupted (no longer pushed), so start again
+        or not TUnitActionWalkTo(U.GetUnitAction).WasPushed then
       begin
         fHasStarted := False;
         fWaitingForPush := False;
@@ -332,24 +333,24 @@ begin
       ((fDirection = gd_GoOutside) and (fStep < 0.2)) or
       ((fDirection = gd_GoInside) and (fStep > 0.8))
       )
-  and (fStreet.X = fDoor.X) //We are walking straight
-  and (fHouse <> nil) then
+    and (fStreet.X = fDoor.X) //We are walking straight
+    and (fHouse <> nil) then
     fUnit.IsExchanging := (fHouse.DoorwayUse > 1);
 
-  Assert((fHouse = nil) or KMSamePoint(fDoor, fHouse.GetEntrance)); //Must always go in/out the entrance of the house
-  Distance := gRes.UnitDat[fUnit.UnitType].Speed;
+  Assert((fHouse = nil) or KMSamePoint(fDoor, fHouse.Entrance)); //Must always go in/out the entrance of the house
+  Distance := gRes.Units[fUnit.UnitType].Speed;
 
   //Actual speed is slower if we are moving diagonally, due to the fact we are moving in X and Y
   if (fStreet.X - fDoor.X <> 0) then
     Distance := Distance / 1.41; {sqrt (2) = 1.41421 }
 
-  fStep := fStep - Distance * shortint(fDirection);
+  fStep := fStep - Distance * ShortInt(fDirection);
   fUnit.PositionF := KMLerp(fDoor, fStreet, fStep);
   fUnit.Visible := (fHouse = nil) or (fHouse.IsDestroyed) or (fStep > 0); //Make unit invisible when it's inside of House
 
   if (fStep <= 0) or (fStep >= 1) then
   begin
-    Result := ActDone;
+    Result := ar_ActDone;
     fUnit.IsExchanging := False;
     if fUsedDoorway then DecDoorway;
     if fDirection = gd_GoInside then
@@ -368,7 +369,7 @@ begin
       and (fUnit.GetHome <> nil)
       and (fUnit.GetHome.HouseType = ht_Woodcutters)
       and (fUnit.GetHome = fHouse) then //And is the house we are walking from
-        fHouse.fCurrentAction.SubActionAdd([ha_Flagpole]);
+        fHouse.CurrentAction.SubActionAdd([ha_Flagpole]);
 
       if Assigned(OnWalkedIn) then
         OnWalkedIn;

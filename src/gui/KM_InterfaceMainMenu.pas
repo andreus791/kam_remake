@@ -2,6 +2,8 @@ unit KM_InterfaceMainMenu;
 {$I KaM_Remake.inc}
 interface
 uses
+  {$IFDEF MSWindows} Windows, {$ENDIF}
+  {$IFDEF Unix} LCLType, {$ENDIF}
   Classes, Controls, Math, SysUtils, KromUtils,
   KM_Controls, KM_Defaults, KM_Pics, KM_Networking,
   KM_InterfaceDefaults,
@@ -42,25 +44,27 @@ type
     fMenuResultsSP: TKMMenuResultsSP;
     fMenuSingleMap: TKMMenuSingleMap;
     fMenuSinglePlayer: TKMMenuSinglePlayer;
+
+    fMenuPage: TKMMenuPageCommon;
   protected
     Panel_Menu: TKMPanel;
     Label_Version: TKMLabel;
   public
     constructor Create(X,Y: Word);
     destructor Destroy; override;
-    procedure PageChange(Dest: TKMMenuPage; aText: UnicodeString = '');
+    procedure PageChange(Dest: TKMMenuPageType; const aText: UnicodeString = '');
     procedure AppendLoadingText(const aText: string);
     procedure ShowResultsMP(aMsg: TGameResultMsg);
     procedure ShowResultsSP(aMsg: TGameResultMsg);
     function GetChatState: TChatState;
     procedure SetChatState(const aChatState: TChatState);
-    procedure ExportPages(aPath: string); override;
+    procedure ExportPages(const aPath: string); override;
     procedure ReturnToLobby(const aSaveName: UnicodeString);
 
-    procedure KeyDown(Key:Word; Shift: TShiftState); override;
-    procedure KeyUp(Key:Word; Shift: TShiftState); override;
+    procedure KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
+    procedure KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
-    procedure MouseMove(Shift: TShiftState; X,Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
 
     procedure Resize(X,Y: Word); override;
@@ -70,7 +74,7 @@ type
 
 implementation
 uses
-  KM_ResTexts, KM_Campaigns, KM_GameApp, KM_Log, KM_RenderUI, KM_ResFonts;
+  KM_Main, KM_ResTexts, KM_Campaigns, KM_GameApp, KM_Game, KM_Log, KM_RenderUI, KM_ResFonts;
 
 
 { TKMMainMenuInterface }
@@ -86,11 +90,11 @@ begin
   Panel_Menu := TKMPanel.Create(Panel_Main, (X - MENU_DESIGN_X) div 2, (Y - MENU_DESIGN_Y) div 2, MENU_DESIGN_X, MENU_DESIGN_Y);
   Panel_Menu.AnchorsCenter;
 
-  //Background is the same for all pages, except Results/Campaign, which will render ontop
-  with TKMImage.Create(Panel_Menu,-448,-216, 960, 600, 17, rxGuiMain) do Anchors := [];
-  with TKMImage.Create(Panel_Menu, 512,-216, 960, 600, 18, rxGuiMain) do Anchors := [];
-  with TKMImage.Create(Panel_Menu,-448, 384, 960, 600, 19, rxGuiMain) do Anchors := [];
-  with TKMImage.Create(Panel_Menu, 512, 384, 960, 600, 20, rxGuiMain) do Anchors := [];
+  // Background is the same for all pages, except Results/Campaign, which will render ontop
+  TKMImage.Create(Panel_Menu,-448,-216, 960, 600, 17, rxGuiMain).AnchorsCenter;
+  TKMImage.Create(Panel_Menu, 512,-216, 960, 600, 18, rxGuiMain).AnchorsCenter;
+  TKMImage.Create(Panel_Menu,-448, 384, 960, 600, 19, rxGuiMain).AnchorsCenter;
+  TKMImage.Create(Panel_Menu, 512, 384, 960, 600, 20, rxGuiMain).AnchorsCenter;
 
   fMenuMain          := TKMMenuMain.Create(Panel_Menu, PageChange);
   fMenuSinglePlayer  := TKMMenuSinglePlayer.Create(Panel_Menu, PageChange);
@@ -204,24 +208,46 @@ begin
 end;
 
 
-procedure TKMMainMenuInterface.PageChange(Dest: TKMMenuPage; aText: UnicodeString = '');
+procedure TKMMainMenuInterface.PageChange(Dest: TKMMenuPageType; const aText: UnicodeString = '');
 var
   I: Integer;
   cmp: TKMCampaignId;
+  Version: String;
 begin
-  Label_Version.Caption := 'KaM Remake - ' + GAME_VERSION + ' / ' + gGameApp.RenderVersion;
+  Version := GAME_VERSION + ' / ' + gGameApp.RenderVersion;
+
+  if gMain <> nil then // could be nil if used from utils
+    gMain.StatusBarText(SB_ID_KMR_VER,'KMR ' +  Version);
 
   //Hide all other pages
   for I := 0 to Panel_Menu.ChildCount - 1 do
     if Panel_Menu.Childs[I] is TKMPanel then
       Panel_Menu.Childs[I].Hide;
 
+  Label_Version.Caption := '';
+
   case Dest of
-    gpMainMenu:     fMenuMain.Show;
-    gpSingleplayer: fMenuSinglePlayer.Show;
-    gpLoad:         fMenuLoad.Show;
-    gpSingleMap:    fMenuSingleMap.Show;
-    gpMultiplayer:  fMenuMultiplayer.Show(aText);
+    gpMainMenu:     begin
+                      Label_Version.Caption := 'KAM Remake - ' + Version;
+                      fMenuMain.Show;
+                      fMenuPage := fMenuMain;
+                    end;
+    gpSingleplayer: begin
+                      fMenuSinglePlayer.Show;
+                      fMenuPage := fMenuSinglePlayer;
+                    end;
+    gpLoad:         begin
+                      fMenuLoad.Show;
+                      fMenuPage := fMenuLoad;
+                    end;
+    gpSingleMap:    begin
+                      fMenuSingleMap.Show;
+                      fMenuPage := fMenuSingleMap;
+                    end;
+    gpMultiplayer:  begin
+                      fMenuMultiplayer.Show(aText);
+                      fMenuPage := fMenuMultiplayer;
+                    end;
     gpLobby:        begin
                       if aText = 'HOST' then
                         fMenuLobby.Show(lpk_Host, gGameApp.Networking, Panel_Menu.Height)
@@ -229,26 +255,57 @@ begin
                       if aText = 'JOIN' then
                         fMenuLobby.Show(lpk_Joiner, gGameApp.Networking, Panel_Menu.Height)
                       else
-                        Assert(False);
+                        raise Exception.Create('');
+                      fMenuPage := fMenuLobby;
                     end;
     gpCampaign:     begin
                       cmp[0] := Ord(aText[1]);
                       cmp[1] := Ord(aText[2]);
                       cmp[2] := Ord(aText[3]);
                       fMenuCampaign.Show(cmp);
+                      fMenuPage := fMenuCampaign;
                     end;
-    gpCampSelect:   fMenuCampaigns.Show;
-    gpCredits:      fMenuCredits.Show;
-    gpOptions:      fMenuOptions.Show;
-    gpMapEditor:    fMenuMapEditor.Show;
-    gpReplays:      fMenuReplays.Show;
-    gpError:        fMenuError.Show(aText);
-    gpLoading:      fMenuLoading.Show(aText);
+    gpCampSelect:   begin
+                      fMenuCampaigns.Show;
+                      fMenuPage := fMenuCampaigns;
+                    end;
+    gpCredits:      begin
+                      fMenuCredits.Show;
+                      fMenuPage := fMenuCredits;
+                    end;
+    gpOptions:      begin
+                      fMenuOptions.Show;
+                      fMenuPage := fMenuOptions;
+                    end;
+    gpMapEditor:    begin
+                      fMenuMapEditor.Show;
+                      fMenuPage := fMenuMapEditor;
+                    end;
+    gpReplays:      begin
+                      fMenuReplays.Show;
+                      fMenuPage := fMenuReplays;
+                    end;
+    gpResultsMP:    begin
+                      fMenuResultsMP.Show(gr_ShowStats);
+                      fMenuPage := fMenuResultsMP;
+                    end;
+    gpResultsSP:    begin
+                      fMenuResultsSP.Show(gr_ShowStats);
+                      fMenuPage := fMenuResultsSP;
+                    end;
+    gpError:        begin
+                      fMenuError.Show(aText);
+                      fMenuPage := fMenuError;
+                    end;
+    gpLoading:      begin
+                      fMenuLoading.Show(aText);
+                      fMenuPage := fMenuLoading;
+                    end;
   end;
 end;
 
 
-procedure TKMMainMenuInterface.ExportPages(aPath: string);
+procedure TKMMainMenuInterface.ExportPages(const aPath: string);
 var
   path: string;
   I, K: Integer;
@@ -285,28 +342,37 @@ begin
 end;
 
 
-procedure TKMMainMenuInterface.KeyDown(Key:Word; Shift: TShiftState);
+procedure TKMMainMenuInterface.KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean);
 begin
+  aHandled := True; // assume we handle all keys here
+
   if fMyControls.KeyDown(Key, Shift) then Exit; //Handled by Controls
+
+  if (fMenuPage <> nil) then
+    fMenuPage.MenuKeyDown(Key, Shift);
 end;
 
 
-procedure TKMMainMenuInterface.KeyUp(Key:Word; Shift: TShiftState);
+procedure TKMMainMenuInterface.KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean);
 begin
+  aHandled := True; // assume we handle all keys here
+
   if fMyControls.KeyUp(Key, Shift) then Exit; //Handled by Controls
 end;
 
 
 procedure TKMMainMenuInterface.MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
 begin
-  fMyControls.MouseDown(X,Y,Shift,Button);
+  fMyControls.MouseDown(X, Y, Shift, Button);
 end;
 
 
 //Do something related to mouse movement in menu
-procedure TKMMainMenuInterface.MouseMove(Shift: TShiftState; X,Y: Integer);
+procedure TKMMainMenuInterface.MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean);
 begin
-  fMyControls.MouseMove(X,Y,Shift);
+  aHandled := True; // assume we always handle mouse move
+
+  fMyControls.MouseMove(X, Y, Shift);
 
   fMenuCampaign.MouseMove(Shift, X, Y);
 end;
@@ -314,7 +380,7 @@ end;
 
 procedure TKMMainMenuInterface.MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
 begin
-  fMyControls.MouseUp(X,Y,Shift,Button);
+  fMyControls.MouseUp(X, Y, Shift, Button);
   Exit; //We could have caused gGameApp reinit (i.e. resolution change), so exit at once
 end;
 
@@ -322,11 +388,13 @@ end;
 //Should update anything we want to be updated, obviously
 procedure TKMMainMenuInterface.UpdateState(aTickCount: Cardinal);
 begin
+  inherited;
   fMenuLobby.UpdateState;
   fMenuMapEditor.UpdateState;
   fMenuLoad.UpdateState;
   fMenuReplays.UpdateState;
   fMenuSingleMap.UpdateState;
+  fMenuCampaign.UpdateState(aTickCount);
 end;
 
 

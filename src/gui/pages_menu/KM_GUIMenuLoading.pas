@@ -7,7 +7,7 @@ uses
 
 
 type
-  TKMMenuLoading = class
+  TKMMenuLoading = class (TKMMenuPageCommon)
   private
     fOnPageChange: TGUIEventText;
   protected
@@ -17,7 +17,7 @@ type
     constructor Create(aParent: TKMPanel; aOnPageChange: TGUIEventText);
 
     procedure AppendText(const aText: UnicodeString);
-    procedure Show(aText: UnicodeString);
+    procedure Show(const aText: UnicodeString);
   end;
 
 
@@ -48,7 +48,7 @@ begin
 end;
 
 
-procedure TKMMenuLoading.Show(aText: UnicodeString);
+procedure TKMMenuLoading.Show(const aText: UnicodeString);
 begin
   Label_Loading.Caption := aText;
   Panel_Loading.Show;

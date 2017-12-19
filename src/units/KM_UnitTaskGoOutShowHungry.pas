@@ -14,7 +14,7 @@ type
 
 implementation
 uses
-  KM_Utils;
+  KM_CommonUtils;
 
 
 { TTaskGoOutShowHungry }
@@ -27,11 +27,11 @@ end;
 
 function TTaskGoOutShowHungry.Execute:TTaskResult;
 begin
-  Result := TaskContinues;
+  Result := tr_TaskContinues;
   if fUnit.GetHome.IsDestroyed then
   begin
-    Result := TaskDone;
-    exit;
+    Result := tr_TaskDone;
+    Exit;
   end;
 
   with fUnit do
@@ -45,7 +45,7 @@ begin
          GetHome.SetState(hst_Empty);
        end;
     2: SetActionLockedStay(4,ua_Walk);
-    3: SetActionWalkToSpot(KMPointBelow(fUnit.GetHome.GetEntrance));
+    3: SetActionWalkToSpot(fUnit.GetHome.PointBelowEntrance);
     4: SetActionGoIn(ua_Walk,gd_GoInside,fUnit.GetHome);
     5: begin
          SetActionStay(20+KaMRandom(10),ua_Walk);
@@ -53,7 +53,7 @@ begin
        end;
     else begin
          Thought := th_None;
-         Result := TaskDone;
+         Result := tr_TaskDone;
        end;
   end;
   inc(fPhase);

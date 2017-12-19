@@ -2,7 +2,7 @@ unit KM_UnitActionFight;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, KM_CommonClasses, KM_Defaults, KM_Utils, KromUtils, Math, SysUtils, KM_Units, KM_Points;
+  Classes, KM_CommonClasses, KM_Defaults, KM_CommonUtils, KromUtils, Math, SysUtils, KM_Units, KM_Points;
 
 
 //Fight until we die or the opponent dies
@@ -62,7 +62,7 @@ begin
   fFightDelay     := -1;
   fOpponent       := aOpponent.GetUnitPointer;
   aUnit.Direction := KMGetDirection(fUnit.PositionF, fOpponent.PositionF); //Face the opponent from the beginning
-  fVertexOccupied := KMPoint(0,0);
+  fVertexOccupied := KMPOINT_ZERO;
   if KMStepIsDiag(fUnit.GetPosition, fOpponent.GetPosition) and not TKMUnitWarrior(fUnit).IsRanged then
     IncVertex(fUnit.GetPosition, fOpponent.GetPosition);
 end;
@@ -71,7 +71,7 @@ end;
 destructor TUnitActionFight.Destroy;
 begin
   gHands.CleanUpUnitPointer(fOpponent);
-  if not KMSamePoint(fVertexOccupied, KMPoint(0,0)) then
+  if not KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then
     DecVertex;
   inherited;
 end;
@@ -128,7 +128,7 @@ end;
 procedure TUnitActionFight.IncVertex(aFrom, aTo: TKMPoint);
 begin
   //Tell gTerrain that this vertex is being used so no other unit walks over the top of us
-  Assert(KMSamePoint(fVertexOccupied, KMPoint(0,0)), 'Fight vertex in use');
+  Assert(KMSamePoint(fVertexOccupied, KMPOINT_ZERO), 'Fight vertex in use');
 
   fUnit.VertexAdd(aFrom, aTo);
   fVertexOccupied := KMGetDiagVertex(aFrom,aTo);
@@ -138,10 +138,10 @@ end;
 procedure TUnitActionFight.DecVertex;
 begin
   //Tell gTerrain that this vertex is not being used anymore
-  if KMSamePoint(fVertexOccupied, KMPoint(0,0)) then exit;
+  if KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then exit;
 
   fUnit.VertexRem(fVertexOccupied);
-  fVertexOccupied := KMPoint(0,0);
+  fVertexOccupied := KMPOINT_ZERO;
 end;
 
 
@@ -157,7 +157,8 @@ begin
   //We should not use KaMRandom below this line because sound playback depends on FOW and is individual for each player
   if gMySpectator.FogOfWar.CheckTileRevelation(fUnit.GetPosition.X, fUnit.GetPosition.Y) < 255 then Exit;
 
-  if MakeBattleCry then gSoundPlayer.PlayWarrior(fUnit.UnitType, sp_BattleCry, fUnit.PositionF);
+  if MakeBattleCry then
+    gSoundPlayer.PlayWarrior(fUnit.UnitType, sp_BattleCry, fUnit.PositionF);
 
   case fUnit.UnitType of
     ut_Arbaletman: gSoundPlayer.Play(sfx_CrossbowDraw, fUnit.PositionF); // Aiming
@@ -175,7 +176,7 @@ end;
 
 function TUnitActionFight.ExecuteValidateOpponent(Step: Byte): TActionResult;
 begin
-  Result := ActContinues;
+  Result := ar_ActContinues;
   //See if Opponent has walked away (i.e. Serf) or died
   if fOpponent.IsDeadOrDying //Don't continue to fight dead units
   or not fOpponent.Visible //Don't continue to fight units that have went into a house
@@ -206,7 +207,7 @@ begin
     else
     begin
       //No one else to fight, so we exit
-      Result := ActDone;
+      Result := ar_ActDone;
     end;
   end;
 end;
@@ -243,7 +244,7 @@ begin
       ut_Arbaletman:  gProjectiles.AimTarget(fUnit.PositionF, fOpponent, pt_Bolt, fUnit, RANGE_ARBALETMAN_MAX, RANGE_ARBALETMAN_MIN);
       ut_Bowman:      gProjectiles.AimTarget(fUnit.PositionF, fOpponent, pt_Arrow, fUnit, RANGE_BOWMAN_MAX, RANGE_BOWMAN_MIN);
       ut_Slingshot:   ;
-      else            Assert(False, 'Unknown shooter');
+      else            raise Exception.Create('Unknown shooter');
     end;
 
     fFightDelay := -1; //Reset
@@ -274,20 +275,20 @@ begin
 
     //Tell our AI that we are in a battle and might need assistance! (only for melee battles against warriors)
     if (fOpponent is TKMUnitWarrior) and not TKMUnitWarrior(fUnit).IsRanged then
-      gHands[fUnit.Owner].AI.UnitAttackNotification(fUnit, TKMUnitWarrior(fOpponent));
+      gHands[fUnit.Owner].AI.UnitAttackNotification(fUnit, TKMUnitWarrior(fOpponent), False);
   end;
 
   //Melee units place hit on this step
   if Step = STRIKE_STEP then
   begin
     //Base damage is the unit attack strength + AttackHorse if the enemy is mounted
-    Damage := gRes.UnitDat[fUnit.UnitType].Attack;
+    Damage := gRes.Units[fUnit.UnitType].Attack;
     if (fOpponent.UnitType in [low(UnitGroups) .. high(UnitGroups)]) and (UnitGroups[fOpponent.UnitType] = gt_Mounted) then
-      Damage := Damage + gRes.UnitDat[fUnit.UnitType].AttackHorse;
+      Damage := Damage + gRes.Units[fUnit.UnitType].AttackHorse;
 
     Damage := Damage * (GetDirModifier(fUnit.Direction,fOpponent.Direction)+1); //Direction modifier
     //Defence modifier
-    Damage := Damage div Math.max(gRes.UnitDat[fOpponent.UnitType].Defence, 1); //Not needed, but animals have 0 defence
+    Damage := Damage div Math.max(gRes.Units[fOpponent.UnitType].Defence, 1); //Not needed, but animals have 0 defence
 
     IsHit := (Damage >= KaMRandom(101)); //Damage is a % chance to hit
     if IsHit then
@@ -319,11 +320,11 @@ function TUnitActionFight.Execute: TActionResult;
 var
   Cycle, Step: Byte;
 begin
-  Cycle := max(gRes.UnitDat[fUnit.UnitType].UnitAnim[ActionType, fUnit.Direction].Count, 1);
+  Cycle := max(gRes.Units[fUnit.UnitType].UnitAnim[ActionType, fUnit.Direction].Count, 1);
   Step  := fUnit.AnimStep mod Cycle;
 
   Result := ExecuteValidateOpponent(Step);
-  if Result = ActDone then Exit;
+  if Result = ar_ActDone then Exit;
   Step := fUnit.AnimStep mod Cycle; //Can be changed by ExecuteValidateOpponent, so recalculate it
 
   //Opponent can walk next to us, keep facing him
@@ -335,7 +336,7 @@ begin
     if not UpdateVertexUsage(fUnit.GetPosition, fOpponent.GetPosition) then
     begin
       //The vertex is being used so we can't fight
-      Result := ActDone;
+      Result := ar_ActDone;
       Exit;
     end;
 

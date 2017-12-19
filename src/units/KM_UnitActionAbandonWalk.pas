@@ -41,10 +41,10 @@ end;
 
 destructor TUnitActionAbandonWalk.Destroy;
 begin
-  if not KMSamePoint(fVertexOccupied, KMPoint(0,0)) then
+  if not KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then
   begin
     fUnit.VertexRem(fVertexOccupied); //Unoccupy vertex
-    fVertexOccupied := KMPoint(0,0);
+    fVertexOccupied := KMPOINT_ZERO;
   end;
   inherited;
 end;
@@ -75,23 +75,23 @@ var
   DX, DY: ShortInt;
   WalkX, WalkY, Distance: Single;
 begin
-  Result := ActContinues;
+  Result := ar_ActContinues;
 
   //Execute the route in series of moves
-  Distance := gRes.UnitDat[fUnit.UnitType].Speed;
+  Distance := gRes.Units[fUnit.UnitType].Speed;
 
   //Check if unit has arrived on tile
   if KMSamePointF(fUnit.PositionF, KMPointF(fWalkTo), Distance/2) then
   begin
     fUnit.PositionF := KMPointF(fWalkTo); //Set precise position to avoid rounding errors
     fUnit.IsExchanging := False; //Disable sliding (in case it was set in previous step)
-    if not KMSamePoint(fVertexOccupied, KMPoint(0,0)) then
+    if not KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then
     begin
       fUnit.VertexRem(fVertexOccupied); //Unoccupy vertex
-      fVertexOccupied := KMPoint(0,0);
+      fVertexOccupied := KMPOINT_ZERO;
     end;
     StepDone := True;
-    Result := ActDone;
+    Result := ar_ActDone;
     exit;
   end;
 

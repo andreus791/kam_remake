@@ -2,9 +2,9 @@ unit KM_AIGeneral;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, KromUtils, Math, SysUtils,
-  KM_Defaults, KM_CommonClasses, KM_Points, KM_AISetup, KM_AIDefensePos,
-  KM_UnitGroups, KM_Units, KM_AIAttacks;
+  KM_AISetup, KM_AIAttacks, KM_AIDefensePos,
+  KM_Units, KM_UnitGroups,
+  KM_CommonClasses, KM_Defaults, KM_Points;
 
 
 type
@@ -42,8 +42,10 @@ type
 
 implementation
 uses
-  KM_HandsCollection, KM_Hand, KM_Terrain, KM_Game, KM_HouseBarracks,
-  KM_AIFields, KM_NavMesh, KM_Houses, KM_Utils, KM_ResHouses;
+  Classes, Math,
+  KM_Game, KM_Hand, KM_HandsCollection, KM_Terrain, KM_AIFields,
+  KM_Houses, KM_HouseBarracks,
+  KM_ResHouses, KM_NavMesh, KM_CommonUtils;
 
 
 const
@@ -171,6 +173,7 @@ begin
   for I := 0 to High(Barracks) do
   begin
     HB := Barracks[I];
+
     //Chose a random group type that we are going to attempt to train (so we don't always train certain group types first)
     K := 0;
     repeat
@@ -178,11 +181,13 @@ begin
       Inc(K);
     until (GroupReq[GT] > 0) or (K > 9); //Limit number of attempts to guarantee it doesn't loop forever
 
-    if GroupReq[GT] = 0 then Break; //Don't train
+    if GroupReq[GT] = 0 then
+      Break; // Don't train
 
-    for K := 1 to 3 do
+    for K := Low(AITroopTrainOrder[GT]) to High(AITroopTrainOrder[GT]) do
     begin
       UT := AITroopTrainOrder[GT, K];
+
       if (UT <> ut_None) then
         while ((CanEquipIron and (UT in WARRIORS_IRON)) or (CanEquipLeather and not (UT in WARRIORS_IRON)))
         and HB.CanEquip(UT)
@@ -396,7 +401,7 @@ begin
   begin
     H := gHands[fOwner].Houses.FindHouse(ht_Store, 0, 0, 1);
     if H <> nil then
-      fSetup.StartPosition := H.GetEntrance;
+      fSetup.StartPosition := H.Entrance;
   end;
 
   //See how many soldiers we need to launch an attack

@@ -42,6 +42,7 @@ type
     fGroupType: TGroupType;
     fDisableHungerMessage: Boolean;
     fBlockOrders: Boolean;
+    fManualFormation: Boolean;
 
     fOrder: TKMGroupOrder; //Remember last order incase we need to repeat it (e.g. to joined members)
     fOrderLoc: TKMPointDir; //Dir is the direction to face after order
@@ -55,6 +56,7 @@ type
 
     function GetCount: Integer;
     function GetMember(aIndex: Integer): TKMUnitWarrior;
+    function GetFlagBearer: TKMUnitWarrior;
     function GetNearestMember(aUnit: TKMUnitWarrior): Integer; overload;
     function GetNearestMember(aLoc: TKMPoint): TKMUnitWarrior; overload;
     function GetMemberLoc(aIndex: Integer): TKMPointExact;
@@ -66,6 +68,9 @@ type
     procedure ClearOrderTarget;
     procedure ClearOffenders;
     procedure HungarianReorderMembers;
+
+    function GetFlagPositionF: TKMPointF;
+    function GetFlagColor: Cardinal;
 
     function GetOrderTargetUnit: TKMUnit;
     function GetOrderTargetGroup: TKMUnitGroup;
@@ -99,13 +104,13 @@ type
     procedure Save(SaveStream: TKMemoryStream);
     destructor Destroy; override;
 
-    function GetGroupPointer: TKMUnitGroup;
+    function  GetGroupPointer: TKMUnitGroup;
     procedure ReleaseGroupPointer;
     procedure AddMember(aWarrior: TKMUnitWarrior; aIndex: Integer = -1);
-    function MemberByUID(aUID: Integer): TKMUnitWarrior;
-    function HitTest(X,Y: Integer): Boolean;
+    function  MemberByUID(aUID: Integer): TKMUnitWarrior;
+    function  HitTest(X,Y: Integer): Boolean;
     procedure SelectFlagBearer;
-    function HasMember(aWarrior: TKMUnit): Boolean;
+    function  HasMember(aWarrior: TKMUnit): Boolean;
     procedure ResetAnimStep;
     function InFight(aCountCitizens: Boolean = False): Boolean; //Fighting and can't take any orders from player
     function IsAttackingHouse: Boolean; //Attacking house
@@ -124,6 +129,7 @@ type
     property Count: Integer read GetCount;
     property MapEdCount: Word read fMapEdCount write SetMapEdCount;
     property Members[aIndex: Integer]: TKMUnitWarrior read GetMember;
+    property FlagBearer: TKMUnitWarrior read GetFlagBearer;
     property Owner: TKMHandIndex read fOwner;
     property Position: TKMPoint read GetPosition write SetPosition;
     property Direction: TKMDirection read GetDirection write SetDirection;
@@ -133,11 +139,17 @@ type
     property Order: TKMGroupOrder read fOrder;
     property DisableHungerMessage: Boolean read fDisableHungerMessage write fDisableHungerMessage;
     property BlockOrders: Boolean read fBlockOrders write fBlockOrders;
+    property ManualFormation: Boolean read fManualFormation write fManualFormation;
+    property FlagPositionF: TKMPointF read GetFlagPositionF;
+    property FlagColor: Cardinal read GetFlagColor;
+    function IsFlagRenderBeforeUnit: Boolean;
 
     property OrderTargetUnit: TKMUnit read GetOrderTargetUnit write SetOrderTargetUnit;
     property OrderTargetGroup: TKMUnitGroup read GetOrderTargetGroup;
     property OrderTargetHouse: TKMHouse read GetOrderTargetHouse write SetOrderTargetHouse;
 
+    procedure SetOwner(aOwner: TKMHandIndex);
+    procedure OwnerUpdate(aOwner: TKMHandIndex; aMoveToNewOwner: Boolean = False);
     procedure OrderAttackHouse(aHouse: TKMHouse; aClearOffenders: Boolean);
     procedure OrderAttackUnit(aUnit: TKMUnit; aClearOffenders: Boolean);
     procedure OrderFood(aClearOffenders: Boolean; aHungryOnly: Boolean = False);
@@ -146,13 +158,16 @@ type
     procedure OrderLinkTo(aTargetGroup: TKMUnitGroup; aClearOffenders: Boolean);
     procedure OrderNone;
     procedure OrderRepeat;
+    procedure CopyOrderFrom(aGroup: TKMUnitGroup);
     function OrderSplit(aClearOffenders: Boolean; aSplitSingle: Boolean = False): TKMUnitGroup;
     function OrderSplitUnit(aUnit: TKMUnit; aClearOffenders: Boolean): TKMUnitGroup;
     procedure OrderSplitLinkTo(aGroup: TKMUnitGroup; aCount: Word; aClearOffenders: Boolean);
     procedure OrderStorm(aClearOffenders: Boolean);
     procedure OrderWalk(aLoc: TKMPoint; aClearOffenders: Boolean; aDir: TKMDirection = dir_NA);
+    procedure KillGroup;
 
     procedure UpdateState;
+    procedure PaintHighlighted(aHandColor: Cardinal; aFlagColor: Cardinal; aDoImmediateRender: Boolean = False; aDoHighlight: Boolean = False; aHighlightColor: Cardinal = 0);
     procedure Paint;
   end;
 
@@ -170,6 +185,8 @@ type
 
     function AddGroup(aWarrior: TKMUnitWarrior): TKMUnitGroup; overload;
     function AddGroup(aOwner: TKMHandIndex; aUnitType: TUnitType; PosX, PosY: Word; aDir: TKMDirection; aUnitPerRow, aCount: Word): TKMUnitGroup; overload;
+    procedure AddGroupToList(aGroup: TKMUnitGroup);
+    procedure DeleteGroupFromList(aGroup: TKMUnitGroup);
     procedure RemGroup(aGroup: TKMUnitGroup);
 
     property Count: Integer read GetCount;
@@ -191,7 +208,7 @@ type
 
 implementation
 uses
-  KM_Game, KM_Hand, KM_HandsCollection, KM_Terrain, KM_Utils, KM_ResTexts, KM_RenderPool,
+  KM_Game, KM_Hand, KM_HandsCollection, KM_Terrain, KM_CommonUtils, KM_ResTexts, KM_RenderPool,
   KM_Hungarian, KM_UnitActionWalkTo, KM_PerfLog, KM_AI, KM_ResUnits, KM_ScriptingEvents,
   KM_UnitActionStormAttack;
 
@@ -320,7 +337,8 @@ begin
   LoadStream.Read(fTimeSinceHungryReminder);
   LoadStream.Read(fUnitsPerRow);
   LoadStream.Read(fDisableHungerMessage);
-  Loadstream.Read(fBlockOrders);
+  LoadStream.Read(fBlockOrders);
+  LoadStream.Read(fManualFormation);
 end;
 
 
@@ -407,6 +425,7 @@ begin
   SaveStream.Write(fUnitsPerRow);
   SaveStream.Write(fDisableHungerMessage);
   SaveStream.Write(fBlockOrders);
+  SaveStream.Write(fManualFormation);
 end;
 
 
@@ -436,6 +455,12 @@ end;
 function TKMUnitGroup.GetMember(aIndex: Integer): TKMUnitWarrior;
 begin
   Result := fMembers.Items[aIndex];
+end;
+
+
+function TKMUnitGroup.GetFlagBearer: TKMUnitWarrior;
+begin
+  Result := fMembers.Items[0];
 end;
 
 
@@ -516,7 +541,7 @@ begin
   if not IsDead then
     Result := Members[0].GetPosition
   else
-    Result := KMPoint(0,0);
+    Result := KMPOINT_ZERO;
 end;
 
 
@@ -620,6 +645,14 @@ end;
 function TKMUnitGroup.IsRanged: Boolean;
 begin
   Result := (fGroupType = gt_Ranged);
+end;
+
+
+procedure TKMUnitGroup.KillGroup;
+var I: Integer;
+begin
+  for I := fMembers.Count - 1 downto 0 do
+    TKMUnit(fMembers[I]).KillUnit(PLAYER_NONE, True, False);
 end;
 
 
@@ -840,8 +873,10 @@ begin
                         begin
                           //Old enemy has died, change target to his comrades
                           U := OrderTargetGroup.GetNearestMember(Members[0].GetPosition);
-                          Assert(U <> nil, 'We checked that Group is not dead, hence we should have a valid Unit');
-                          OrderAttackUnit(U, False);
+                          if U <> nil then // U could be nil in some rare cases (probably some rare bug with unit kills from scripts), just ignore that situation for now
+                            OrderAttackUnit(U, False)
+                          else
+                            OrderExecuted := True; //Could rarely happen, as described above
                         end;
                       end;
                     end;
@@ -961,6 +996,30 @@ begin
 end;
 
 
+procedure TKMUnitGroup.SetOwner(aOwner: TKMHandIndex);
+var I: Integer;
+begin
+  fOwner := aOwner;
+  for I := 0 to fMembers.Count - 1 do
+    TKMUnitWarrior(fMembers[I]).SetOwner(aOwner);
+end;
+
+
+procedure TKMUnitGroup.OwnerUpdate(aOwner: TKMHandIndex; aMoveToNewOwner: Boolean = False);
+var I: Integer;
+begin
+  if aMoveToNewOwner and (fOwner <> aOwner) then
+  begin
+    Assert(gGame.GameMode = gmMapEd); // Allow to move existing Unit directly only in MapEd
+    gHands[fOwner].UnitGroups.DeleteGroupFromList(Self);
+    gHands[aOwner].UnitGroups.AddGroupToList(Self);
+  end;
+  fOwner := aOwner;
+  for I := 0 to fMembers.Count - 1 do
+    TKMUnitWarrior(fMembers[I]).OwnerUpdate(aOwner, aMoveToNewOwner);
+end;
+
+
 //All units are assigned TTaskAttackHouse which does everything for us (move to position, hit house, abandon, etc.)
 procedure TKMUnitGroup.OrderAttackHouse(aHouse: TKMHouse; aClearOffenders: Boolean);
 var
@@ -979,6 +1038,9 @@ begin
 
   for I := 0 to Count - 1 do
     Members[I].OrderAttackHouse(aHouse);
+
+  //Script may have additional event processors
+  gScriptEvents.ProcGroupOrderAttackHouse(Self, aHouse);
 end;
 
 
@@ -1072,6 +1134,9 @@ begin
     fOrderLoc := KMPointDir(aUnit.NextPosition, dir_NA); //Remember where unit stand
     OrderTargetUnit := aUnit;
   end;
+
+  //Script may have additional event processors
+  gScriptEvents.ProcGroupOrderAttackUnit(Self, aUnit);
 end;
 
 
@@ -1084,8 +1149,6 @@ begin
   for I := 0 to Count - 1 do
     if not aHungryOnly or (Members[I].Condition <= UNIT_MIN_CONDITION) then
       Members[I].OrderFood;
-
-  OrderHalt(False);
 end;
 
 
@@ -1105,6 +1168,8 @@ begin
 
   SetUnitsPerRow(Max(fUnitsPerRow + aColumnsChange, 0));
 
+  ManualFormation := True;
+
   OrderRepeat;
 end;
 
@@ -1118,7 +1183,7 @@ begin
   //Halt is not a true order, it is just OrderWalk
   //hose target depends on previous activity
   case fOrder of
-    goNone:         if not KMSamePoint(fOrderLoc.Loc, KMPoint(0,0)) then
+    goNone:         if not KMSamePoint(fOrderLoc.Loc, KMPOINT_ZERO) then
                       OrderWalk(fOrderLoc.Loc, False)
                     else
                       OrderWalk(Members[0].NextPosition, False);
@@ -1167,6 +1232,9 @@ begin
 
   //Repeat targets group order to newly linked members
   aTargetGroup.OrderRepeat;
+
+  //Script may have additional event processors
+  gScriptEvents.ProcGroupOrderLink(Self, aTargetGroup);
 end;
 
 
@@ -1180,6 +1248,23 @@ begin
 
   for I := 0 to Count - 1 do
     Members[I].OrderNone;
+end;
+
+
+//Copy order from specified aGroup
+procedure TKMUnitGroup.CopyOrderFrom(aGroup: TKMUnitGroup);
+begin
+  fOrder := aGroup.fOrder;
+  if fOrder <> goNone then          //when there is no order, then use own fOrderLoc
+    fOrderLoc := aGroup.fOrderLoc;  //otherwise - copy from target group
+
+  case fOrder of
+    goNone:         OrderHalt(False);
+    goWalkTo:       OrderWalk(fOrderLoc.Loc, False);
+    goAttackHouse:  if aGroup.OrderTargetHouse <> nil then OrderAttackHouse(aGroup.OrderTargetHouse, False);
+    goAttackUnit:   if aGroup.OrderTargetUnit <> nil then OrderAttackUnit(aGroup.OrderTargetUnit, False);
+    goStorm:        ;
+  end;
 end;
 
 
@@ -1269,10 +1354,13 @@ begin
   NewGroup.fOrderLoc := KMPointDir(NewLeader.GetPosition, fOrderLoc.Dir);
 
   //Tell both groups to reposition
-  OrderHalt(False);
-  NewGroup.OrderHalt(False);
+  OrderRepeat;
+  NewGroup.CopyOrderFrom(Self);
 
   Result := NewGroup; //Return the new group in case somebody is interested in it
+
+  //Script may have additional event processors
+  gScriptEvents.ProcGroupOrderSplit(Self, NewGroup);
 end;
 
 
@@ -1319,6 +1407,9 @@ begin
 
   //Return NewGroup as result
   Result := NewGroup;
+
+  //Script may have additional event processors
+  gScriptEvents.ProcGroupOrderSplit(Self, NewGroup);
 end;
 
 
@@ -1433,16 +1524,18 @@ begin
 
   SomeoneHungry := False;
   for I := 0 to Count - 1 do
-  begin
-    SomeoneHungry := SomeoneHungry
-                     or ((Members[I].Condition < UNIT_MIN_CONDITION)
-                     and not Members[I].RequestedFood);
-    if SomeoneHungry then Break;
-  end;
+    if (Members[I] <> nil) 
+    and not Members[I].IsDeadOrDying then
+    begin
+      SomeoneHungry := SomeoneHungry
+                       or ((Members[I].Condition < UNIT_MIN_CONDITION)
+                       and not Members[I].RequestedFood);
+      if SomeoneHungry then Break;
+    end;
 
   if SomeoneHungry then
   begin
-    dec(fTimeSinceHungryReminder, HUNGER_CHECK_FREQ);
+    Dec(fTimeSinceHungryReminder, HUNGER_CHECK_FREQ);
     if fTimeSinceHungryReminder < 1 then
     begin
       gScriptEvents.ProcGroupHungry(Self);
@@ -1474,6 +1567,37 @@ begin
     gHands.CleanUpUnitPointer(U);
   end;
   fOffenders.Clear;
+end;
+
+
+function TKMUnitGroup.IsFlagRenderBeforeUnit: Boolean;
+begin
+  Result := FlagBearer.Direction in [dir_SE, dir_S, dir_SW, dir_W];
+end;
+
+
+function TKMUnitGroup.GetFlagPositionF: TKMPointF;
+begin
+  Result.X := FlagBearer.PositionF.X + UNIT_OFF_X + FlagBearer.GetSlide(ax_X);
+  Result.Y := FlagBearer.PositionF.Y + UNIT_OFF_Y + FlagBearer.GetSlide(ax_Y);
+  //Flag needs to be rendered above or below unit depending on direction (see AddUnitFlag)
+  if IsFlagRenderBeforeUnit then
+    Result.Y := Result.Y - FLAG_X_OFFSET
+  else
+    Result.Y := Result.Y + FLAG_X_OFFSET;
+end;
+
+
+function TKMUnitGroup.GetFlagColor: Cardinal;
+begin
+  //Highlight selected group
+  Result := gHands[FlagBearer.Owner].FlagColor;
+  if gMySpectator.Selected = Self then
+    //If base color is brighter than $FFFF40 then use black highlight
+    if (Result and $FF) + (Result shr 8 and $FF) + (Result shr 16 and $FF) > $240 then
+      Result := $FF404040
+    else
+      Result := $FFFFFFFF;
 end;
 
 
@@ -1614,10 +1738,14 @@ end;
 
 
 procedure TKMUnitGroup.Paint;
+begin
+  PaintHighlighted(gHands[FlagBearer.Owner].FlagColor, FlagColor);
+end;
+
+
+procedure TKMUnitGroup.PaintHighlighted(aHandColor: Cardinal; aFlagColor: Cardinal; aDoImmediateRender: Boolean = False; aDoHighlight: Boolean = False; aHighlightColor: Cardinal = 0);
 var
-  FlagCarrier: TKMUnitWarrior;
   UnitPos: TKMPointF;
-  FlagColor: Cardinal;
   FlagStep: Cardinal;
   I: Integer;
   NewPos: TKMPoint;
@@ -1625,35 +1753,11 @@ var
 begin
   if IsDead then Exit;
 
-  FlagCarrier := Members[0]; //
-
-  if not FlagCarrier.Visible then Exit;
-  if FlagCarrier.IsDeadOrDying then Exit;
-
-  UnitPos.X := FlagCarrier.PositionF.X + UNIT_OFF_X + FlagCarrier.GetSlide(ax_X);
-  UnitPos.Y := FlagCarrier.PositionF.Y + UNIT_OFF_Y + FlagCarrier.GetSlide(ax_Y);
-
-  //Highlight selected group
-  FlagColor := gHands[FlagCarrier.Owner].FlagColor;
-  if gMySpectator.Selected = Self then
-    //If base color is brighter than $FFFF40 then use black highlight
-    if (FlagColor and $FF) + (FlagColor shr 8 and $FF) + (FlagColor shr 16 and $FF) > $240 then
-      FlagColor := $FF404040
-    else
-      FlagColor := $FFFFFFFF;
+  if not FlagBearer.Visible then Exit;
+  if FlagBearer.IsDeadOrDying then Exit;
 
   //In MapEd units fTicker always the same, use Terrain instead
   FlagStep := IfThen(gGame.GameMode = gmMapEd, gTerrain.AnimStep, fTicker);
-
-  //Flag needs to be rendered above or below unit depending on direction (see AddUnitFlag)
-
-  if FlagCarrier.Direction in [dir_SE, dir_S, dir_SW, dir_W] then
-    UnitPos.Y := UnitPos.Y - FLAG_X_OFFSET
-  else
-    UnitPos.Y := UnitPos.Y + FLAG_X_OFFSET;
-
-  fRenderPool.AddUnitFlag(FlagCarrier.UnitType, FlagCarrier.GetUnitAction.ActionType,
-    FlagCarrier.Direction, FlagStep, UnitPos.X, UnitPos.Y, FlagColor);
 
   //Paint virtual members in MapEd mode
   for I := 1 to fMapEdCount - 1 do
@@ -1662,8 +1766,13 @@ begin
     if not DoesFit then Continue; //Don't render units that are off the map in the map editor
     UnitPos.X := NewPos.X + UNIT_OFF_X; //MapEd units don't have sliding
     UnitPos.Y := NewPos.Y + UNIT_OFF_Y;
-    fRenderPool.AddUnit(FlagCarrier.UnitType, 0, ua_Walk, fOrderLoc.Dir, UnitStillFrames[fOrderLoc.Dir], UnitPos.X, UnitPos.Y, gHands[FlagCarrier.Owner].FlagColor, True);
+    gRenderPool.AddUnit(FlagBearer.UnitType, 0, ua_Walk, fOrderLoc.Dir, UnitStillFrames[fOrderLoc.Dir], UnitPos.X, UnitPos.Y, aHandColor, True, aDoImmediateRender, aDoHighlight, aHighlightColor);
   end;
+
+  // We need to render Flag after MapEd virtual members
+  gRenderPool.AddUnitFlag(FlagBearer.UnitType, FlagBearer.GetUnitAction.ActionType,
+    FlagBearer.Direction, FlagStep, FlagPositionF.X, FlagPositionF.Y, aFlagColor, aDoImmediateRender);
+
 end;
 
 
@@ -1720,6 +1829,22 @@ begin
 end;
 
 
+procedure TKMUnitGroups.AddGroupToList(aGroup: TKMUnitGroup);
+begin
+  Assert(gGame.GameMode = gmMapEd); // Allow to add existing Group directly only in MapEd
+  if aGroup <> nil then
+    fGroups.Add(aGroup);
+end;
+
+
+procedure TKMUnitGroups.DeleteGroupFromList(aGroup: TKMUnitGroup);
+begin
+  Assert(gGame.GameMode = gmMapEd); // Allow to delete existing Group directly only in MapEd
+  if (aGroup <> nil) then
+    fGroups.Extract(aGroup);  // use Extract instead of Delete, cause Delete nils inner objects somehow
+end;
+
+
 function TKMUnitGroups.GetGroupByUID(aUID: Integer): TKMUnitGroup;
 var
   I: Integer;
@@ -1765,7 +1890,9 @@ begin
                      Result := gHands[aUnit.Owner].UnitGroups.GetGroupByMember(LinkUnit);
                      Result.AddMember(aUnit);
                      //Form a square (rather than a long snake like in TSK/TPR)
-                     Result.UnitsPerRow := Ceil(Sqrt(Result.Count));
+                     //but don't change formation if player decided to set it manually
+                     if not Result.ManualFormation then
+                       Result.UnitsPerRow := Ceil(Sqrt(Result.Count));
                      Result.OrderRepeat;
                    end
                    else

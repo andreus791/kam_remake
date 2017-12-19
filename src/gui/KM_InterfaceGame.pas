@@ -12,9 +12,17 @@ uses
 type
   // Common class for ingame interfaces (Gameplay, MapEd)
   TKMUserInterfaceGame = class(TKMUserInterfaceCommon)
+  private
+    fDragScrollingCursorPos: TPoint;
+    fDragScrollingViewportPos: TKMPointF;
+
+    procedure ResetDragScrolling;
   protected
     fMinimap: TKMMinimap;
     fViewport: TKMViewport;
+    fDragScrolling: Boolean;
+
+    function IsDragScrollingAllowed: Boolean; virtual;
   public
     constructor Create(aRender: TRender); reintroduce;
     destructor Destroy; override;
@@ -24,8 +32,12 @@ type
 
     function CursorToMapCoord(X, Y: Integer): TKMPointF;
 
+    procedure KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
+    procedure KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
     procedure MouseWheel(Shift: TShiftState; WheelDelta: Integer; X,Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean); override;
 
+    procedure GameSpeedChanged(aFromSpeed, aToSpeed: Single);
     procedure SyncUI(aMoveViewport: Boolean = True); virtual;
     procedure SyncUIView(aCenter: TKMPointF; aZoom: Single = 1);
     procedure UpdateGameCursor(X, Y: Integer; Shift: TShiftState);
@@ -38,19 +50,20 @@ const
   TB_PAD = 9; // Picked up empirically
   TB_WIDTH = 180; // Max width of sidebar elements
   PAGE_TITLE_Y = 5; // Page title offset
+  STATS_LINES_CNT = 13; //Number of stats (F3) lines
 
   // Shortcuts
   // All shortcuts are in English and are the same for all languages to avoid
   // naming collisions and confusion in discussions
 
-  GUI_HOUSE_COUNT = 27;   // Number of KaM houses to show in GUI
+  GUI_HOUSE_COUNT = 28;   // Number of KaM houses to show in GUI
   GUIHouseOrder: array [1..GUI_HOUSE_COUNT] of THouseType = (
     ht_School, ht_Inn, ht_Quary, ht_Woodcutters, ht_Sawmill,
     ht_Farm, ht_Mill, ht_Bakery, ht_Swine, ht_Butchers,
     ht_Wineyard, ht_GoldMine, ht_CoalMine, ht_Metallurgists, ht_WeaponWorkshop,
     ht_Tannery, ht_ArmorWorkshop, ht_Stables, ht_IronMine, ht_IronSmithy,
     ht_WeaponSmithy, ht_ArmorSmithy, ht_Barracks, ht_Store, ht_WatchTower,
-    ht_FisherHut, ht_Marketplace);
+    ht_FisherHut, ht_Marketplace, ht_TownHall);
 
   // Template for how resources are shown in Barracks
   BARRACKS_RES_COUNT = 11;
@@ -77,9 +90,12 @@ const
     ut_Militia, ut_AxeFighter, ut_Swordsman, ut_Bowman, ut_Arbaletman,
     ut_Pikeman, ut_Hallebardman, ut_HorseScout, ut_Cavalry);
 
+  TownHall_Order: array [0..5] of TUnitType = (
+    ut_Peasant, ut_Militia, ut_Slingshot, ut_Horseman, ut_Barbarian, ut_MetalBarbarian);
+
   // Stats get stacked by UI logic (so that on taller screens they all were
   // in nice pairs, and would stack up only on short screens)
-  StatPlan: array [0..12] of record
+  StatPlan: array [0..STATS_LINES_CNT-1] of record
     HouseType: array [0..3] of THouseType;
     UnitType: array [0..1] of TUnitType;
   end = (
@@ -94,7 +110,7 @@ const
     (HouseType: (ht_ArmorSmithy, ht_WeaponSmithy, ht_None, ht_None); UnitType: (ut_Smith, ut_None)),
     (HouseType: (ht_CoalMine, ht_IronMine, ht_GoldMine, ht_None); UnitType: (ut_Miner, ut_None)),
     (HouseType: (ht_Sawmill, ht_WeaponWorkshop, ht_ArmorWorkshop, ht_None); UnitType: (ut_Lamberjack, ut_None)),
-    (HouseType: (ht_Barracks, ht_WatchTower, ht_None, ht_None); UnitType: (ut_Recruit, ut_None)),
+    (HouseType: (ht_Barracks, ht_TownHall, ht_WatchTower, ht_None); UnitType: (ut_Recruit, ut_None)),
     (HouseType: (ht_Store, ht_School, ht_Inn, ht_Marketplace); UnitType: (ut_Serf, ut_Worker))
     );
 
@@ -116,10 +132,6 @@ const
     71, 72, 73, 74,
     75, 76, 77, 78);
 
-
-  // Amounts for placing orders
-  ORDER_WHEEL_AMOUNT = 5;
-
   MARKET_RES_HEIGHT = 35;
 
   // Big tab buttons in MapEd
@@ -137,7 +149,7 @@ const
 
 implementation
 uses
-  KM_Terrain, KM_RenderPool;
+  KM_Main, KM_Game, KM_HandSpectator, KM_Terrain, KM_RenderPool, KM_Resource, KM_ResCursors, KM_ResKeys;
 
 
 { TKMUserInterfaceGame }
@@ -147,7 +159,13 @@ begin
 
   fMinimap := TKMMinimap.Create(False, False);
   fViewport := TKMViewport.Create(aRender.ScreenX, aRender.ScreenY);
-  fRenderPool := TRenderPool.Create(fViewport, aRender);
+
+  fDragScrolling := False;
+  fDragScrollingCursorPos.X := 0;
+  fDragScrollingCursorPos.Y := 0;
+  fDragScrollingViewportPos := KMPOINTF_ZERO;
+
+  gRenderPool := TRenderPool.Create(fViewport, aRender);
 end;
 
 
@@ -155,8 +173,99 @@ destructor TKMUserInterfaceGame.Destroy;
 begin
   FreeAndNil(fMinimap);
   FreeAndNil(fViewport);
-  FreeAndNil(fRenderPool);
+  FreeAndNil(gRenderPool);
   Inherited;
+end;
+
+
+procedure TKMUserInterfaceGame.KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean);
+  {$IFDEF MSWindows}
+var
+  WindowRect: TRect;
+  {$ENDIF}
+begin
+  aHandled := True;
+  //Scrolling
+  if Key = gResKeys[SC_SCROLL_LEFT].Key       then fViewport.ScrollKeyLeft  := True
+  else if Key = gResKeys[SC_SCROLL_RIGHT].Key then fViewport.ScrollKeyRight := True
+  else if Key = gResKeys[SC_SCROLL_UP].Key    then fViewport.ScrollKeyUp    := True
+  else if Key =  gResKeys[SC_SCROLL_DOWN].Key then fViewport.ScrollKeyDown  := True
+  else if Key = gResKeys[SC_ZOOM_IN].Key      then fViewport.ZoomKeyIn      := True
+  else if Key = gResKeys[SC_ZOOM_OUT].Key     then fViewport.ZoomKeyOut     := True
+  else if Key = gResKeys[SC_ZOOM_RESET].Key   then fViewport.ResetZoom
+  else if (Key = gResKeys[SC_MAP_DRAG_SCROLL].Key)
+      and IsDragScrollingAllowed then
+  begin
+    fDragScrolling := True;
+   // Restrict the cursor to the window, for now.
+   //TODO: Allow one to drag out of the window, and still capture.
+   {$IFDEF MSWindows}
+     WindowRect := gMain.ClientRect;
+     ClipCursor(@WindowRect);
+   {$ENDIF}
+   fDragScrollingCursorPos.X := gGameCursor.Pixel.X;
+   fDragScrollingCursorPos.Y := gGameCursor.Pixel.Y;
+   fDragScrollingViewportPos.X := fViewport.Position.X;
+   fDragScrollingViewportPos.Y := fViewport.Position.Y;
+   gRes.Cursors.Cursor := kmc_Drag;
+  end
+  else
+    aHandled := False;
+end;
+
+
+procedure TKMUserInterfaceGame.KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean);
+begin
+  aHandled := True;
+  //Scrolling
+  if Key = gResKeys[SC_SCROLL_LEFT].Key       then fViewport.ScrollKeyLeft  := False
+  else if Key = gResKeys[SC_SCROLL_RIGHT].Key then fViewport.ScrollKeyRight := False
+  else if Key = gResKeys[SC_SCROLL_UP].Key    then fViewport.ScrollKeyUp    := False
+  else if Key =  gResKeys[SC_SCROLL_DOWN].Key then fViewport.ScrollKeyDown  := False
+  else if Key = gResKeys[SC_ZOOM_IN].Key      then fViewport.ZoomKeyIn      := False
+  else if Key = gResKeys[SC_ZOOM_OUT].Key     then fViewport.ZoomKeyOut     := False
+  else if Key = gResKeys[SC_ZOOM_RESET].Key   then fViewport.ResetZoom
+  else if Key = gResKeys[SC_MAP_DRAG_SCROLL].Key then
+  begin
+    if fDragScrolling then
+      ResetDragScrolling;
+  end
+  else aHandled := False;
+end;
+
+
+procedure TKMUserInterfaceGame.ResetDragScrolling;
+begin
+  fDragScrolling := False;
+  gRes.Cursors.Cursor := kmc_Default; //Reset cursor
+  gMain.ApplyCursorRestriction;
+end;
+
+
+function TKMUserInterfaceGame.IsDragScrollingAllowed: Boolean;
+begin
+  Result := True; // Allow drag scrolling by default
+end;
+
+
+procedure TKMUserInterfaceGame.MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean);
+var
+  VP: TKMPointF;
+begin
+  inherited;
+  aHandled := False;
+  if fDragScrolling then
+  begin
+    if GetKeyState(gResKeys[SC_MAP_DRAG_SCROLL].Key) < 0 then
+    begin
+      UpdateGameCursor(X, Y, Shift);
+      VP.X := fDragScrollingViewportPos.X + (fDragScrollingCursorPos.X - X) / (CELL_SIZE_PX * fViewport.Zoom);
+      VP.Y := fDragScrollingViewportPos.Y + (fDragScrollingCursorPos.Y - Y) / (CELL_SIZE_PX * fViewport.Zoom);
+      fViewport.Position := VP;
+      aHandled := True;
+    end else
+      ResetDragScrolling;
+  end;
 end;
 
 
@@ -168,7 +277,7 @@ begin
 
   if (X < 0) or (Y < 0) then Exit; // This happens when you use the mouse wheel on the window frame
 
-  // Allow to zoom only when curor is over map. Controls handle zoom on their own
+  // Allow to zoom only when cursor is over map. Controls handle zoom on their own
   if (fMyControls.CtrlOver = nil) then
   begin
     UpdateGameCursor(X, Y, Shift); // Make sure we have the correct cursor position to begin with
@@ -180,6 +289,12 @@ begin
                                    fViewport.Position.Y + PrevCursor.Y-gGameCursor.Float.Y);
     UpdateGameCursor(X, Y, Shift); // Recentering the map changes the cursor position
   end;
+end;
+
+
+procedure TKMUserInterfaceGame.GameSpeedChanged(aFromSpeed, aToSpeed: Single);
+begin
+  fViewport.GameSpeedChanged(aFromSpeed, aToSpeed);
 end;
 
 
@@ -220,11 +335,13 @@ begin
     Pixel.Y := Y;
     Float := CursorToMapCoord(X, Y);
 
+    PrevCell := Cell; //Save previous cell
+
     // Cursor cannot reach row MapY or column MapX, they're not part of the map (only used for vertex height)
     Cell.X := EnsureRange(round(Float.X+0.5), 1, gTerrain.MapX-1); // Cell below cursor in map bounds
     Cell.Y := EnsureRange(round(Float.Y+0.5), 1, gTerrain.MapY-1);
 
-    ObjectUID := fRenderPool.RenderList.GetSelectionUID(Float);
+    ObjectUID := gRenderPool.RenderList.GetSelectionUID(Float);
     SState := Shift;
   end;
 end;

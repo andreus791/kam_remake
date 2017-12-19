@@ -2,8 +2,8 @@ unit KM_Saves;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, KromUtils, Math, Windows, SysUtils, SyncObjs,
-  KM_CommonClasses, KM_Defaults, KM_GameInfo, KM_GameOptions, KM_Minimap, KM_ResTexts, KM_Resource;
+  Classes, SyncObjs,
+  KM_GameOptions, KM_GameInfo, KM_Minimap;
 
 
 type
@@ -12,7 +12,8 @@ type
     smByDescriptionAsc, smByDescriptionDesc,
     smByTimeAsc, smByTimeDesc,
     smByDateAsc, smByDateDesc,
-    smByPlayerCountAsc, smByPlayerCountDesc);
+    smByPlayerCountAsc, smByPlayerCountDesc,
+    smByModeAsc, smByModeDesc);
 
   TKMSaveInfo = class;
   TSaveEvent = procedure (aSave: TKMSaveInfo) of object;
@@ -22,24 +23,29 @@ type
   private
     fPath: string; //TKMGameInfo does not stores paths, because they mean different things for Maps and Saves
     fFileName: string; //without extension
+    fCrcCalculated: Boolean;
     fCRC: Cardinal;
     fSaveError: string;
     fInfo: TKMGameInfo;
     fGameOptions: TKMGameOptions;
     procedure ScanSave;
+    function GetCRC: Cardinal;
   public
-    constructor Create(const aPath, aFileName: String);
+    constructor Create(const aName: String; aIsMultiplayer: Boolean);
     destructor Destroy; override;
 
     property Info: TKMGameInfo read fInfo;
     property GameOptions: TKMGameOptions read fGameOptions;
     property Path: string read fPath;
     property FileName: string read fFileName;
-    property CRC: Cardinal read fCRC;
+    property CRC: Cardinal read GetCRC;
+    property SaveError: string read fSaveError;
 
     function IsValid: Boolean;
+    function IsMultiplayer: Boolean;
     function IsReplayValid: Boolean;
-    function LoadMinimap(aMinimap: TKMMinimap): Boolean;
+    function LoadMinimap(aMinimap: TKMMinimap): Boolean; overload;
+    function LoadMinimap(aMinimap: TKMMinimap; aStartLoc: Integer): Boolean; overload;
   end;
 
   TTSavesScanner = class(TThread)
@@ -47,8 +53,9 @@ type
     fMultiplayerPath: Boolean;
     fOnSaveAdd: TSaveEvent;
     fOnSaveAddDone: TNotifyEvent;
+    fOnComplete: TNotifyEvent;
   public
-    constructor Create(aMultiplayerPath: Boolean; aOnSaveAdd: TSaveEvent; aOnSaveAddDone, aOnComplete: TNotifyEvent);
+    constructor Create(aMultiplayerPath: Boolean; aOnSaveAdd: TSaveEvent; aOnSaveAddDone, aOnTerminate, aOnComplete: TNotifyEvent);
     procedure Execute; override;
   end;
 
@@ -63,10 +70,13 @@ type
     fScanFinished: Boolean;
     fUpdateNeeded: Boolean;
     fOnRefresh: TNotifyEvent;
+    fOnComplete: TNotifyEvent;
+    fOnTerminate: TNotifyEvent;
     procedure Clear;
     procedure SaveAdd(aSave: TKMSaveInfo);
     procedure SaveAddDone(Sender: TObject);
     procedure ScanComplete(Sender: TObject);
+    procedure ScanTerminate(Sender: TObject);
     procedure DoSort;
     function GetSave(aIndex: Integer): TKMSaveInfo;
   public
@@ -78,15 +88,21 @@ type
     procedure Lock;
     procedure Unlock;
 
-    procedure Refresh(aOnRefresh: TNotifyEvent; aMultiplayerPath: Boolean);
+    class function Path(const aName: UnicodeString; aIsMultiplayer: Boolean): UnicodeString;
+    class function FullPath(const aName, aExt: UnicodeString; aIsMultiplayer: Boolean): UnicodeString;
+    class function GetSaveCRC(const aName: UnicodeString; aIsMultiplayer: Boolean): Cardinal;
+    class function GetSaveFolder(aIsMultiplayer: Boolean): UnicodeString;
+
+    procedure Refresh(aOnRefresh: TNotifyEvent; aMultiplayerPath: Boolean; aOnTerminate: TNotifyEvent = nil; aOnComplete: TNotifyEvent = nil);
     procedure TerminateScan;
     procedure Sort(aSortMethod: TSavesSortMethod; aOnSortComplete: TNotifyEvent);
     property SortMethod: TSavesSortMethod read fSortMethod; //Read-only because we should not change it while Refreshing
     property ScanFinished: Boolean read fScanFinished;
 
-    function Contains(aNewName: UnicodeString): Boolean;
+    function Contains(const aNewName: UnicodeString): Boolean;
     procedure DeleteSave(aIndex: Integer);
-    procedure RenameSave(aIndex: Integer; aName: UnicodeString);
+    procedure MoveSave(aIndex: Integer; const aName: UnicodeString);
+    procedure RenameSave(aIndex: Integer; const aName: UnicodeString);
 
     function SavesList: UnicodeString;
     procedure UpdateState;
@@ -94,14 +110,21 @@ type
 
 
 implementation
+uses
+  SysUtils, Math, KromUtils,
+  KM_Resource, KM_ResTexts, KM_FileIO, KM_NetworkTypes,
+  KM_CommonClasses, KM_Defaults, KM_CommonUtils, KM_Log;
+
+const
+  ANY_LOC = -1000;
 
 
 { TKMSaveInfo }
-constructor TKMSaveInfo.Create(const aPath, aFileName: String);
+constructor TKMSaveInfo.Create(const aName: String; aIsMultiplayer: Boolean);
 begin
   inherited Create;
-  fPath := aPath;
-  fFileName := aFileName;
+  fPath := TKMSavesCollection.Path(aName, aIsMultiplayer);
+  fFileName := aName;
   fInfo := TKMGameInfo.Create;
   fGameOptions := TKMGameOptions.Create;
 
@@ -119,20 +142,31 @@ begin
 end;
 
 
+function TKMSaveInfo.GetCRC: Cardinal;
+begin
+  if not fCrcCalculated then
+  begin
+    fCRC := Adler32CRC(fPath + fFileName + EXT_SAVE_MAIN_DOT);
+    fCrcCalculated := True;
+  end;
+  Result := fCRC;
+end;
+
+
 procedure TKMSaveInfo.ScanSave;
 var
   LoadStream: TKMemoryStream;
 begin
-  if not FileExists(fPath + fFileName + '.sav') then
+  if not FileExists(fPath + fFileName + EXT_SAVE_MAIN_DOT) then
   begin
     fSaveError := 'File not exists';
     Exit;
   end;
 
-  fCRC := Adler32CRC(fPath + fFileName + '.sav');
+  fCrcCalculated := False; //make lazy load for CRC
 
   LoadStream := TKMemoryStream.Create; //Read data from file into stream
-  LoadStream.LoadFromFile(fPath + fFileName + '.sav');
+  LoadStream.LoadFromFile(fPath + fFileName + EXT_SAVE_MAIN_DOT);
 
   fInfo.Load(LoadStream);
   fGameOptions.Load(LoadStream);
@@ -149,20 +183,28 @@ end;
 
 
 function TKMSaveInfo.LoadMinimap(aMinimap: TKMMinimap): Boolean;
+begin
+  Result := LoadMinimap(aMinimap, ANY_LOC);
+end;
+
+
+function TKMSaveInfo.LoadMinimap(aMinimap: TKMMinimap; aStartLoc: Integer): Boolean;
 var
-  LoadStream: TKMemoryStream;
+  LoadStream, LoadMnmStream: TKMemoryStream;
   DummyInfo: TKMGameInfo;
   DummyOptions: TKMGameOptions;
   IsMultiplayer: Boolean;
+  MinimapFilePath: String;
+  MnmStartLoc: Integer;
 begin
   Result := False;
-  if not FileExists(fPath + fFileName + '.sav') then Exit;
+  if not FileExists(fPath + fFileName + EXT_SAVE_MAIN_DOT) then Exit;
 
   DummyInfo := TKMGameInfo.Create;
   DummyOptions := TKMGameOptions.Create;
   LoadStream := TKMemoryStream.Create; //Read data from file into stream
   try
-    LoadStream.LoadFromFile(fPath + fFileName + '.sav');
+    LoadStream.LoadFromFile(fPath + fFileName + EXT_SAVE_MAIN_DOT);
 
     DummyInfo.Load(LoadStream); //We don't care, we just need to skip past it correctly
     DummyOptions.Load(LoadStream); //We don't care, we just need to skip past it correctly
@@ -171,6 +213,36 @@ begin
     begin
       aMinimap.LoadFromStream(LoadStream);
       Result := True;
+    end else begin
+      // Lets try to load Minimap for MP save
+      LoadMnmStream := TKMemoryStream.Create;
+      try
+        try
+          MinimapFilePath := fPath + fFileName + '.' + EXT_SAVE_MP_MINIMAP;
+          if FileExists(MinimapFilePath) then
+          begin
+            LoadMnmStream.LoadFromFile(MinimapFilePath); // try to load minimap from file
+            LoadMnmStream.Read(MnmStartLoc);
+            if (aStartLoc = ANY_LOC) // for not MP game, f.e.
+              or (aStartLoc = LOC_SPECTATE) // allow to see minimap for spectator loc
+              or (aStartLoc = MnmStartLoc) then // allow, if we was on the same loc
+            begin
+              aMinimap.LoadFromStream(LoadMnmStream);
+              Result := True;
+            end;
+          end;
+        except
+          // Ignore any errors, because MP minimap is optional
+          on E: Exception do
+            // Just log error to log, do not crash game in case of any error here
+            gLog.AddTime('Load MP save minimap from file '
+              + MinimapFilePath + ' exception: ' + E.ClassName + ': ' + E.Message
+              {$IFDEF WDC} + sLineBreak + E.StackTrace {$ENDIF}
+              );
+        end;
+      finally
+        LoadMnmStream.Free;
+      end;
     end;
 
   finally
@@ -183,15 +255,21 @@ end;
 
 function TKMSaveInfo.IsValid: Boolean;
 begin
-  Result := FileExists(fPath + fFileName + '.sav') and (fSaveError = '') and fInfo.IsValid(True);
+  Result := FileExists(fPath + fFileName + EXT_SAVE_MAIN_DOT) and (fSaveError = '') and fInfo.IsValid(True);
+end;
+
+
+function TKMSaveInfo.IsMultiplayer: Boolean;
+begin
+  Result := GetFileDirName(Copy(fPath, 0, Length(fPath) - 1)) = SAVES_MP_FOLDER_NAME;
 end;
 
 
 //Check if replay files exist at location
 function TKMSaveInfo.IsReplayValid: Boolean;
 begin
-  Result := FileExists(fPath + fFileName + '.bas') and
-            FileExists(fPath + fFileName + '.rpl');
+  Result := FileExists(fPath + fFileName + EXT_SAVE_BASE_DOT) and
+            FileExists(fPath + fFileName + EXT_SAVE_REPLAY_DOT);
 end;
 
 
@@ -254,7 +332,27 @@ begin
 end;
 
 
-function TKMSavesCollection.Contains(aNewName: UnicodeString): Boolean;
+class function TKMSavesCollection.GetSaveCRC(const aName: UnicodeString; aIsMultiplayer: Boolean): Cardinal;
+var
+  SavePath: UnicodeString;
+begin
+  Result := 0;
+  SavePath := FullPath(aName, EXT_SAVE_MAIN, aIsMultiplayer);
+  if FileExists(SavePath) then
+    Result := Adler32CRC(SavePath);
+end;
+
+
+class function TKMSavesCollection.GetSaveFolder(aIsMultiplayer: Boolean): UnicodeString;
+begin
+  if aIsMultiplayer then
+    Result := SAVES_MP_FOLDER_NAME
+  else
+    Result := SAVES_FOLDER_NAME;
+end;
+
+
+function TKMSavesCollection.Contains(const aNewName: UnicodeString): Boolean;
 var
   I: Integer;
 begin
@@ -274,40 +372,61 @@ var
   I: Integer;
 begin
   Lock;
+  try
     Assert(InRange(aIndex, 0, fCount-1));
-    DeleteFile(fSaves[aIndex].Path + fSaves[aIndex].fFileName + '.sav');
-    DeleteFile(fSaves[aIndex].Path + fSaves[aIndex].fFileName + '.rpl');
-    DeleteFile(fSaves[aIndex].Path + fSaves[aIndex].fFileName + '.bas');
+    KMDeleteFolder(fSaves[aIndex].Path);
     fSaves[aIndex].Free;
     for I := aIndex to fCount - 2 do
       fSaves[I] := fSaves[I+1]; //Move them down
-    dec(fCount);
+    Dec(fCount);
     SetLength(fSaves, fCount);
-  Unlock;
+  finally
+    Unlock;
+  end;
 end;
 
 
-procedure TKMSavesCollection.RenameSave(aIndex: Integer; aName: UnicodeString);
+procedure TKMSavesCollection.MoveSave(aIndex: Integer; const aName: UnicodeString);
 var
-  fileOld, fileNew: UnicodeString;
+  I: Integer;
+  Dest: UnicodeString;
 begin
+  Assert(InRange(aIndex, 0, fCount - 1));
+  if Trim(aName) = '' then Exit;
+
   Lock;
-    fileOld := fSaves[aIndex].Path + fSaves[aIndex].fFileName;
-    fileNew := fSaves[aIndex].Path + aName;
-    RenameFile(fileOld + '.sav', fileNew + '.sav');
-    RenameFile(fileOld + '.rpl', fileNew + '.rpl');
-    RenameFile(fileOld + '.bas', fileNew + '.bas');
-  Unlock;
+  try
+    Dest := Path(aName, fSaves[aIndex].IsMultiplayer);
+    Assert(fSaves[aIndex].Path <> Dest);
+
+    KMMoveFolder(fSaves[aIndex].Path, Dest);
+
+    //Remove the map from our list
+    fSaves[aIndex].Free;
+    for I  := aIndex to fCount - 2 do
+      fSaves[I] := fSaves[I + 1];
+    Dec(fCount);
+    SetLength(fSaves, fCount);
+  finally
+    Unlock;
+  end;
+end;
+
+
+procedure TKMSavesCollection.RenameSave(aIndex: Integer; const aName: UnicodeString);
+begin
+  MoveSave(aIndex, aName);
 end;
 
 
 //For private acces, where CS is managed by the caller
 procedure TKMSavesCollection.DoSort;
+var TempSaves: array of TKMSaveInfo;
   //Return True if items should be exchanged
-  function Compare(A, B: TKMSaveInfo; aMethod: TSavesSortMethod): Boolean;
+  function Compare(A, B: TKMSaveInfo): Boolean;
   begin
     Result := False; //By default everything remains in place
-    case aMethod of
+    case fSortMethod of
       smByFileNameAsc:     Result := CompareText(A.FileName, B.FileName) < 0;
       smByFileNameDesc:    Result := CompareText(A.FileName, B.FileName) > 0;
       smByDescriptionAsc:  Result := CompareText(A.Info.GetTitleWithTime, B.Info.GetTitleWithTime) < 0;
@@ -318,15 +437,54 @@ procedure TKMSavesCollection.DoSort;
       smByDateDesc:        Result := A.Info.SaveTimestamp < B.Info.SaveTimestamp;
       smByPlayerCountAsc:  Result := A.Info.PlayerCount < B.Info.PlayerCount;
       smByPlayerCountDesc: Result := A.Info.PlayerCount > B.Info.PlayerCount;
+      smByModeAsc:         Result := A.Info.MissionMode < B.Info.MissionMode;
+      smByModeDesc:        Result := A.Info.MissionMode > B.Info.MissionMode;
     end;
   end;
-var
-  I, K: Integer;
+
+  procedure MergeSort(left, right: integer);
+  var middle, i, j, ind1, ind2: integer;
+  begin
+    if right <= left then
+      exit;
+
+    middle := (left+right) div 2;
+    MergeSort(left, middle);
+    Inc(middle);
+    MergeSort(middle, right);
+    ind1 := left;
+    ind2 := middle;
+    for i := left to right do
+    begin
+      if (ind1 < middle) and ((ind2 > right) or not Compare(fSaves[ind1], fSaves[ind2])) then
+      begin
+        TempSaves[i] := fSaves[ind1];
+        Inc(ind1);
+      end
+      else
+      begin
+        TempSaves[i] := fSaves[ind2];
+        Inc(ind2);
+      end;
+    end;
+    for j := left to right do
+      fSaves[j] := TempSaves[j];
+  end;
 begin
-  for I := 0 to fCount - 1 do
-  for K := I to fCount - 1 do
-  if Compare(fSaves[I], fSaves[K], fSortMethod) then
-    SwapInt(NativeUInt(fSaves[I]), NativeUInt(fSaves[K])); //Exchange only pointers to MapInfo objects
+  SetLength(TempSaves, Length(fSaves));
+  MergeSort(Low(fSaves), High(fSaves));
+end;
+
+
+class function TKMSavesCollection.Path(const aName: UnicodeString; aIsMultiplayer: Boolean): UnicodeString;
+begin
+  Result := ExeDir + GetSaveFolder(aIsMultiplayer) + PathDelim + aName + PathDelim;
+end;
+
+
+class function TKMSavesCollection.FullPath(const aName, aExt: UnicodeString; aIsMultiplayer: Boolean): UnicodeString;
+begin
+  Result := Path(aName, aIsMultiplayer) + aName + '.' + aExt;
 end;
 
 
@@ -335,10 +493,13 @@ var
   I: Integer;
 begin
   Lock;
+  try
     Result := '';
     for I := 0 to fCount - 1 do
       Result := Result + fSaves[I].FileName + EolW;
-  Unlock;
+  finally
+    Unlock;
+  end;
 end;
 
 
@@ -398,7 +559,7 @@ end;
 
 
 //Start the refresh of maplist
-procedure TKMSavesCollection.Refresh(aOnRefresh: TNotifyEvent; aMultiplayerPath: Boolean);
+procedure TKMSavesCollection.Refresh(aOnRefresh: TNotifyEvent; aMultiplayerPath: Boolean; aOnTerminate: TNotifyEvent = nil; aOnComplete: TNotifyEvent = nil);
 begin
   //Terminate previous Scanner if two scans were launched consequentialy
   TerminateScan;
@@ -406,10 +567,12 @@ begin
 
   fScanFinished := False;
   fOnRefresh := aOnRefresh;
+  fOnComplete := aOnComplete;
+  fOnTerminate := aOnTerminate;
 
   //Scan will launch upon create automatcally
   fScanning := True;
-  fScanner := TTSavesScanner.Create(aMultiplayerPath, SaveAdd, SaveAddDone, ScanComplete);
+  fScanner := TTSavesScanner.Create(aMultiplayerPath, SaveAdd, SaveAddDone, ScanTerminate, ScanComplete);
 end;
 
 
@@ -441,14 +604,29 @@ begin
 end;
 
 
-//All saves have been scanned
-//No need to resort since that was done in last SaveAdd event
 procedure TKMSavesCollection.ScanComplete(Sender: TObject);
 begin
   Lock;
   try
     fScanning := False;
+    if Assigned(fOnComplete) then
+      fOnComplete(Self);
+  finally
+    Unlock;
+  end;
+end;
+
+
+//All saves have been scanned
+//No need to resort since that was done in last SaveAdd event
+procedure TKMSavesCollection.ScanTerminate(Sender: TObject);
+begin
+  Lock;
+  try
+    fScanning := False;
     fScanFinished := True;
+    if Assigned(fOnTerminate) then
+      fOnTerminate(Self);
   finally
     Unlock;
   end;
@@ -458,8 +636,9 @@ end;
 { TTSavesScanner }
 //aOnSaveAdd - signal that there's new save that should be added
 //aOnSaveAddDone - signal that save has been added
+//aOnTerminate - scan was terminated (but could be not complete yet)
 //aOnComplete - scan is complete
-constructor TTSavesScanner.Create(aMultiplayerPath: Boolean; aOnSaveAdd: TSaveEvent; aOnSaveAddDone, aOnComplete: TNotifyEvent);
+constructor TTSavesScanner.Create(aMultiplayerPath: Boolean; aOnSaveAdd: TSaveEvent; aOnSaveAddDone, aOnTerminate, aOnComplete: TNotifyEvent);
 begin
   //Thread isn't started until all constructors have run to completion
   //so Create(False) may be put in front as well
@@ -470,38 +649,45 @@ begin
   fMultiplayerPath := aMultiplayerPath;
   fOnSaveAdd := aOnSaveAdd;
   fOnSaveAddDone := aOnSaveAddDone;
-  OnTerminate := aOnComplete;
+  fOnComplete := aOnComplete;
+  OnTerminate := aOnTerminate;
   FreeOnTerminate := False;
 end;
 
 
 procedure TTSavesScanner.Execute;
 var
-  pathToSaves: string;
+  PathToSaves: string;
   SearchRec: TSearchRec;
   Save: TKMSaveInfo;
 begin
-  if fMultiplayerPath then
-    pathToSaves := ExeDir + 'SavesMP' + PathDelim
-  else
-    pathToSaves := ExeDir + 'Saves' + PathDelim;
+  try
+    PathToSaves := ExeDir + TKMSavesCollection.GetSaveFolder(fMultiplayerPath) + PathDelim;
 
-  if not DirectoryExists(pathToSaves) then Exit;
+    if not DirectoryExists(PathToSaves) then Exit;
 
-  if FindFirst(pathToSaves + '*.sav', faAnyFile, SearchRec) = 0 then
-  repeat
-    if (SearchRec.Attr and faDirectory <> faDirectory) //Only files
-    and (SearchRec.Name <> '.') and (SearchRec.Name <> '..')
-    then
-    begin
-      Save :=  TKMSaveInfo.Create(pathToSaves, TruncateExt(SearchRec.Name));
-      if SLOW_SAVE_SCAN then
-        Sleep(50);
-      fOnSaveAdd(Save);
-      fOnSaveAddDone(Self);
+    FindFirst(PathToSaves + '*', faDirectory, SearchRec);
+    try
+      repeat
+        if (SearchRec.Name <> '.') and (SearchRec.Name <> '..')
+          and FileExists(TKMSavesCollection.FullPath(SearchRec.Name, EXT_SAVE_MAIN, fMultiplayerPath))
+          and FileExists(TKMSavesCollection.FullPath(SearchRec.Name, EXT_SAVE_REPLAY, fMultiplayerPath))
+          and FileExists(TKMSavesCollection.FullPath(SearchRec.Name, EXT_SAVE_BASE, fMultiplayerPath)) then
+        begin
+          Save := TKMSaveInfo.Create(SearchRec.Name, fMultiplayerPath);
+          if SLOW_SAVE_SCAN then
+            Sleep(50);
+          fOnSaveAdd(Save);
+          fOnSaveAddDone(Self);
+        end;
+      until (FindNext(SearchRec) <> 0) or Terminated;
+    finally
+      FindClose(SearchRec);
     end;
-  until (FindNext(SearchRec) <> 0) or Terminated;
-  FindClose(SearchRec);
+  finally
+    if not Terminated and Assigned(fOnComplete) then
+      fOnComplete(Self);
+  end;
 end;
 
 

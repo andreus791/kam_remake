@@ -1,23 +1,22 @@
 unit KM_ScriptingEvents;
 {$I KaM_Remake.inc}
+{$WARN IMPLICIT_STRING_CAST OFF}
 interface
 uses
-  Classes, Math, SysUtils, StrUtils, uPSRuntime,
+  Classes, Math, SysUtils, StrUtils, uPSRuntime, uPSDebugger,
   KM_CommonTypes, KM_Defaults, KM_Points, KM_Houses, KM_ScriptingIdCache, KM_Units,
-  KM_UnitGroups, KM_ResHouses, KM_HouseCollection, KM_ResWares;
+  KM_UnitGroups, KM_ResHouses, KM_HouseCollection, KM_ResWares, KM_ScriptingTypes;
 
 
 type
-  TScriptErrorType = (se_InvalidParameter, se_Exception, se_CompileError, se_CompileWarning, se_Log);
-  TKMScriptErrorEvent = procedure (aType: TScriptErrorType; const aData: UnicodeString) of object;
-
   TByteSet = set of Byte;
 
   TKMScriptEntity = class
   protected
     fIDCache: TKMScriptingIdCache;
     fOnScriptError: TKMScriptErrorEvent;
-    procedure LogParamWarning(aFuncName: string; const aValues: array of Integer);
+    procedure LogWarning(const aFuncName: string; aWarnMsg: String);
+    procedure LogParamWarning(const aFuncName: string; const aValues: array of Integer);
   public
     constructor Create(aIDCache: TKMScriptingIdCache);
     property OnScriptError: TKMScriptErrorEvent write fOnScriptError;
@@ -25,7 +24,7 @@ type
 
   TKMScriptEvents = class(TKMScriptEntity)
   private
-    fExec: TPSExec;
+    fExec: TPSDebugExec;
 
     fProcBeacon: TMethod;
     fProcHouseAfterDestroyed: TMethod;
@@ -35,6 +34,10 @@ type
     fProcHouseDamaged: TMethod;
     fProcHouseDestroyed: TMethod;
     fProcGroupHungry: TMethod;
+    fProcGroupOrderAttackHouse: TMethod;
+    fProcGroupOrderAttackUnit: TMethod;
+    fProcGroupOrderLink: TMethod;
+    fProcGroupOrderSplit: TMethod;
     fProcMarketTrade: TMethod;
     fProcMissionStart: TMethod;
     fProcPlanRoadPlaced: TMethod;
@@ -58,7 +61,7 @@ type
   public
     ExceptionOutsideScript: Boolean; //Flag that the exception occured in a State or Action call not script
 
-    constructor Create(aExec: TPSExec; aIDCache: TKMScriptingIdCache);
+    constructor Create(aExec: TPSDebugExec; aIDCache: TKMScriptingIdCache);
     procedure LinkEvents;
 
     procedure ProcBeacon(aPlayer: TKMHandIndex; aX, aY: Word);
@@ -69,6 +72,10 @@ type
     procedure ProcHouseDamaged(aHouse: TKMHouse; aAttacker: TKMUnit);
     procedure ProcHouseDestroyed(aHouse: TKMHouse; aDestroyerIndex: TKMHandIndex);
     procedure ProcGroupHungry(aGroup: TKMUnitGroup);
+    procedure ProcGroupOrderAttackHouse(aGroup: TKMUnitGroup; aHouse: TKMHouse);
+    procedure ProcGroupOrderAttackUnit(aGroup: TKMUnitGroup; aUnit: TKMUnit);
+    procedure ProcGroupOrderLink(aGroup1, aGroup2: TKMUnitGroup);
+    procedure ProcGroupOrderSplit(aGroup, aNewGroup: TKMUnitGroup);
     procedure ProcMarketTrade(aMarket: TKMHouse; aFrom, aTo: TWareType);
     procedure ProcMissionStart;
     procedure ProcPlanRoadPlaced(aPlayer: TKMHandIndex; aX, aY: Word);
@@ -95,8 +102,9 @@ var
 
 implementation
 uses
-  KM_AI, KM_Terrain, KM_Game, KM_FogOfWar, KM_HandsCollection, KM_Units_Warrior,
-  KM_HouseBarracks, KM_HouseSchool, KM_ResUnits, KM_Log, KM_Utils, KM_HouseMarket,
+  uPSUtils,
+  KromUtils, KM_AI, KM_Terrain, KM_Game, KM_FogOfWar, KM_HandsCollection, KM_Units_Warrior,
+  KM_HouseBarracks, KM_HouseSchool, KM_ResUnits, KM_Log, KM_CommonUtils, KM_HouseMarket,
   KM_Resource, KM_UnitTaskSelfTrain, KM_Sound, KM_Hand, KM_AIDefensePos, KM_CommonClasses,
   KM_UnitsCollection, KM_PathFindingRoad;
 
@@ -123,7 +131,7 @@ end;
 
 
 { TKMScriptEvents }
-constructor TKMScriptEvents.Create(aExec: TPSExec; aIDCache: TKMScriptingIdCache);
+constructor TKMScriptEvents.Create(aExec: TPSDebugExec; aIDCache: TKMScriptingIdCache);
 begin
   inherited Create(aIDCache);
 
@@ -133,31 +141,35 @@ end;
 
 procedure TKMScriptEvents.LinkEvents;
 begin
-  fProcBeacon               := fExec.GetProcAsMethodN('ONBEACON');
-  fProcHouseAfterDestroyed  := fExec.GetProcAsMethodN('ONHOUSEAFTERDESTROYED');
-  fProcHouseBuilt           := fExec.GetProcAsMethodN('ONHOUSEBUILT');
-  fProcHousePlanPlaced      := fExec.GetProcAsMethodN('ONHOUSEPLANPLACED');
-  fProcHousePlanRemoved     := fExec.GetProcAsMethodN('ONHOUSEPLANREMOVED');
-  fProcHouseDamaged         := fExec.GetProcAsMethodN('ONHOUSEDAMAGED');
-  fProcHouseDestroyed       := fExec.GetProcAsMethodN('ONHOUSEDESTROYED');
-  fProcGroupHungry          := fExec.GetProcAsMethodN('ONGROUPHUNGRY');
-  fProcMarketTrade          := fExec.GetProcAsMethodN('ONMARKETTRADE');
-  fProcMissionStart         := fExec.GetProcAsMethodN('ONMISSIONSTART');
-  fProcPlanRoadPlaced       := fExec.GetProcAsMethodN('ONPLANROADPLACED');
-  fProcPlanRoadRemoved      := fExec.GetProcAsMethodN('ONPLANROADREMOVED');
-  fProcPlanFieldPlaced      := fExec.GetProcAsMethodN('ONPLANFIELDPLACED');
-  fProcPlanFieldRemoved     := fExec.GetProcAsMethodN('ONPLANFIELDREMOVED');
-  fProcPlanWinefieldPlaced  := fExec.GetProcAsMethodN('ONPLANWINEFIELDPLACED');
-  fProcPlanWinefieldRemoved := fExec.GetProcAsMethodN('ONPLANWINEFIELDREMOVED');
-  fProcPlayerDefeated       := fExec.GetProcAsMethodN('ONPLAYERDEFEATED');
-  fProcPlayerVictory        := fExec.GetProcAsMethodN('ONPLAYERVICTORY');
-  fProcTick                 := fExec.GetProcAsMethodN('ONTICK');
-  fProcUnitAfterDied        := fExec.GetProcAsMethodN('ONUNITAFTERDIED');
-  fProcUnitDied             := fExec.GetProcAsMethodN('ONUNITDIED');
-  fProcUnitTrained          := fExec.GetProcAsMethodN('ONUNITTRAINED');
-  fProcUnitWounded          := fExec.GetProcAsMethodN('ONUNITWOUNDED');
-  fProcUnitAttacked         := fExec.GetProcAsMethodN('ONUNITATTACKED');
-  fProcWarriorEquipped      := fExec.GetProcAsMethodN('ONWARRIOREQUIPPED');
+  fProcBeacon                := fExec.GetProcAsMethodN('OnBeacon');
+  fProcHouseAfterDestroyed   := fExec.GetProcAsMethodN('OnHouseAfterDestroyed');
+  fProcHouseBuilt            := fExec.GetProcAsMethodN('OnHouseBuilt');
+  fProcHousePlanPlaced       := fExec.GetProcAsMethodN('OnHousePlanPlaced');
+  fProcHousePlanRemoved      := fExec.GetProcAsMethodN('OnHousePlanRemoved');
+  fProcHouseDamaged          := fExec.GetProcAsMethodN('OnHouseDamaged');
+  fProcHouseDestroyed        := fExec.GetProcAsMethodN('OnHouseDestroyed');
+  fProcGroupHungry           := fExec.GetProcAsMethodN('OnGroupHungry');
+  fProcGroupOrderAttackHouse := fExec.GetProcAsMethodN('OnGroupOrderAttackHouse');
+  fProcGroupOrderAttackUnit  := fExec.GetProcAsMethodN('OnGroupOrderAttackUnit');
+  fProcGroupOrderLink        := fExec.GetProcAsMethodN('OnGroupOrderLink');
+  fProcGroupOrderSplit       := fExec.GetProcAsMethodN('OnGroupOrderSplit');
+  fProcMarketTrade           := fExec.GetProcAsMethodN('OnMarketTrade');
+  fProcMissionStart          := fExec.GetProcAsMethodN('OnMissionStart');
+  fProcPlanRoadPlaced        := fExec.GetProcAsMethodN('OnPlanRoadPlaced');
+  fProcPlanRoadRemoved       := fExec.GetProcAsMethodN('OnPlanRoadRemoved');
+  fProcPlanFieldPlaced       := fExec.GetProcAsMethodN('OnPlanFieldPlaced');
+  fProcPlanFieldRemoved      := fExec.GetProcAsMethodN('OnPlanFieldRemoved');
+  fProcPlanWinefieldPlaced   := fExec.GetProcAsMethodN('OnPlanWinefieldPlaced');
+  fProcPlanWinefieldRemoved  := fExec.GetProcAsMethodN('OnPlanWinefieldRemoved');
+  fProcPlayerDefeated        := fExec.GetProcAsMethodN('OnPlayerDefeated');
+  fProcPlayerVictory         := fExec.GetProcAsMethodN('OnPlayerVictory');
+  fProcTick                  := fExec.GetProcAsMethodN('OnTick');
+  fProcUnitAfterDied         := fExec.GetProcAsMethodN('OnUnitAfterDied');
+  fProcUnitDied              := fExec.GetProcAsMethodN('OnUnitDied');
+  fProcUnitTrained           := fExec.GetProcAsMethodN('OnUnitTrained');
+  fProcUnitWounded           := fExec.GetProcAsMethodN('OnUnitWounded');
+  fProcUnitAttacked          := fExec.GetProcAsMethodN('OnUnitAttacked');
+  fProcWarriorEquipped       := fExec.GetProcAsMethodN('OnWarriorEquipped');
 end;
 
 
@@ -171,7 +183,11 @@ end;
 procedure TKMScriptEvents.DoProc(const aProc: TMethod; const aParams: array of Integer);
 var
   ExceptionProc: TPSProcRec;
-  S: UnicodeString;
+  InternalProc: TPSInternalProcRec;
+  MainErrorStr, ErrorStr, DetailedErrorStr: UnicodeString;
+  Pos, Row, Col: Cardinal;
+  TBTFileName: tbtstring;
+  ErrorMessage: TKMScriptErrorMessage;
 begin
   try
     case Length(aParams) of
@@ -180,7 +196,7 @@ begin
       2: TKMScriptEvent2I(aProc)(aParams[0], aParams[1]);
       3: TKMScriptEvent3I(aProc)(aParams[0], aParams[1], aParams[2]);
       4: TKMScriptEvent4I(aProc)(aParams[0], aParams[1], aParams[2], aParams[3]);
-      else Assert(False);
+      else raise Exception.Create('Unexpected Length(aParams)');
     end;
   except
     on E: Exception do
@@ -191,11 +207,22 @@ begin
       end
       else
       begin
-        S := 'Exception in script: ''' + E.Message + '''';
+        DetailedErrorStr := '';
+        MainErrorStr := 'Exception in script: ''' + E.Message + '''';
         ExceptionProc := fExec.GetProcNo(fExec.ExceptionProcNo);
         if ExceptionProc is TPSInternalProcRec then
-          S := S + ' in procedure ''' + UnicodeString(TPSInternalProcRec(ExceptionProc).ExportName) + '''';
-        fOnScriptError(se_Exception, S);
+        begin
+          InternalProc := TPSInternalProcRec(ExceptionProc);
+          MainErrorStr := MainErrorStr + EolW + 'in procedure ''' + UnicodeString(InternalProc.ExportName) + '''' + EolW;
+          // With the help of uPSDebugger get information about error position in script code
+          if fExec.TranslatePositionEx(fExec.LastExProc, fExec.LastExPos, Pos, Row, Col, TBTFileName) then
+          begin
+            ErrorMessage := gGame.Scripting.GetErrorMessage('Error', '', Row, Col);
+            ErrorStr := MainErrorStr + ErrorMessage.GameMessage;
+            DetailedErrorStr := MainErrorStr + ErrorMessage.LogMessage;
+          end;
+        end;
+        fOnScriptError(se_Exception, ErrorStr, DetailedErrorStr);
       end;
   end;
 end;
@@ -254,7 +281,7 @@ end;
 
 //* Version: 5882
 //* Occurs when a house is damaged by the enemy soldier.
-//* !Attacker is -1 the house was damaged some other way, such as from Actions.!HouseAddDamage.
+//* Attacker is -1 the house was damaged some other way, such as from Actions.HouseAddDamage.
 procedure TKMScriptEvents.ProcHouseDamaged(aHouse: TKMHouse; aAttacker: TKMUnit);
 begin
   if MethodAssigned(fProcHouseDamaged) then
@@ -274,8 +301,8 @@ end;
 
 //* Version: 5407
 //* Occurs when a house is destroyed.
-//* If !DestroyerIndex is -1 the house was destroyed some other way, such as from Actions.!HouseDestroy.
-//* If !DestroyerIndex is the same as the house owner (States.!HouseOwner), the house was demolished by the player who owns it.
+//* If DestroyerIndex is -1 the house was destroyed some other way, such as from Actions.HouseDestroy.
+//* If DestroyerIndex is the same as the house owner (States.HouseOwner), the house was demolished by the player who owns it.
 //* Otherwise it was destroyed by an enemy.
 //* Called just before the house is destroyed so HouseID is usable only during this event, and the area occupied by the house is still unusable.
 //* aDestroyerIndex: Index of player who destroyed it
@@ -292,7 +319,7 @@ end;
 //* Version: 6114
 //* Occurs after a house is destroyed and has been completely removed from the game,
 //* meaning the area it previously occupied can be used.
-//* If you need more information about the house use the !OnHouseDestroyed event.
+//* If you need more information about the house use the OnHouseDestroyed event.
 procedure TKMScriptEvents.ProcHouseAfterDestroyed(aHouseType: THouseType; aOwner: TKMHandIndex; aX, aY: Word);
 begin
   if MethodAssigned(fProcHouseAfterDestroyed) then
@@ -305,7 +332,7 @@ end;
 procedure TKMScriptEvents.ProcHousePlanPlaced(aPlayer: TKMHandIndex; aX, aY: Word; aType: THouseType);
 begin
   if MethodAssigned(fProcHousePlanPlaced) then
-    DoProc(fProcHousePlanPlaced, [aPlayer, aX + gRes.HouseDat[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
+    DoProc(fProcHousePlanPlaced, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
 end;
 
 
@@ -314,7 +341,7 @@ end;
 procedure TKMScriptEvents.ProcHousePlanRemoved(aPlayer: TKMHandIndex; aX, aY: Word; aType: THouseType);
 begin
   if MethodAssigned(fProcHousePlanRemoved) then
-    DoProc(fProcHousePlanRemoved, [aPlayer, aX + gRes.HouseDat[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
+    DoProc(fProcHousePlanRemoved, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
 end;
 
 
@@ -332,8 +359,68 @@ begin
 end;
 
 
+//* Version: 7000+
+//* Occurs when the group gets order to attack house
+//* aGroup: attackers group ID
+//* aHouse: target house ID
+procedure TKMScriptEvents.ProcGroupOrderAttackHouse(aGroup: TKMUnitGroup; aHouse: TKMHouse);
+begin
+  if MethodAssigned(fProcGroupOrderAttackHouse) then
+  begin
+    fIDCache.CacheGroup(aGroup, aGroup.UID); //Improves cache efficiency since aGroup will probably be accessed soon
+    fIDCache.CacheHouse(aHouse, aHouse.UID); //Improves cache efficiency since aHouse will probably be accessed soon
+    DoProc(fProcGroupOrderAttackHouse, [aGroup.UID, aHouse.UID]);
+  end;
+end;
+
+
+//* Version: 7000+
+//* Occurs when the group gets order to attack unit
+//* aGroup: attackers group ID
+//* aUnit: target unit ID
+procedure TKMScriptEvents.ProcGroupOrderAttackUnit(aGroup: TKMUnitGroup; aUnit: TKMUnit);
+begin
+  if MethodAssigned(fProcGroupOrderAttackUnit) then
+  begin
+    fIDCache.CacheGroup(aGroup, aGroup.UID); //Improves cache efficiency since aGroup will probably be accessed soon
+    fIDCache.CacheUnit(aUnit, aUnit.UID);    //Improves cache efficiency since aUnit will probably be accessed soon
+    DoProc(fProcGroupOrderAttackUnit, [aGroup.UID, aUnit.UID]);
+  end;
+end;
+
+
+//* Version: 7000+
+//* Occurs when the group1 gets order to link to group2
+//* aGroup1: link group ID
+//* aGroup2: link target group ID
+procedure TKMScriptEvents.ProcGroupOrderLink(aGroup1, aGroup2: TKMUnitGroup);
+begin
+  if MethodAssigned(fProcGroupOrderLink) then
+  begin
+    fIDCache.CacheGroup(aGroup1, aGroup1.UID); //Improves cache efficiency since aGroup1 will probably be accessed soon
+    fIDCache.CacheGroup(aGroup2, aGroup2.UID); //Improves cache efficiency since aGroup2 will probably be accessed soon
+    DoProc(fProcGroupOrderLink, [aGroup1.UID, aGroup2.UID]);
+  end;
+end;
+
+
+//* Version: 7000+
+//* Occurs when the group gets order to split
+//* aGroup: group ID
+//* aNewGroup: splitted group ID
+procedure TKMScriptEvents.ProcGroupOrderSplit(aGroup, aNewGroup: TKMUnitGroup);
+begin
+  if MethodAssigned(fProcGroupOrderLink) then
+  begin
+    fIDCache.CacheGroup(aGroup, aGroup.UID);       //Improves cache efficiency since aGroup will probably be accessed soon
+    fIDCache.CacheGroup(aNewGroup, aNewGroup.UID); //Improves cache efficiency since aNewGroup will probably be accessed soon
+    DoProc(fProcGroupOrderSplit, [aGroup.UID, aNewGroup.UID]);
+  end;
+end;
+
+
 //* Version: 5407
-//* Occurs when a unit dies. If !KillerIndex is -1 the unit died from another cause such as hunger or Actions.!UnitKill.
+//* Occurs when a unit dies. If KillerIndex is -1 the unit died from another cause such as hunger or Actions.UnitKill.
 //* Called just before the unit is killed so UnitID is usable only during this event,
 //* and the tile occupied by the unit is still taken.
 //* aKillerOwner: Index of player who killed it
@@ -349,8 +436,8 @@ end;
 
 //* Version: 6114
 //* Occurs after a unit has died and has been completely removed from the game, meaning the tile it previously occupied can be used.
-//* If you need more information about the unit use the !OnUnitDied event.
-//* Note: Because units have a death animation there is a delay of several ticks between !OnUnitDied and !OnUnitAfterDied.
+//* If you need more information about the unit use the OnUnitDied event.
+//* Note: Because units have a death animation there is a delay of several ticks between OnUnitDied and OnUnitAfterDied.
 procedure TKMScriptEvents.ProcUnitAfterDied(aUnitType: TUnitType; aOwner: TKMHandIndex; aX, aY: Word);
 begin
   if MethodAssigned(fProcUnitAfterDied) then
@@ -506,14 +593,20 @@ begin
 end;
 
 
-procedure TKMScriptEntity.LogParamWarning(aFuncName: string; const aValues: array of Integer);
+procedure TKMScriptEntity.LogWarning(const aFuncName: string; aWarnMsg: String);
+begin
+  fOnScriptError(se_Log, 'Warning in ' + aFuncName + ': ' + aWarnMsg);
+end;
+
+
+procedure TKMScriptEntity.LogParamWarning(const aFuncName: string; const aValues: array of Integer);
 var
   I: Integer;
   Values: string;
 begin
   Values := '';
   for I := Low(aValues) to High(aValues) do
-    Values := Values + IntToStr(aValues[I]) + IfThen(I<>High(aValues), ', ');
+    Values := Values + String(IntToStr(aValues[I])) + IfThen(I <> High(aValues), ', ');
   fOnScriptError(se_InvalidParameter, 'Invalid parameter(s) passed to ' + aFuncName + ': ' + Values);
 end;
 

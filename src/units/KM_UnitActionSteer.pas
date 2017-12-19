@@ -27,7 +27,7 @@ type
 
 implementation
 uses
-  KM_Utils, KM_Resource, KM_ResUnits;
+  KM_CommonUtils, KM_Resource, KM_ResUnits;
 
 
 { TUnitActionSteer }
@@ -35,14 +35,14 @@ constructor TUnitActionSteer.Create(aUnit: TKMUnit; aActionType:TUnitActionType;
 begin
   inherited Create(aUnit, aActionType, aLocked);
   Assert(aUnit is TKMUnitAnimal); //Only animals do steering
-  fVertexOccupied := KMPoint(0,0);
-  fNextPos        := KMPoint(0,0);
+  fVertexOccupied := KMPOINT_ZERO;
+  fNextPos        := KMPOINT_ZERO;
 end;
 
 
 destructor TUnitActionSteer.Destroy;
 begin
-  if not KMSamePoint(fVertexOccupied, KMPoint(0,0)) then
+  if not KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then
     DecVertex;
   Inherited;
 end;
@@ -73,7 +73,7 @@ end;
 procedure TUnitActionSteer.IncVertex(aFrom, aTo: TKMPoint);
 begin
   //Tell gTerrain that this vertex is being used so no other unit walks over the top of us
-  Assert(KMSamePoint(fVertexOccupied, KMPoint(0,0)), 'Steer vertex in use');
+  Assert(KMSamePoint(fVertexOccupied, KMPOINT_ZERO), 'Steer vertex in use');
 
   fUnit.VertexAdd(aFrom,aTo);
   fVertexOccupied := KMGetDiagVertex(aFrom,aTo);
@@ -83,10 +83,10 @@ end;
 procedure TUnitActionSteer.DecVertex;
 begin
   //Tell gTerrain that this vertex is not being used anymore
-  Assert(not KMSamePoint(fVertexOccupied, KMPoint(0,0)), 'DecVertex 0:0 Steer');
+  Assert(not KMSamePoint(fVertexOccupied, KMPOINT_ZERO), 'DecVertex 0:0 Steer');
 
   fUnit.VertexRem(fVertexOccupied);
-  fVertexOccupied := KMPoint(0,0);
+  fVertexOccupied := KMPOINT_ZERO;
 end;
 
 
@@ -133,7 +133,7 @@ var
   WalkX,WalkY,Distance:single;
   FirstStep: Boolean;
 begin
-  if KMSamePoint(fNextPos, KMPoint(0,0)) then
+  if KMSamePoint(fNextPos, KMPOINT_ZERO) then
   begin
     fNextPos := fUnit.GetPosition; //Set fNextPos to current pos so it initializes on the first run
     FirstStep := True;
@@ -141,7 +141,7 @@ begin
   else
     FirstStep := False;
       
-  Distance := gRes.UnitDat[fUnit.UnitType].Speed;
+  Distance := gRes.Units[fUnit.UnitType].Speed;
   if KMSamePointF(fUnit.PositionF, KMPointF(fNextPos), Distance/2) then
   begin
     //Set precise position to avoid rounding errors
@@ -156,9 +156,9 @@ begin
     begin
       inc(fStuckFor);
       if fStuckFor > 200 then
-        Result := ActAborted //We have been stuck for a while so abort and TKMUnitAnimal.UpdateState will kill us
+        Result := ar_ActAborted //We have been stuck for a while so abort and TKMUnitAnimal.UpdateState will kill us
       else
-        Result := ActContinues;
+        Result := ar_ActContinues;
       Exit;
     end;
     fStuckFor := 0;
@@ -184,7 +184,7 @@ begin
                               fUnit.PositionF.Y + DY*Math.min(Distance,abs(WalkY)));
 
   inc(fUnit.AnimStep);
-  Result := ActContinues;
+  Result := ar_ActContinues;
 end;
 
 

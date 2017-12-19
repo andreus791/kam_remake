@@ -2,9 +2,8 @@ unit KM_HandSpectator;
 {$I KaM_Remake.inc}
 interface
 uses
-  KromUtils,
-  KM_CommonClasses, KM_Defaults,
-  KM_FogOfWar, KM_Hand;
+  KM_Hand, KM_FogOfWar,
+  KM_CommonClasses, KM_Defaults;
 
 
 type
@@ -16,24 +15,31 @@ type
     fHighlight: TObject; //Unit/House/Group that is shown highlighted to draw players attention
     fHighlightEnd: Cardinal; //Highlight has a short time to live
     fSelected: TObject;
+    fIsSelectedMyObj: Boolean; // We can select ally's house/unit
+    fLastSpecSelectedObjUID: array [0..MAX_HANDS-1] of Integer; //UIDs of last selected objects for each hand while spectating/watching replay
     fFOWIndex: TKMHandIndex; //Unit/House/Group selected by player and shown in UI
     fFogOfWarOpen: TKMFogOfWarOpen; //Stub for MapEd
     fFogOfWar: TKMFogOfWarCommon; //Pointer to current FOW view, updated by UpdateFogOfWarIndex
     procedure SetHighlight(Value: TObject);
     procedure SetSelected(Value: TObject);
-    procedure SeTKMHandIndex(const Value: TKMHandIndex);
+    procedure SetHandIndex(const Value: TKMHandIndex);
     procedure SetFOWIndex(const Value: TKMHandIndex);
     procedure UpdateFogOfWarIndex;
+    function GetLastSpecSelectedObj: TObject;
+    function IsLastSelectObjectValid(aObject: TObject): Boolean;
   public
     constructor Create(aHandIndex: TKMHandIndex);
     destructor Destroy; override;
     property Highlight: TObject read fHighlight write SetHighlight;
     property Selected: TObject read fSelected write SetSelected;
+    property IsSelectedMyObj: Boolean read fIsSelectedMyObj write fIsSelectedMyObj;
     function Hand: TKMHand;
-    property HandIndex: TKMHandIndex read fHandIndex write SeTKMHandIndex;
+    property HandIndex: TKMHandIndex read fHandIndex write SetHandIndex;
     property FOWIndex: TKMHandIndex read fFOWIndex write SetFOWIndex;
     property FogOfWar: TKMFogOfWarCommon read fFogOfWar;
-    function HitTestCursor: TObject;
+    property LastSpecSelectedObj: TObject read GetLastSpecSelectedObj;
+    function HitTestCursor(aIncludeAnimals: Boolean = False): TObject;
+    function HitTestCursorWGroup(aIncludeAnimals: Boolean = False): TObject;
     procedure UpdateSelect;
     procedure Load(LoadStream: TKMemoryStream);
     procedure Save(SaveStream: TKMemoryStream);
@@ -43,12 +49,15 @@ type
 
 implementation
 uses
-  KM_HandsCollection, KM_Game, KM_Houses, KM_Units, KM_UnitGroups, KM_GameCursor,
-  KM_Units_Warrior;
+  KM_Game, KM_GameCursor, KM_HandsCollection,
+  KM_Units, KM_UnitGroups, KM_Units_Warrior, KM_Houses,
+  KM_Utils, KM_CommonUtils;
 
 
 { TKMSpectator }
 constructor TKMSpectator.Create(aHandIndex: TKMHandIndex);
+var
+  I: Integer;
 begin
   inherited Create;
 
@@ -57,6 +66,9 @@ begin
   //Stub that always returns REVEALED
   fFogOfWarOpen := TKMFogOfWarOpen.Create;
   UpdateFogOfWarIndex;
+
+  for I := Low(fLastSpecSelectedObjUID) to High(fLastSpecSelectedObjUID) do
+    fLastSpecSelectedObjUID[I] := UID_NONE;
 end;
 
 
@@ -82,6 +94,35 @@ begin
 end;
 
 
+//Return last seleted object for current chosen hand
+function TKMSpectator.GetLastSpecSelectedObj: TObject;
+var
+  Obj: TObject;
+  UID: Integer;
+begin
+  Result := nil;
+  UID := fLastSpecSelectedObjUID[fHandIndex];
+  if UID <> UID_NONE then
+  begin
+    Obj := gHands.GetObjectByUID(UID);
+    if IsLastSelectObjectValid(Obj) then
+      Result := Obj
+    else
+      fLastSpecSelectedObjUID[fHandIndex] := UID_NONE;  // Last selected object is not valid anymore, so reset UID
+  end;
+end;
+
+
+function TKMSpectator.IsLastSelectObjectValid(aObject: TObject): Boolean;
+begin
+  Result := (aObject <> nil)
+    and not ((aObject is TKMUnit) and TKMUnit(aObject).IsDeadOrDying)    //Don't allow the player to select dead units
+    and not (aObject is TKMUnitAnimal)                                   //...or animals
+    and not ((aObject is TKMUnitGroup) and TKMUnitGroup(aObject).IsDead) //We can not select dead groups (with no warriors)
+    and not ((aObject is TKMHouse) and TKMHouse(aObject).IsDestroyed);   //Don't allow the player to select destroyed houses
+end;
+
+
 procedure TKMSpectator.Load(LoadStream: TKMemoryStream);
 begin
   LoadStream.Read(fHandIndex);
@@ -103,11 +144,11 @@ end;
 
 //Test if there's object below that player can interact with
 //Units and Houses, not Groups
-function TKMSpectator.HitTestCursor: TObject;
+function TKMSpectator.HitTestCursor(aIncludeAnimals: Boolean = False): TObject;
 begin
   Result := gHands.GetUnitByUID(gGameCursor.ObjectUID);
   if ((Result is TKMUnit) and TKMUnit(Result).IsDeadOrDying)
-  or (Result is TKMUnitAnimal) then
+  or ((Result is TKMUnitAnimal) and not aIncludeAnimals) then
     Result := nil;
 
   //If there's no unit try pick a house on the Cell below
@@ -120,36 +161,74 @@ begin
 end;
 
 
+//Test if there's object below that player can interact with
+//Units and Houses and Groups
+function TKMSpectator.HitTestCursorWGroup(aIncludeAnimals: Boolean = False): TObject;
+var
+  G: TKMUnitGroup;
+begin
+  Result := HitTestCursor(aIncludeAnimals);
+
+  if Result is TKMUnitWarrior then
+  begin
+    if gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]  then
+      G := gHands.GetGroupByMember(TKMUnitWarrior(Result))
+    else
+      G := gHands[fHandIndex].UnitGroups.GetGroupByMember(TKMUnitWarrior(Result));
+
+    //Warrior might not be assigned to a group while walking out of the Barracks
+    if G <> nil then
+      Result := G
+    else
+      Result := nil; //Can't select warriors until they have been assigned a group
+  end;
+end;
+
+
 //Select anything player CAN select below cursor
 procedure TKMSpectator.UpdateSelect;
 var
-  G: TKMUnitGroup;
   NewSelected: TObject;
+
+  procedure CheckNewSelected;
+  var
+    OwnerIndex: TKMHandIndex;
+  begin
+    OwnerIndex := GetGameObjectOwnerIndex(NewSelected);
+    if OwnerIndex <> -1 then
+    begin
+      if (OwnerIndex <> fHandIndex) then  // check if we selected our unit/ally's or enemy's
+      begin
+        if (Hand.Alliances[OwnerIndex] = at_Ally)
+          or (ALLOW_SELECT_ENEMIES and (Hand.Alliances[OwnerIndex] = at_Enemy)) then // Enemies can be selected for debug
+          fIsSelectedMyObj := False
+        else
+          NewSelected := nil;
+      end else
+        fIsSelectedMyObj := True;
+    end;
+  end;
+
+var
+  UID: Integer;
 begin
-  //In-game player can select only own Units
-  if gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti] then
-    NewSelected := gHands.GetUnitByUID(gGameCursor.ObjectUID)
-  else
-    NewSelected := gHands[fHandIndex].Units.GetUnitByUID(gGameCursor.ObjectUID);
+  NewSelected := gHands.GetUnitByUID(gGameCursor.ObjectUID);
+  //In-game player can select only own and ally Units
+  if not (gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]) then
+    CheckNewSelected;
 
   //Don't allow the player to select dead units
   if ((NewSelected is TKMUnit) and TKMUnit(NewSelected).IsDeadOrDying)
-  or (NewSelected is TKMUnitAnimal) then //...or animals
+    or (NewSelected is TKMUnitAnimal) then //...or animals
     NewSelected := nil;
 
   //If Id belongs to some Warrior, try to select his group instead
   if NewSelected is TKMUnitWarrior then
   begin
-    if gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]  then
-      G := gHands.GetGroupByMember(TKMUnitWarrior(NewSelected))
-    else
-      G := gHands[fHandIndex].UnitGroups.GetGroupByMember(TKMUnitWarrior(NewSelected));
+    NewSelected := gHands.GetGroupByMember(TKMUnitWarrior(NewSelected));
 
-    //Warrior might not be assigned to a group while walking out of the Barracks
-    if G <> nil then
-      NewSelected := G
-    else
-      NewSelected := nil; //Can't select warriors until they have been assigned a group
+    if not (gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]) then
+      CheckNewSelected;
   end;
 
   //Update selected groups selected unit
@@ -159,10 +238,11 @@ begin
   //If there's no unit try pick a house on the Cell below
   if NewSelected = nil then
   begin
-    if gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]  then
-      NewSelected := gHands.HousesHitTest(gGameCursor.Cell.X, gGameCursor.Cell.Y)
-    else
-      NewSelected := gHands[fHandIndex].HousesHitTest(gGameCursor.Cell.X, gGameCursor.Cell.Y);
+    NewSelected := gHands.HousesHitTest(gGameCursor.Cell.X, gGameCursor.Cell.Y);
+
+    //In-game player can select only own and ally Units
+    if not (gGame.GameMode in [gmMultiSpectate, gmMapEd, gmReplaySingle, gmReplayMulti]) then
+      CheckNewSelected;
 
     //Don't allow the player to select destroyed houses
     if (NewSelected is TKMHouse) and TKMHouse(NewSelected).IsDestroyed then
@@ -172,6 +252,30 @@ begin
   //Don't clear the old selection unless we found something new
   if NewSelected <> nil then
     Selected := NewSelected;
+
+  // In a replay we want in-game statistics (and other things) to be shown for the owner of the last select object
+  if gGame.GameMode in [gmMultiSpectate, gmReplaySingle, gmReplayMulti] then
+  begin
+    UID := UID_NONE;
+    if Selected is TKMHouse then
+    begin
+      HandIndex := TKMHouse(Selected).Owner;
+      UID := TKMHouse(Selected).UID;
+    end;
+    if Selected is TKMUnit then
+    begin
+      HandIndex := TKMUnit(Selected).Owner;
+      UID := TKMUnit(Selected).UID;
+    end;
+    if Selected is TKMUnitGroup then
+    begin
+      HandIndex := TKMUnitGroup(Selected).Owner;
+      UID := TKMUnitGroup(Selected).UID;
+    end;
+    if (Selected <> nil) and (UID <> UID_NONE) then
+      fLastSpecSelectedObjUID[fHandIndex] := UID;
+  end;
+
 end;
 
 
@@ -191,7 +295,7 @@ begin
 end;
 
 
-procedure TKMSpectator.SeTKMHandIndex(const Value: TKMHandIndex);
+procedure TKMSpectator.SetHandIndex(const Value: TKMHandIndex);
 begin
   Assert(MULTIPLAYER_CHEATS or (gGame.GameMode <> gmMulti));
   fHandIndex := Value;

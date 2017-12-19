@@ -2,8 +2,9 @@ unit KM_Campaigns;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, KromUtils, Math, SysUtils,
-  KM_CommonClasses, KM_Pics, KM_Points, KM_ResTexts, KM_ResLocales;
+  Classes,
+  KM_ResTexts, KM_Pics,
+  KM_CommonClasses, KM_Points;
 
 
 const
@@ -41,9 +42,9 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    procedure LoadFromFile(aFileName: UnicodeString);
-    procedure SaveToFile(aFileName: UnicodeString);
-    procedure LoadFromPath(aPath: UnicodeString);
+    procedure LoadFromFile(const aFileName: UnicodeString);
+    procedure SaveToFile(const aFileName: UnicodeString);
+    procedure LoadFromPath(const aPath: UnicodeString);
 
     property BackGroundPic: TKMPic read fBackGroundPic write fBackGroundPic;
     property MapCount: Byte read fMapCount write SetMapCount;
@@ -54,6 +55,7 @@ type
 
     function CampaignTitle: UnicodeString;
     function CampaignDescription: UnicodeString;
+    function CampaignMissionTitle(aIndex: Byte): UnicodeString;
     function MissionFile(aIndex: Byte): UnicodeString;
     function MissionTitle(aIndex: Byte): UnicodeString;
     function MissionBriefing(aIndex: Byte): UnicodeString;
@@ -96,7 +98,9 @@ const
 
 implementation
 uses
-  KM_Defaults, KM_Resource, KM_ResSprites, KM_Log;
+  SysUtils, Math, KromUtils,
+  KM_Resource, KM_ResLocales, KM_ResSprites,
+  KM_Log, KM_Defaults;
 
 
 const
@@ -346,7 +350,7 @@ end;
 
 //Load campaign info from *.cmp file
 //It should be private, but it is used by CampaignBuilder
-procedure TKMCampaign.LoadFromFile(aFileName: UnicodeString);
+procedure TKMCampaign.LoadFromFile(const aFileName: UnicodeString);
 var
   M: TKMemoryStream;
   I, K: Integer;
@@ -380,7 +384,7 @@ begin
 end;
 
 
-procedure TKMCampaign.SaveToFile(aFileName: UnicodeString);
+procedure TKMCampaign.SaveToFile(const aFileName: UnicodeString);
 var
   M: TKMemoryStream;
   I, K: Integer;
@@ -421,7 +425,7 @@ begin
 end;
 
 
-procedure TKMCampaign.LoadFromPath(aPath: UnicodeString);
+procedure TKMCampaign.LoadFromPath(const aPath: UnicodeString);
 var
   SP: TKMSpritePack;
   FirstSpriteIndex: Word;
@@ -483,6 +487,18 @@ end;
 function TKMCampaign.CampaignDescription: UnicodeString;
 begin
   Result := fTextLib[2];
+end;
+
+
+function TKMCampaign.CampaignMissionTitle(aIndex: Byte): UnicodeString;
+begin
+  if fTextLib[3] <> '' then
+  begin
+    Assert(CountMatches(fTextLib[3], '%d') = 1, 'Custom campaign mission template must have a single "%d" in it.');
+    Result := Format(fTextLib[3], [aIndex+1]);
+  end
+  else
+    Result := Format(gResTexts[TX_GAME_MISSION], [aIndex+1]);
 end;
 
 

@@ -13,24 +13,22 @@ type
   //Class with additional editing properties
   TKMSpritePackEdit = class(TKMSpritePack)
   private
-    fPalettes: TKMPalettes;
+    fPalettes: TKMResPalettes;
     function GetLoaded: Boolean;
   protected
     procedure Allocate(aCount: Integer); override; //Allocate space for data that is being loaded
     procedure Expand;
   public
-    constructor Create(aRT: TRXType; aPalettes: TKMPalettes);
+    constructor Create(aRT: TRXType; aPalettes: TKMResPalettes);
 
     property IsLoaded: Boolean read GetLoaded;
-    procedure AdjoinHouseMasks(aHouseDat: TKMHouseDatCollection);
-    procedure GrowHouseMasks(aHouseDat: TKMHouseDatCollection);
-    procedure SoftWater(aTileset: TKMTileset);
+    procedure AdjoinHouseMasks(aHouseDat: TKMResHouses);
+    procedure GrowHouseMasks(aHouseDat: TKMResHouses);
+    procedure SoftWater(aTileset: TKMResTileset);
     procedure Delete(aIndex: Integer);
     procedure LoadFromRXFile(const aFileName: string);
     procedure LoadFromFolder(const aFolder: string);
     procedure SaveToRXXFile(const aFileName: string);
-    procedure SoftenShadows(aStart:Integer=1; aEnd: Integer=-1; aOnlyShadows:Boolean=True); overload;
-    procedure SoftenShadows(aID:Integer; aOnlyShadows:Boolean=True); overload;
     function TrimSprites: Cardinal; //For debug
     procedure ClearTemp; override;
     procedure GetImageToBitmap(aIndex: Integer; aBmp, aMask: TBitmap);
@@ -65,7 +63,7 @@ var
 
 { TKMSpritePackEdit }
 //We need to access to palettes to properly Expand RX files
-constructor TKMSpritePackEdit.Create(aRT: TRXType; aPalettes: TKMPalettes);
+constructor TKMSpritePackEdit.Create(aRT: TRXType; aPalettes: TKMResPalettes);
 begin
   inherited Create(aRT);
 
@@ -91,26 +89,26 @@ end;
 
 //Convert paletted data into RGBA and select Team color layer from it
 procedure TKMSpritePackEdit.Expand;
-  function HouseWIP(aID: Integer): TKMPalData;
+  function HouseWIP(aID: Integer): TKMPaletteInfo;
   const
     //These are sprites with house building steps
     WIP: array[0..55] of word = (3,4,25,43,44,116,118,119,120,121,123,126,127,136,137,140,141,144,145,148,149,213,214,237,238,241,242,243,246,247,252,253,257,258,275,276,336,338,360,361,365,366,370,371,380,381,399,400,665,666,670,671,1658,1660,1682,1684);
   var
     I: Byte;
   begin
-    Result := fPalettes.DefDal;
+    Result := fPalettes.DefaultPalette;
 
     for I := 0 to High(WIP) do
     if aID = WIP[I] then
     begin
-      Result := fPalettes.PalData[pal_lin];
+      Result := fPalettes[pal_lin];
       Exit;
     end;
   end;
 var
   H: Integer;
   K, I: Integer;
-  Palette: TKMPalData;
+  Palette: TKMPaletteInfo;
   L: byte;
   Pixel: Integer;
 begin
@@ -121,7 +119,7 @@ begin
     case fRT of
       rxHouses:   Palette := HouseWIP(H);
       rxGuiMain:  Palette := fPalettes[RX5Pal[H]];
-      else        Palette := fPalettes.DefDal;
+      else        Palette := fPalettes.DefaultPalette;
     end;
 
     if Flag[H] = 1 then
@@ -139,7 +137,7 @@ begin
         //We decode them according to visualization pipeline to greyscale
         //and make a color transparency mask
         if RXInfo[fRT].TeamColors and (L in [24..30])
-        and (Palette <> fPalettes.PalData[pal_lin])
+        and (Palette <> fPalettes[pal_lin])
         and ((fRT <> rxHouses) or (H > 400))  //Skip the Inn Weapon Smithy and the rest
         and ((fRT <> rxGui) or InRange(H, 141, 154) or InRange(H, 521, 550)) then //Unit icons and scrolls
         begin
@@ -172,7 +170,7 @@ end;
 
 
 //
-procedure TKMSpritePackEdit.AdjoinHouseMasks(aHouseDat: TKMHouseDatCollection);
+procedure TKMSpritePackEdit.AdjoinHouseMasks(aHouseDat: TKMResHouses);
 var
   HT: THouseType;
   ID1, ID2: Integer; //RGB and A index
@@ -214,7 +212,7 @@ end;
 
 
 //Grow house building masks to account for blurred shadows edges being visible
-procedure TKMSpritePackEdit.GrowHouseMasks(aHouseDat: TKMHouseDatCollection);
+procedure TKMSpritePackEdit.GrowHouseMasks(aHouseDat: TKMResHouses);
 var
   HT: THouseType;
   ID: Integer; //RGB and A index
@@ -248,7 +246,7 @@ begin
 end;
 
 
-procedure TKMSpritePackEdit.SoftWater(aTileset: TKMTileset);
+procedure TKMSpritePackEdit.SoftWater(aTileset: TKMResTileset);
 var
   I, J, K, T: Integer;
   AR, AG, AB: Cardinal;
@@ -338,36 +336,13 @@ end;
 
 //Release RAM that is no longer needed
 procedure TKMSpritePackEdit.ClearTemp;
-var I: Integer;
+var
+  I: Integer;
 begin
   inherited;
 
   for I := 1 to fRXData.Count do
     SetLength(fRXData.Data[I], 0);
-end;
-
-
-//Make old style KaM checkerboard shadows smooth and transparent
-procedure TKMSpritePackEdit.SoftenShadows(aStart:Integer=1; aEnd: Integer=-1; aOnlyShadows:Boolean=True);
-var ShadowConverter: TKMSoftShadowConverter; I:Integer;
-begin
-  ShadowConverter := TKMSoftShadowConverter.Create(Self);
-  if aEnd = -1 then aEnd := fRXData.Count;
-  for I := aStart to aEnd do
-    if (fRXData.Flag[I] <> 0) then
-      ShadowConverter.ConvertShadows(I, aOnlyShadows);
-
-  ShadowConverter.Free;
-end;
-
-
-procedure TKMSpritePackEdit.SoftenShadows(aID:Integer; aOnlyShadows:Boolean=True);
-var ShadowConverter: TKMSoftShadowConverter;
-begin
-  ShadowConverter := TKMSoftShadowConverter.Create(Self);
-  if (fRXData.Flag[aID] <> 0) then
-    ShadowConverter.ConvertShadows(aID, aOnlyShadows);
-  ShadowConverter.Free;
 end;
 
 
@@ -465,7 +440,7 @@ begin
     begin
       S.ReadBuffer(fRXData.Size[I].X, 4);
       S.ReadBuffer(fRXData.Pivot[I].X, 8);
-      //Data part of each sprite is 8BPP palleted in KaM RX
+      //Data part of each sprite is 8BPP paletted in KaM RX
       SetLength(fRXData.Data[I], fRXData.Size[I].X * fRXData.Size[I].Y);
       S.ReadBuffer(fRXData.Data[I,0], fRXData.Size[I].X * fRXData.Size[I].Y);
     end;

@@ -3,7 +3,7 @@ unit RXXEditorForm;
 interface
 uses
   Classes, Controls, Dialogs,
-  ExtCtrls, Forms, Graphics, Spin, StdCtrls, SysUtils, TypInfo,
+  ExtCtrls, Forms, Graphics, Spin, StdCtrls, SysUtils,
   {$IFDEF FPC} LResources, {$ENDIF}
   KM_Defaults, KM_Log, KM_Pics, KM_PNG, KM_ResPalettes, KM_ResSprites, KM_ResSpritesEdit;
 
@@ -31,6 +31,7 @@ type
     edtPivotX: TSpinEdit;
     edtPivotY: TSpinEdit;
     chkHasMask: TCheckBox;
+    chbImageStretch: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure OpenDialog1Show(Sender: TObject);
     procedure SaveDialog1Show(Sender: TObject);
@@ -46,8 +47,9 @@ type
     procedure btnMaskExportClick(Sender: TObject);
     procedure chkHasMaskClick(Sender: TObject);
     procedure PivotChange(Sender: TObject);
+    procedure chbImageStretchClick(Sender: TObject);
   private
-    fPalettes: TKMPalettes;
+    fPalettes: TKMResPalettes;
     fSprites: TKMSpritePackEdit;
     procedure UpdateList;
   end;
@@ -65,15 +67,17 @@ procedure TRXXForm1.FormCreate(Sender: TObject);
 var
   RT: TRXType;
 begin
-  ExeDir := ExtractFilePath(Application.ExeName) + '..\..\';
+  ExeDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '..\..\');
 
   Caption := 'RXX Editor (' + GAME_REVISION + ')';
 
   //Although we don't need them in this tool, these are required to load sprites
   gLog := TKMLog.Create(ExeDir + 'RXXEditor.log');
 
-  fPalettes := TKMPalettes.Create;
+  fPalettes := TKMResPalettes.Create;
   fPalettes.LoadPalettes(ExeDir + 'data\gfx\');
+
+  chbImageStretchClick(nil);
 end;
 
 
@@ -273,6 +277,12 @@ begin
 end;
 
 
+procedure TRXXForm1.chbImageStretchClick(Sender: TObject);
+begin
+  Image1.Stretch := chbImageStretch.Checked;
+  Image1.Center := not chbImageStretch.Checked;
+end;
+
 procedure TRXXForm1.chkHasMaskClick(Sender: TObject);
 begin
   //
@@ -296,8 +306,11 @@ end;
 
 
 procedure TRXXForm1.UpdateList;
-var I: Integer;
+var
+  I: Integer;
+  aIndexList : Integer;
 begin
+  aIndexList := lbSpritesList.ItemIndex;
   lbSpritesList.Items.BeginUpdate;
   lbSpritesList.Items.Clear;
 
@@ -310,6 +323,10 @@ begin
   end;
 
   lbSpritesList.Items.EndUpdate;
+  if lbSpritesList.Items.Count > aIndexList + 1 then
+    lbSpritesList.ItemIndex := aIndexList
+  else
+    lbSpritesList.ItemIndex := lbSpritesList.Items.Count-1;
   lbSpritesListClick(Self);
 end;
 

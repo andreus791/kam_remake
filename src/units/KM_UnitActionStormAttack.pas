@@ -3,7 +3,7 @@ unit KM_UnitActionStormAttack;
 interface
 uses
   Classes, Math,
-  KM_CommonClasses, KM_Defaults, KM_Points, KM_Utils,
+  KM_CommonClasses, KM_Defaults, KM_Points, KM_CommonUtils,
   KM_Units;
 
 
@@ -50,14 +50,14 @@ begin
   fTileSteps      := -1; //-1 so the first initializing step makes it 0
   fDelay          := aRow * 5; //No delay for the first row
   fStamina        := MIN_STAMINA + KaMRandom(MAX_STAMINA-MIN_STAMINA+1);
-  fNextPos        := KMPoint(0,0);
-  fVertexOccupied := KMPoint(0,0);
+  fNextPos        := KMPOINT_ZERO;
+  fVertexOccupied := KMPOINT_ZERO;
 end;
 
 
 destructor TUnitActionStormAttack.Destroy;
 begin
-  if not KMSamePoint(fVertexOccupied, KMPoint(0,0)) then
+  if not KMSamePoint(fVertexOccupied, KMPOINT_ZERO) then
     DecVertex;
   inherited;
 end;
@@ -89,7 +89,7 @@ end;
 procedure TUnitActionStormAttack.IncVertex(aFrom, aTo: TKMPoint);
 begin
   //Tell gTerrain that this vertex is being used so no other unit walks over the top of us
-  Assert(KMSamePoint(fVertexOccupied, KMPoint(0,0)), 'Storm vertex in use');
+  Assert(KMSamePoint(fVertexOccupied, KMPOINT_ZERO), 'Storm vertex in use');
   //Assert(not gTerrain.HasVertexUnit(KMGetDiagVertex(aFrom,aTo)), 'Storm vertex blocked');
 
   fUnit.VertexAdd(aFrom,aTo); //Running counts as walking
@@ -100,19 +100,19 @@ end;
 procedure TUnitActionStormAttack.DecVertex;
 begin
   //Tell gTerrain that this vertex is not being used anymore
-  Assert(not KMSamePoint(fVertexOccupied, KMPoint(0,0)), 'DecVertex 0:0 Storm');
+  Assert(not KMSamePoint(fVertexOccupied, KMPOINT_ZERO), 'DecVertex 0:0 Storm');
 
   fUnit.VertexRem(fVertexOccupied);
-  fVertexOccupied := KMPoint(0,0);
+  fVertexOccupied := KMPOINT_ZERO;
 end;
 
 
 function TUnitActionStormAttack.GetSpeed: Single;
 begin
   if (fTileSteps <= 0) or (fTileSteps >= fStamina-1) then
-    Result := gRes.UnitDat[fUnit.UnitType].Speed
+    Result := gRes.Units[fUnit.UnitType].Speed
   else
-    Result := gRes.UnitDat[fUnit.UnitType].Speed * STORM_SPEEDUP;
+    Result := gRes.Units[fUnit.UnitType].Speed * STORM_SPEEDUP;
 end;
 
 
@@ -121,7 +121,7 @@ var
   DX, DY: ShortInt;
   WalkX, WalkY, Distance: Single;
 begin
-  if KMSamePoint(fNextPos, KMPoint(0,0)) then
+  if KMSamePoint(fNextPos, KMPOINT_ZERO) then
     fNextPos := fUnit.GetPosition; //Set fNextPos to current pos so it initializes on the first run
 
   //Walk for the first step before running
@@ -129,7 +129,7 @@ begin
   begin
     Dec(fDelay);
     fUnit.AnimStep := UnitStillFrames[fUnit.Direction];
-    Result := ActContinues;
+    Result := ar_ActContinues;
     Exit;
   end;
 
@@ -137,10 +137,10 @@ begin
   //In KaM the first step was also walking, but this makes it less useful/surprising
   if (fTileSteps >= fStamina - 1) then
   begin
-    Distance := gRes.UnitDat[fUnit.UnitType].Speed;
+    Distance := gRes.Units[fUnit.UnitType].Speed;
     fActionType := ua_Walk;
   end else begin
-    Distance := gRes.UnitDat[fUnit.UnitType].Speed * STORM_SPEEDUP;
+    Distance := gRes.Units[fUnit.UnitType].Speed * STORM_SPEEDUP;
     fActionType := ua_Spec;
   end;
 
@@ -161,7 +161,7 @@ begin
       begin
         //If we've picked a fight it means this action no longer exists,
         //so we must exit out (don't set ActDone as that will now apply to fight action)
-        Result := ActContinues;
+        Result := ar_ActContinues;
         Exit;
       end;
     Locked := True; //Finished CheckForEnemy, so lock again
@@ -172,7 +172,7 @@ begin
     //Action ends if: 1: Used up stamina. 2: There is an enemy to fight. 3: NextPos is an obsticle
     if (fTileSteps >= fStamina) or not fUnit.CanStepTo(fNextPos.X, fNextPos.Y, fUnit.DesiredPassability) then
     begin
-      Result := ActDone; //Finished run
+      Result := ar_ActDone; //Finished run
       Exit; //Must exit right away as we might have changed this action to fight
     end;
 
@@ -196,7 +196,7 @@ begin
 
   inc(fUnit.AnimStep);
   StepDone := false; //We are not actually done because now we have just taken another step
-  Result := ActContinues;
+  Result := ar_ActContinues;
 end;
 
 

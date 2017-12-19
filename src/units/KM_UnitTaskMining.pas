@@ -32,7 +32,8 @@ type
 
 implementation
 uses
-  KM_Houses, KM_HandsCollection, KM_Resource, KM_ResMapElements, KM_ResTexts, KM_ResHouses,
+  KM_Houses, KM_HouseWoodcutters, KM_HandsCollection,
+  KM_Resource, KM_ResMapElements, KM_ResTexts, KM_ResHouses,
   KM_Hand, KM_ResUnits;
 
 
@@ -48,7 +49,7 @@ begin
   fWorkPlan.FindPlan( fUnit,
                       fUnit.GetHome.HouseType,
                       aWare,
-                      KMPointBelow(aUnit.GetHome.GetEntrance),
+                      aUnit.GetHome.PointBelowEntrance,
                       ChooseToCutOrPlant
                       );
 end;
@@ -68,7 +69,7 @@ end;
 
 
 //Note: Phase is -1 because it will have been increased at the end of last Execute
-function TTaskMining.WalkShouldAbandon:boolean;
+function TTaskMining.WalkShouldAbandon: Boolean;
 begin
   Result := false;
   Assert(fUnit is TKMUnitCitizen);
@@ -88,6 +89,7 @@ begin
   case fUnit.GetHome.HouseType of
     ht_Woodcutters: case TKMHouseWoodcutters(fUnit.GetHome).WoodcutterMode of
                       wcm_Chop:         Result := taCut;
+                      wcm_Plant:        Result := taPlant;
                       wcm_ChopAndPlant: if fUnit.GetHome.CheckResOut(wt_Trunk) >= MAX_WARES_IN_HOUSE then
                                           Result := taPlant
                                         else
@@ -130,13 +132,13 @@ end;
 //Happens when we discover that resource is gone or is occupied by another busy unit
 //Return false if new plan could not be found
 procedure TTaskMining.FindAnotherWorkPlan;
-var OldLoc: TKMPoint; OldDir:TKMDirection;
+var OldLoc: TKMPoint; OldDir: TKMDirection;
 begin
   OldLoc := WorkPlan.Loc;
   OldDir := WorkPlan.WorkDir;
 
   //Tell the work plan to find a new resource of the same gathering script
-  if WorkPlan.FindDifferentResource(fUnit, KMPointBelow(fUnit.GetHome.GetEntrance), OldLoc) then
+  if WorkPlan.FindDifferentResource(fUnit, fUnit.GetHome.PointBelowEntrance, OldLoc) then
   begin
     //Must always give us a new location (or same location but different direction)
     Assert((OldDir <> WorkPlan.WorkDir) or not KMSamePoint(OldLoc, WorkPlan.Loc));
@@ -213,12 +215,12 @@ var
   TimeToWork, StillFrame: Integer;
   ResAcquired: Boolean;
 begin
-  Result := TaskContinues;
+  Result := tr_TaskContinues;
 
   //there's no point in doing a task if we can't return home
   if (fUnit.GetHome <> nil) and fUnit.GetHome.IsDestroyed then
   begin
-    Result := TaskDone;
+    Result := tr_TaskDone;
     Exit;
   end;
 
@@ -231,7 +233,7 @@ begin
 
           //Woodcutter takes his axe with him when going to chop trees
           if (WorkPlan.GatheringScript = gs_WoodCutterCut) then
-            GetHome.fCurrentAction.SubActionRem([ha_Flagpole]);
+            GetHome.CurrentAction.SubActionRem([ha_Flagpole]);
         end
         else
         begin
@@ -263,15 +265,15 @@ begin
          if WorkPlan.WorkDir <> dir_NA then
            Direction := WorkPlan.WorkDir;
 
-         if gRes.UnitDat[UnitType].UnitAnim[WorkPlan.ActionWorkType, Direction].Count < 1 then
+         if gRes.Units[UnitType].UnitAnim[WorkPlan.ActionWorkType, Direction].Count < 1 then
            for D := dir_N to dir_NW do
-             if gRes.UnitDat[UnitType].UnitAnim[WorkPlan.ActionWorkType, D].Count > 1 then
+             if gRes.Units[UnitType].UnitAnim[WorkPlan.ActionWorkType, D].Count > 1 then
              begin
                Direction := D;
                Break;
              end;
 
-         TimeToWork := WorkPlan.WorkCyc * Math.max(gRes.UnitDat[UnitType].UnitAnim[WorkPlan.ActionWorkType, Direction].Count, 1);
+         TimeToWork := WorkPlan.WorkCyc * Math.max(gRes.Units[UnitType].UnitAnim[WorkPlan.ActionWorkType, Direction].Count, 1);
          SetActionLockedStay(TimeToWork, WorkPlan.ActionWorkType, False);
        end;
     5: //After work tasks for specific mining jobs
@@ -294,7 +296,7 @@ begin
            gs_WoodCutterPlant:  //If the player placed a house plan here while we were digging don't place the
                                 //tree so the house plan isn't canceled. This is actually the same as TSK/TPR IIRC
                                 if TKMUnitCitizen(fUnit).CanWorkAt(WorkPlan.Loc, gs_WoodCutterPlant) then
-                                  gTerrain.SetTree(WorkPlan.Loc, gTerrain.ChooseTreeToPlant(WorkPlan.Loc));
+                                  gTerrain.SetObject(WorkPlan.Loc, gTerrain.ChooseTreeToPlant(WorkPlan.Loc));
            gs_WoodCutterCut:    begin
                                   gTerrain.FallTree(KMGetVertexTile(WorkPlan.Loc, WorkPlan.WorkDir));
                                   StillFrame := 5;
@@ -304,7 +306,7 @@ begin
        end;
     7: begin
          //Removing the tree and putting a stump is handled in gTerrain.UpdateState from FallingTrees list
-         SetActionWalkToSpot(KMPointBelow(GetHome.GetEntrance), WorkPlan.ActionWalkFrom); //Go home
+         SetActionWalkToSpot(GetHome.PointBelowEntrance, WorkPlan.ActionWalkFrom); //Go home
          Thought := th_Home;
        end;
     8: SetActionGoIn(WorkPlan.ActionWalkFrom, gd_GoInside, GetHome); //Go inside
@@ -321,7 +323,7 @@ begin
             gHands[fUnit.Owner].Stats.WareConsumed(WorkPlan.Resource1, WorkPlan.Count1);
             gHands[fUnit.Owner].Stats.WareConsumed(WorkPlan.Resource2, WorkPlan.Count2);
 
-            GetHome.fCurrentAction.SubActionAdd([ha_Smoke]);
+            GetHome.CurrentAction.SubActionAdd([ha_Smoke]);
             if WorkPlan.GatheringScript = gs_SwineBreeder then
             begin //Swines get feed and taken immediately
               fBeastID := TKMHouseSwineStable(GetHome).FeedBeasts;
@@ -330,7 +332,7 @@ begin
 
             if WorkPlan.ActCount >= fPhase2 then
             begin
-              GetHome.fCurrentAction.SubActionWork(WorkPlan.HouseAct[fPhase2].Act);
+              GetHome.CurrentAction.SubActionWork(WorkPlan.HouseAct[fPhase2].Act);
               //Keep unit idling till next Phase, Idle time is -1 to compensate TaskExecution Phase
               SetActionLockedStay(WorkPlan.HouseAct[fPhase2].TimeToWork-1, ua_Walk);
             end
@@ -352,7 +354,7 @@ begin
             //Keep on working
             if fPhase2 <= WorkPlan.ActCount then
             begin
-              GetHome.fCurrentAction.SubActionWork(WorkPlan.HouseAct[fPhase2].Act);
+              GetHome.CurrentAction.SubActionWork(WorkPlan.HouseAct[fPhase2].Act);
               if fPhase < WorkPlan.ActCount then
                 SetActionLockedStay(WorkPlan.HouseAct[fPhase2].TimeToWork-1, ua_Walk) //-1 to compensate units UpdateState run
               else
@@ -390,9 +392,9 @@ begin
             GetHome.SetState(hst_Idle);
             SetActionLockedStay(WorkPlan.AfterWorkIdle-1, ua_Walk);
           end;
-    else  Result := TaskDone;
+    else  Result := tr_TaskDone;
   end;
-  inc(fPhase);
+  Inc(fPhase);
 end;
 
 

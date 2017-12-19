@@ -339,7 +339,7 @@ end;
 
 function TKMUnitWarrior.IsRanged: Boolean;
 begin
-  Result := gRes.UnitDat[fUnitType].FightType = ft_Ranged;
+  Result := gRes.Units[fUnitType].FightType = ft_Ranged;
 end;
 
 
@@ -413,7 +413,7 @@ end;
 procedure TKMUnitWarrior.SetActionGoIn(aAction: TUnitActionType; aGoDir: TGoInDirection; aHouse: TKMHouse);
 begin
   Assert(aGoDir = gd_GoOutside, 'Walking inside is not implemented yet');
-  Assert(aHouse.HouseType = ht_Barracks, 'Only Barracks so far');
+  Assert((aHouse.HouseType = ht_Barracks) or (aHouse.HouseType = ht_TownHall), 'Only Barracks and TownHall so far');
   inherited;
 
   TUnitActionGoInOut(GetUnitAction).OnWalkedOut := WalkedOut;
@@ -748,7 +748,7 @@ end;}
 function TKMUnitWarrior.UpdateState: Boolean;
 begin
   if fCurrentAction = nil then
-    raise ELocError.Create(gRes.UnitDat[UnitType].GUIName+' has no action at start of TKMUnitWarrior.UpdateState',fCurrPosition);
+    raise ELocError.Create(gRes.Units[UnitType].GUIName+' has no action at start of TKMUnitWarrior.UpdateState',fCurrPosition);
 
   if IsDeadOrDying then
   begin
@@ -796,10 +796,10 @@ begin
   UnitPos.X := fPosition.X + UNIT_OFF_X + GetSlide(ax_X);
   UnitPos.Y := fPosition.Y + UNIT_OFF_Y + GetSlide(ax_Y);
 
-  fRenderPool.AddUnit(fUnitType, fUID, Act, Direction, AnimStep, UnitPos.X, UnitPos.Y, gHands[fOwner].FlagColor, True);
+  gRenderPool.AddUnit(fUnitType, fUID, Act, Direction, AnimStep, UnitPos.X, UnitPos.Y, gHands[fOwner].FlagColor, True);
 
   if fThought <> th_None then
-    fRenderPool.AddUnitThought(fUnitType, Act, Direction, fThought, UnitPos.X, UnitPos.Y);
+    gRenderPool.AddUnitThought(fUnitType, Act, Direction, fThought, UnitPos.X, UnitPos.Y);
 
   if SHOW_ATTACK_RADIUS then
     if IsRanged then

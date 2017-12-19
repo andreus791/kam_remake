@@ -2,8 +2,7 @@ unit KM_AISetup;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, KromUtils, Math, SysUtils,
-  KM_CommonClasses, KM_Points, KM_Defaults;
+  KM_CommonClasses, KM_Defaults, KM_Points;
 
 
 type
@@ -42,6 +41,8 @@ type
 
 
 implementation
+uses
+  Math;
 
 
 { TKMHandAISetup }
@@ -131,6 +132,7 @@ begin
   SaveStream.Write(Aggressiveness);
   SaveStream.Write(AutoAttack);
   SaveStream.Write(AutoBuild);
+  SaveStream.Write(AutoRepair);
   SaveStream.Write(AutoDefend);
   SaveStream.Write(DefendAllies);
   SaveStream.Write(UnlimitedEquip);
@@ -154,6 +156,7 @@ begin
   LoadStream.Read(Aggressiveness);
   LoadStream.Read(AutoAttack);
   LoadStream.Read(AutoBuild);
+  LoadStream.Read(AutoRepair);
   LoadStream.Read(AutoDefend);
   LoadStream.Read(DefendAllies);
   LoadStream.Read(UnlimitedEquip);

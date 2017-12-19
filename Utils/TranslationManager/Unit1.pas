@@ -5,7 +5,8 @@ uses
   Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Math, Menus,
   {$IFDEF MSWINDOWS} ComCtrls, FileCtrl, {$ENDIF}
   StdCtrls, StrUtils, Windows, SysUtils, CheckLst, INIFiles, Zippit,
-  KM_Defaults, KM_FileIO, KM_ResLocales, Unit_Text, Unit_PathManager;
+  KM_Defaults, KM_FileIO, KM_ResLocales, Unit_Text, Unit_PathManager,
+  Vcl.Samples.Spin;
 
 const
   //Disables insert, delete, compact, sort, etc. functions
@@ -25,8 +26,6 @@ type
     lbFolders: TListBox;
     btnCopy: TButton;
     btnPaste: TButton;
-    Label4: TLabel;
-    Edit1: TEdit;
     MainMenu1: TMainMenu;
     File1: TMenuItem;
     Edit2: TMenuItem;
@@ -39,13 +38,19 @@ type
     mnuExit: TMenuItem;
     btnRename: TButton;
     clbShowLang: TCheckListBox;
-    cbShowMis: TCheckBox;
-    cbShowDup: TCheckBox;
     StatusBar1: TStatusBar;
-    Bevel1: TBevel;
     clbFolders: TCheckListBox;
     mmSaveAllZIP: TMenuItem;
     sdExportZIP: TSaveDialog;
+    FilterGroupBox: TGroupBox;
+    cbShowMis: TCheckBox;
+    cbShowDup: TCheckBox;
+    Label4: TLabel;
+    edTextFilter: TEdit;
+    Label1: TLabel;
+    edLabelName: TEdit;
+    Label3: TLabel;
+    edLabelId: TEdit;
     procedure FormCreate(Sender: TObject);
     procedure ListBox1Click(Sender: TObject);
     procedure btnSortByIndexClick(Sender: TObject);
@@ -61,7 +66,7 @@ type
     procedure lbFoldersClick(Sender: TObject);
     procedure btnCopyClick(Sender: TObject);
     procedure btnPasteClick(Sender: TObject);
-    procedure Edit1Change(Sender: TObject);
+    procedure FilterChanged(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure btnUnusedClick(Sender: TObject);
     procedure mnuExitClick(Sender: TObject);
@@ -105,9 +110,7 @@ implementation
 
 
 const
-  eol: string = #13#10; //EndOfLine
-  //TextPath = '..\..\data\text\';
-  //ConstPath = '..\..\KM_TextIDs.inc';
+  eol: string = #13#10; // EndOfLine
 
 
 procedure TForm1.FormCreate(Sender: TObject);
@@ -212,6 +215,8 @@ end;
 procedure TForm1.lbFoldersClick(Sender: TObject);
 const
   MSG_WARNING: string = 'You have unsaved changes that will be lost, load new libx anyway?';
+  PATH_TEXT = 'data\text\text.%s.libx';
+  PATH_CONST = 'KM_TextIDs.inc';
 var
   ID: Integer;
 begin
@@ -227,9 +232,9 @@ begin
   ID := lbFolders.ItemIndex;
   if ID = -1 then Exit;
 
-  //Special case for ingame text library
-  if SameText(lbFolders.Items[ID], 'data\text\text.%s.libx') then
-    fTextManager.Load(fWorkDir + lbFolders.Items[ID], fWorkDir + 'KM_TextIDs.inc')
+  // Special case for ingame text library
+  if SameText(lbFolders.Items[ID], PATH_TEXT) then
+    fTextManager.Load(fWorkDir + PATH_TEXT, fWorkDir + PATH_CONST)
   else
     fTextManager.Load(fWorkDir + lbFolders.Items[ID], '');
 
@@ -240,28 +245,20 @@ end;
 
 
 procedure TForm1.btnSaveClick(Sender: TObject);
-var
-  ID: Integer;
 begin
-  ID := lbFolders.ItemIndex;
-  if ID = -1 then Exit;
-
-  if SameText(lbFolders.Items[ID], 'data\text\text.%s.libx') then
-    fTextManager.Save(fWorkDir + lbFolders.Items[ID], fWorkDir + 'KM_TextIDs.inc')
-  else
-    fTextManager.Save(fWorkDir + lbFolders.Items[ID], '');
-
-  mnuSave.Enabled := False;
+  fTextManager.Save;
 end;
 
 
 procedure TForm1.RefreshList;
   function ShowConst(aIndex: Integer): Boolean;
   var
-    I,K, TextID, DefLoc: Integer;
+    I,K, TextID, DefLoc, LabelId: Integer;
+    TextConstName: String;
   begin
     Result := True;
     TextID := fTextManager.Consts[aIndex].TextID;
+    TextConstName := fTextManager.Consts[aIndex].ConstName;
     DefLoc := gResLocales.IndexByCode(DEFAULT_LOCALE);
 
     //Hide lines that have text
@@ -290,8 +287,14 @@ procedure TForm1.RefreshList;
               Result := Result or (fTextManager.Texts[TextID][I] = fTextManager.Texts[TextID][K]);
       end;
 
-    if Result and (Edit1.Text <> '') then
-        Result := (TextID <> -1) and (Pos(UpperCase(Edit1.Text), UpperCase(fTextManager.Texts[TextID][DefLoc])) <> 0);
+    if Result and (edTextFilter.Text <> '') then
+      Result := (TextID <> -1) and (Pos(UpperCase(edTextFilter.Text), UpperCase(fTextManager.Texts[TextID][DefLoc])) <> 0);
+
+    if Result and (edLabelName.Text <> '') then
+      Result := (TextID <> -1) and (Pos(UpperCase(edLabelName.Text), UpperCase(TextConstName)) <> 0);
+
+    if Result and (edLabelId.Text <> '') then
+      Result := (TextID <> -1) and TryStrToInt(edLabelId.Text, LabelId) and (TextID = LabelId);
   end;
 var
   I, TopIdx, ItemIdx: Integer;
@@ -498,7 +501,7 @@ begin
 end;
 
 
-procedure TForm1.Edit1Change(Sender: TObject);
+procedure TForm1.FilterChanged(Sender: TObject);
 begin
   RefreshFilter;
   RefreshList;
@@ -688,7 +691,8 @@ begin
   if Id = -1 then Exit;
 
   MainFile := SameText(lbFolders.Items[ID], 'data\text\text.%s.libx');
-  Filter := cbShowMis.Checked or cbShowDup.Checked or (Edit1.Text <> '');
+  Filter := cbShowMis.Checked or cbShowDup.Checked
+    or (edTextFilter.Text <> '') or (edLabelId.Text <> '') or (edLabelName.Text <> '');
 
   //Disable buttons
   mnuSortByIndex.Enabled := MainFile and not Filter;

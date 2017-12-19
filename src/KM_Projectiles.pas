@@ -2,9 +2,8 @@ unit KM_Projectiles;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes, SysUtils, Math, KromUtils,
-  KM_CommonClasses, KM_Defaults, KM_Points, KM_Utils,
-  KM_Houses, KM_Terrain, KM_Units;
+  KM_Units, KM_Houses,
+  KM_CommonClasses, KM_Points;
 
 
 type
@@ -58,8 +57,11 @@ var
 
 implementation
 uses
-  KM_ResSound, KM_Sound, KM_RenderPool, KM_RenderAux, KM_HandsCollection, KM_Resource,
-  KM_ResUnits, KM_Hand;
+  Math, KromUtils,
+  KM_Terrain, KM_RenderPool, KM_RenderAux,
+  KM_Resource, KM_ResSound, KM_ResUnits,
+  KM_Hand, KM_HandsCollection, KM_Sound,
+  KM_CommonUtils, KM_Defaults;
 
 
 const
@@ -155,7 +157,7 @@ begin
   if TimeToHit <> 0 then
   begin
     Jitter := ProjectileJitter[aProjType]
-            + KMLength(KMPointF(0,0), TargetVector) * ProjectilePredictJitter[aProjType];
+            + KMLength(KMPOINTF_ZERO, TargetVector) * ProjectilePredictJitter[aProjType];
 
     //Calculate the target position relative to start position (the 0;0)
     Target.X := TargetPosition.X + TargetVector.X*TimeToHit + KaMRandomS(Jitter);
@@ -287,10 +289,10 @@ begin
                             and (KMLengthSqr(fShotFrom, U.PositionF) <= Sqr(fMaxLength)) then
                             begin
                               Damage := 0;
-                              if fType = pt_Arrow then Damage := gRes.UnitDat[ut_Bowman].Attack;
-                              if fType = pt_Bolt then Damage := gRes.UnitDat[ut_Arbaletman].Attack;
-                              if fType = pt_SlingRock then Damage := gRes.UnitDat[ut_Slingshot].Attack;
-                              Damage := Round(Damage / Math.max(gRes.UnitDat[U.UnitType].GetDefenceVsProjectiles(fType = pt_Bolt), 1)); //Max is not needed, but animals have 0 defence
+                              if fType = pt_Arrow then Damage := gRes.Units[ut_Bowman].Attack;
+                              if fType = pt_Bolt then Damage := gRes.Units[ut_Arbaletman].Attack;
+                              if fType = pt_SlingRock then Damage := gRes.Units[ut_Slingshot].Attack;
+                              Damage := Round(Damage / Math.max(gRes.Units[U.UnitType].GetDefenceVsProjectiles(fType = pt_Bolt), 1)); //Max is not needed, but animals have 0 defence
                               if (FRIENDLY_FIRE or (gHands.CheckAlliance(fOwner.Owner, U.Owner)= at_Enemy))
                               and (Damage >= KaMRandom(101)) then
                                 U.HitPointsDecrease(1, fOwner);
@@ -350,7 +352,7 @@ begin
             //Looks better moved up, launches from the bow not feet and lands in target's body
             P.Y := P.Y - fItems[I].fArc * MixArc - 0.4;
             Dir := KMGetDirection(fItems[I].fScreenStart, fItems[I].fScreenEnd);
-            fRenderPool.AddProjectile(fItems[I].fType, P, PTileBased, Dir, MixValueMax);
+            gRenderPool.AddProjectile(fItems[I].fType, P, PTileBased, Dir, MixValueMax);
           end;
 
         pt_TowerRock:
@@ -358,7 +360,7 @@ begin
             MixArc := cos(MixValue*pi/2); // 1 >> 0      Half-parabola
             //Looks better moved up, lands on the target's body not at his feet
             P.Y := P.Y - fItems[I].fArc * MixArc - 0.4;
-            fRenderPool.AddProjectile(fItems[I].fType, P, PTileBased, dir_N, MixValue); //Direction will be ignored
+            gRenderPool.AddProjectile(fItems[I].fType, P, PTileBased, dir_N, MixValue); //Direction will be ignored
           end;
       end;
 
