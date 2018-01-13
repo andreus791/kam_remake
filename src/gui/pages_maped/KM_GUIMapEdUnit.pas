@@ -65,10 +65,10 @@ begin
   Image_UnitPic         := TKMImage.Create(Panel_Unit,0,38,54,100,521);
   Label_UnitCondition   := TKMLabel.Create(Panel_Unit,65,40,116,0,gResTexts[TX_UNIT_CONDITION],fnt_Grey,taCenter);
 
-  KMConditionBar_Unit     := TKMPercentBar.Create(Panel_Unit,65,55,116,15);
-  Button_ConditionDec     := TKMButton.Create(Panel_Unit,65,78,20,20,'-', bsGame);
-  Button_ConditionInc     := TKMButton.Create(Panel_Unit,161,78,20,20,'+', bsGame);
-  CheckBox_RandomCondition := TKMCheckBox.Create(Panel_Unit,86,78,74,20,'Random', fnt_Grey);  //TODO Translate
+  KMConditionBar_Unit     := TKMPercentBar.Create(Panel_Unit,80,55,90,15);
+  Button_ConditionDec     := TKMButton.Create(Panel_Unit,65,55,15,15,'-', bsGame);
+  Button_ConditionInc     := TKMButton.Create(Panel_Unit,TB_WIDTH-15,55,15,15,'+', bsGame);
+  CheckBox_RandomCondition := TKMCheckBox.Create(Panel_Unit,65,75,120,20,'Random', fnt_Grey);  //TODO Translate
   CheckBox_RandomCondition.Hint := 'Random range for group condition'; //TODO Translate
 
   Button_ConditionDec.OnClickShift := UnitConditionsChange;
