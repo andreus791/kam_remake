@@ -44,7 +44,7 @@ uses
   KM_HouseCollection, KM_HouseBarracks, KM_HouseTownHall, KM_HouseWoodcutters,
   KM_AI, KM_AIDefensePos,
   KM_Resource, KM_ResHouses, KM_ResUnits, KM_ResWares,
-  KM_CommonClasses, KM_Terrain;
+  KM_CommonClasses, KM_Terrain, KM_CommonUtils;
 
 
 type
@@ -489,9 +489,10 @@ begin
                         begin
                           if fLastTroop <> nil then
                           begin
-                            fLastTroop.FlagBearer.StartWDefaultCondition := False;
+                            if InRange(P[1], 0, 1) then
+                              fLastTroop.RandomCondition := Boolean(P[1]);
                             if P[0] <> -1 then
-                              fLastTroop.Condition := P[0]
+                              fLastTroop.Condition := EnsureRange(Round(P[0] + Byte(fLastTroop.RandomCondition)*KaMRandomS(UNIT_CONDITION_RANDOM*UNIT_MAX_CONDITION)), 0, UNIT_MAX_CONDITION)
                             else
                               fLastTroop.Condition := UNIT_MAX_CONDITION; //support old maps !SET_GROUP_FOOD without parameters
                           end else
@@ -991,8 +992,7 @@ begin
     begin
       Group := gHands[I].UnitGroups[K];
       AddCommand(ct_SetGroup, [UnitTypeToIndex[Group.UnitType], Group.Position.X-1 + aLeftInset, Group.Position.Y-1 + aTopInset, Byte(Group.Direction)-1, Group.UnitsPerRow, Group.MapEdCount]);
-      if not Group.FlagBearer.StartWDefaultCondition then
-        AddCommand(ct_SetGroupFood, [Group.FlagBearer.Condition]);
+      AddCommand(ct_SetGroupFood, [Group.FlagBearer.Condition, Byte(Group.RandomCondition)]);
 
       case Group.MapEdOrder.Order of
         ioNoOrder: ;

@@ -43,6 +43,7 @@ type
     fDisableHungerMessage: Boolean;
     fBlockOrders: Boolean;
     fManualFormation: Boolean;
+    fRandomCondition: Boolean; //For MapEditor only. Applies random range for condition
 
     fOrder: TKMGroupOrder; //Remember last order incase we need to repeat it (e.g. to joined members)
     fOrderLoc: TKMPointDir; //Dir is the direction to face after order
@@ -140,6 +141,7 @@ type
     property DisableHungerMessage: Boolean read fDisableHungerMessage write fDisableHungerMessage;
     property BlockOrders: Boolean read fBlockOrders write fBlockOrders;
     property ManualFormation: Boolean read fManualFormation write fManualFormation;
+    property RandomCondition: Boolean read fRandomCondition write fRandomCondition;
     property FlagPositionF: TKMPointF read GetFlagPositionF;
     property FlagColor: Cardinal read GetFlagColor;
     function IsFlagRenderBeforeUnit: Boolean;
@@ -339,6 +341,7 @@ begin
   LoadStream.Read(fDisableHungerMessage);
   LoadStream.Read(fBlockOrders);
   LoadStream.Read(fManualFormation);
+  LoadStream.Read(fRandomCondition);
 end;
 
 
@@ -426,6 +429,7 @@ begin
   SaveStream.Write(fDisableHungerMessage);
   SaveStream.Write(fBlockOrders);
   SaveStream.Write(fManualFormation);
+  SaveStream.Write(fRandomCondition);
 end;
 
 

@@ -71,7 +71,6 @@ type
     fHitPoints: Byte;
     fHitPointCounter: Cardinal; //Counter for hit point restoration, separate cos it resets on first hit
     fCondition: Integer; //Unit condition, when it reaches zero unit should die (rarely can be negative due to WalkExchange)
-    fStartWDefaultCondition: Boolean; //For MapEditor only. Shows if this unit conditions will be set to default at the start of the game
     fTicker: Cardinal; //ticks of life for the unit (allows to spread updates)
     fOwner: TKMHandIndex;
     fHome: TKMHouse;
@@ -154,7 +153,6 @@ type
     property  UnitType: TUnitType read fUnitType;
     function  GetUnitActText: UnicodeString;
     property  Condition: Integer read fCondition write SetCondition;
-    property  StartWDefaultCondition: Boolean read fStartWDefaultCondition write fStartWDefaultCondition;
     procedure SetOwner(aOwner: TKMHandIndex);
     procedure OwnerUpdate(aOwner: TKMHandIndex; aMoveToNewOwner: Boolean = False);
     procedure HitPointsChangeFromScript(aAmount: Integer);
@@ -1122,7 +1120,6 @@ begin
     fCondition    := Round(UNIT_MAX_CONDITION * (UNIT_CONDITION_BASE + KaMRandomS(UNIT_CONDITION_RANDOM)))
   else begin
     fCondition    := Round(UNIT_MAX_CONDITION * UNIT_CONDITION_BASE);
-    fStartWDefaultCondition := True;
   end;
 
   fHitPoints      := HitPointsMax;
@@ -1205,7 +1202,6 @@ begin
 
   LoadStream.Read(fThought, SizeOf(fThought));
   LoadStream.Read(fCondition);
-  LoadStream.Read(fStartWDefaultCondition);
   LoadStream.Read(fTicker);
   LoadStream.Read(fHitPoints);
   LoadStream.Read(fHitPointCounter);
@@ -2024,7 +2020,6 @@ begin
 
   SaveStream.Write(fThought, SizeOf(fThought));
   SaveStream.Write(fCondition);
-  SaveStream.Write(fStartWDefaultCondition);
   SaveStream.Write(fTicker);
   SaveStream.Write(fHitPoints);
   SaveStream.Write(fHitPointCounter);
