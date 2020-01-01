@@ -40,6 +40,8 @@ type
     function InRangeI(aValue, aMin, aMax: Integer): Boolean;
     function InRangeS(aValue, aMin, aMax: Single): Boolean;
 
+    function KaMSeed: Integer;
+
     function MaxI(A, B: Integer): Integer;
     function MaxS(A, B: Single): Single;
 
@@ -431,6 +433,19 @@ function TKMScriptUtils.InRangeS(aValue, aMin, aMax: Single): Boolean;
 begin
   try
     Result := Math.InRange(aValue, aMin, aMax);
+  except
+    gScriptEvents.ExceptionOutsideScript := True;
+    raise;
+  end;
+end;
+
+
+//* Version: 7000+
+//* Returns current KaM Seed
+function TKMScriptUtils.KaMSeed: Integer;
+begin
+  try
+    Result := GetKaMSeed;
   except
     gScriptEvents.ExceptionOutsideScript := True;
     raise;

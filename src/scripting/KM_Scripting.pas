@@ -634,6 +634,8 @@ begin
     RegisterMethodCheck(c, 'function InRangeI(aValue, aMin, aMax: Integer): Boolean');
     RegisterMethodCheck(c, 'function InRangeS(aValue, aMin, aMax: Single): Boolean');
 
+    RegisterMethodCheck(c, 'function KaMSeed: Integer');
+
     RegisterMethodCheck(c, 'function MaxI(A, B: Integer): Integer');
     RegisterMethodCheck(c, 'function MaxS(A, B: Single): Single');
 
@@ -1134,6 +1136,8 @@ begin
 
       RegisterMethod(@TKMScriptUtils.InRangeI,                                  'InRangeI');
       RegisterMethod(@TKMScriptUtils.InRangeS,                                  'InRangeS');
+
+      RegisterMethod(@TKMScriptUtils.KaMSeed,                                   'KaMSeed');
 
       RegisterMethod(@TKMScriptUtils.MaxI,                                      'MaxI');
       RegisterMethod(@TKMScriptUtils.MaxS,                                      'MaxS');

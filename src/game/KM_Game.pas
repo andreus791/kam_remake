@@ -248,7 +248,7 @@ begin
   fGameSpeedChangeTime := TimeGet;
 
   //Here comes terrain/mission init
-  SetKaMSeed(4); //Every time the game will be the same as previous. Good for debug.
+  SetKaMSeed(RandomRange(1, 2147483646)); //Every time the game will be the same as previous. Good for debug.
   gTerrain := TKMTerrain.Create;
   gHands := TKMHandsCollection.Create;
   gAIFields := TKMAIFields.Create;
