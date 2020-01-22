@@ -238,7 +238,8 @@ type
 
     procedure SetSeed(aSeed: Integer);
 
-    procedure Save(const aSaveName: UnicodeString; aTimestamp: TDateTime);
+    procedure Save(const aSaveName: UnicodeString); overload;
+    procedure Save(const aSaveName: UnicodeString; aTimestamp: TDateTime); overload;
     {$IFDEF USE_MAD_EXCEPT}
     procedure AttachCrashReport(const ExceptIntf: IMEException; const aZipFile: UnicodeString);
     {$ENDIF}
@@ -1819,6 +1820,12 @@ begin
 end;
 
 
+procedure TKMGame.Save(const aSaveName: UnicodeString);
+begin
+  Save(aSaveName, UTCNow);
+end;
+
+
 //Saves game by provided name
 procedure TKMGame.Save(const aSaveName: UnicodeString; aTimestamp: TDateTime);
 var
@@ -2392,6 +2399,8 @@ begin
                       end;
         gmReplaySingle,gmReplayMulti:
                       begin
+                        IncGameTick;
+
                         fScripting.UpdateState;
                         UpdatePeacetime; //Send warning messages about peacetime if required (peacetime sound should still be played in replays)
                         gTerrain.UpdateState;
@@ -2438,9 +2447,6 @@ begin
                           Exit;
 
                         CheckPauseGameAtTick;
-
-                        //Increment game tick at the end, because we could have some commands even on 0 tick!
-                        IncGameTick;
 
                         Result := True;
                       end;
