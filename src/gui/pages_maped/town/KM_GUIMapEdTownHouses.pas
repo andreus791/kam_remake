@@ -58,6 +58,7 @@ begin
   Button_BuildWine   := TKMButtonFlat.Create(Panel_Build, 83,28,33,33,336);
   Button_BuildCancel := TKMButtonFlat.Create(Panel_Build,157,28,33,33,340);
 
+  Button_BuildRoad.CapColor := clMapEdBtnRoad;
   Button_BuildField.CapColor := clMapEdBtnField;
   Button_BuildWine.CapColor := clMapEdBtnWine;
 
@@ -231,8 +232,21 @@ procedure TKMMapEdTownHouses.UpdateStateIdle;
 var P: TKMPoint;
 begin
   P := gGameCursor.Cell;
+
+  if (gGameCursor.Mode = cmRoad)
+  and (gTerrain.Land[P.Y, P.X].TileOverlay in [toDig1, toDig2, toDig3, toDig4, toRoad]) then
+  begin
+    Button_BuildRoad.Caption := IntToStr(gTerrain.GetRoadStage(P) + 1);
+    Button_BuildRoad.CapOffsetY := -10;
+    Button_BuildRoad.TexOffsetY := 6;
+  end else begin
+    Button_BuildRoad.Caption := '';
+    Button_BuildRoad.CapOffsetY := 0;
+    Button_BuildRoad.TexOffsetY := 0;
+  end;
+
   if (gGameCursor.Mode = cmField)
-    and gTerrain.TileIsCornField(P) then
+  and gTerrain.TileIsCornField(P) then
   begin
     Button_BuildField.Caption := IntToStr(gTerrain.GetCornStage(P) + 1);
     Button_BuildField.CapOffsetY := -10;
@@ -244,7 +258,7 @@ begin
   end;
 
   if (gGameCursor.Mode = cmWine)
-    and gTerrain.TileIsWineField(P) then
+  and gTerrain.TileIsWineField(P) then
   begin
     Button_BuildWine.Caption := IntToStr(gTerrain.GetWineStage(P) + 1);
     Button_BuildWine.CapOffsetY := -10;

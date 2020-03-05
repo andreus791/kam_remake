@@ -103,6 +103,9 @@ const
   WINE_AGE_2 = 3400 div TERRAIN_PACE;
   WINE_AGE_FULL = 5000 div TERRAIN_PACE; //Wine ready to be harvested
 
+  ROAD_STAGES_COUNT = 6; //0..5
+  //0 = road; 1 = stones; 2 = some stones; 3 = digged area; 4 = a bit digged area; 5 = none
+
 implementation
 
 const

@@ -334,6 +334,12 @@ begin
                 if FieldStage >= 0 then
                   gMySpectator.Hand.AddField(P, ftWine, FieldStage);
               end;
+    cmRoad:   begin
+                if not KMSamePoint(P, gGameCursor.PrevCell) or not aCheckPrevCell then
+                  FieldStage := (gTerrain.GetRoadStage(P) + aStageIncrement + ROAD_STAGES_COUNT) mod ROAD_STAGES_COUNT;
+                if FieldStage >= 0 then
+                  gMySpectator.Hand.AddField(P, ftRoad, FieldStage);
+              end;
   end;
 end;
 
@@ -466,7 +472,8 @@ begin
     case gGameCursor.Mode of
       cmSelection:  fSelection.Selection_Start;
       cmField,
-      cmWine:       UpdateField(1, False);
+      cmWine,
+      cmRoad:       UpdateField(1, False);
   end;
 end;
 
@@ -480,12 +487,11 @@ begin
 
   P := gGameCursor.Cell;
   case gGameCursor.Mode of
-    cmRoad:       if gMySpectator.Hand.CanAddFieldPlan(P, ftRoad) then
-                  begin
+    cmRoad:       begin
                     //If there's a field remove it first so we don't get road on top of the field tile (undesired in MapEd)
                     if gTerrain.TileIsCornField(P) or gTerrain.TileIsWineField(P) then
                       gTerrain.RemField(P);
-                    gMySpectator.Hand.AddRoad(P);
+                    UpdateField(1, True);
                   end;
     cmField,
     cmWine:       UpdateField(1, True);
@@ -547,12 +553,13 @@ begin
   P := gGameCursor.Cell; //Get cursor position tile-wise
   case Button of
     mbLeft:   case gGameCursor.Mode of
-                cmRoad:       if gMySpectator.Hand.CanAddFieldPlan(P, ftRoad) then
-                              begin
+                cmRoad:       begin
                                 //If there's a field remove it first so we don't get road on top of the field tile (undesired in MapEd)
                                 if gTerrain.TileIsCornField(P) or gTerrain.TileIsWineField(P) then
+                                begin
                                   gTerrain.RemField(P);
-                                gMySpectator.Hand.AddRoad(P);
+                                  gMySpectator.Hand.AddRoad(P);
+                                end;
                               end;
                 cmHouses:     if gMySpectator.Hand.CanAddHousePlan(P, TKMHouseType(gGameCursor.Tag1)) then
                               begin

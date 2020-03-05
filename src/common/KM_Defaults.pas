@@ -895,6 +895,7 @@ const
   clListSelOutlineUnfocused = icLightGray;
   clListSeparatorShape = icDarkGray;
 
+  clMapEdBtnRoad = icYellow;
   clMapEdBtnField = icYellow;
   clMapEdBtnWine = icYellow;
 

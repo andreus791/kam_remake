@@ -865,10 +865,40 @@ begin
       gTerrain.SetField(aLoc, fID, aFieldType, Obj - 54, True, aKeepOldObject);
       IsFieldSet := True;
     end;
+  end else if aFieldType = ftRoad then
+  begin
+    case aStage of
+      0: if CanAddFieldPlan(aLoc, ftRoad) then
+           AddRoad(aLoc);
+      1: if HousesHitTest(aLoc.X, aLoc.Y) = nil then
+         begin
+           gTerrain.RemRoad(aLoc);
+           gTerrain.Land[aLoc.Y, aLoc.X].TileOverlay := toDig4;
+         end;
+      2: if HousesHitTest(aLoc.X, aLoc.Y) = nil then
+         begin
+           gTerrain.RemRoad(aLoc);
+           gTerrain.Land[aLoc.Y, aLoc.X].TileOverlay := toDig3;
+         end;
+      3: if HousesHitTest(aLoc.X, aLoc.Y) = nil then
+         begin
+           gTerrain.RemRoad(aLoc);
+           gTerrain.Land[aLoc.Y, aLoc.X].TileOverlay := toDig2;
+         end;
+      4: if HousesHitTest(aLoc.X, aLoc.Y) = nil then
+         begin
+           gTerrain.RemRoad(aLoc);
+           gTerrain.Land[aLoc.Y, aLoc.X].TileOverlay := toDig1;
+         end;
+      5: if HousesHitTest(aLoc.X, aLoc.Y) = nil then
+           gTerrain.RemRoad(aLoc)
+      else Exit;
+    end;
   end;
 
   if not IsFieldSet then
-    gTerrain.SetField(aLoc, fID, aFieldType, aStage, True, aKeepOldObject);
+    if aFieldType in [ftCorn, ftWine] then
+      gTerrain.SetField(aLoc, fID, aFieldType, aStage, True, aKeepOldObject);
 end;
 
 

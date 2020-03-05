@@ -313,6 +313,7 @@ type
 
     function GetCornStage(const Loc: TKMPoint): Byte; overload;
     function GetWineStage(const Loc: TKMPoint): Byte;
+    function GetRoadStage(const Loc: TKMPoint): Byte;
 
     function TopHill: Byte;
     procedure FlattenTerrain(const Loc: TKMPoint; aUpdateWalkConnects: Boolean = True; aIgnoreCanElevate: Boolean = False); overload;
@@ -4500,6 +4501,20 @@ begin
     55:   Result := 1;
     56:   Result := 2;
     57:   Result := 3;
+  end;
+end;
+
+
+function TKMTerrain.GetRoadStage(const Loc: TKMPoint): Byte;
+begin
+  Result := 0;
+  case Land[Loc.Y, Loc.X].TileOverlay of
+    toRoad: Result := 0;
+    toDig4: Result := 1;
+    toDig3: Result := 2;
+    toDig2: Result := 3;
+    toDig1: Result := 4;
+    toNone: Result := 5;
   end;
 end;
 
