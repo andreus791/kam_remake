@@ -7,7 +7,7 @@ uses
 
 
 const
-  TILES_CNT = 349;
+  TILES_CNT = 477;
   MAX_TILE_TO_SHOW = TILES_CNT;
   MAX_STATIC_TERRAIN_ID = 9997;
 
@@ -438,7 +438,75 @@ const
    //343
   (tkStone,tkGold,tkStone,tkStone),(tkGold,tkGold,tkStone,tkStone),(tkGold,tkGold,tkGold,tkStone),
    //346
-  (tkGoldMount,tkAbyss,tkGoldMount,tkGoldMount),(tkAbyss,tkAbyss,tkGoldMount,tkGoldMount),(tkAbyss,tkAbyss,tkAbyss,tkGoldMount)
+  (tkGoldMount,tkAbyss,tkGoldMount,tkGoldMount),(tkAbyss,tkAbyss,tkGoldMount,tkGoldMount),(tkAbyss,tkAbyss,tkAbyss,tkGoldMount),
+   //349
+  (tkCustom,tkCustom,tkCustom,tkCustom),
+   //350
+  (tkGoldMount,tkGoldMount,tkGrassSand2,tkCoastSand), (tkGoldMount,tkGoldMount,tkCoastSand, tkGrassSand2), (tkGoldMount,tkGoldMount,tkCoastSand, tkGrassSand2), (tkGoldMount,tkGoldMount,tkGrassSand2,tkCoastSand),
+   //354
+  (tkGoldMount,tkGoldMount,tkCoastSand, tkGrassSand2), (tkGoldMount,tkGoldMount,tkGrassSand3, tkCoastSand), (tkGoldMount,tkGoldMount,tkCoastSand,tkGrassSand3), (tkGrassSand2,tkGoldMount,tkCoastSand,tkCoastSand),
+   //358
+  (tkCoastSand,tkGoldMount,tkGrassSand2,tkGrassSand2), (tkGoldMount,tkGrassSand2,tkCoastSand,tkCoastSand), (tkGoldMount,tkCoastSand,tkGrassSand2,tkGrassSand2), (tkGoldMount,tkGoldMount,tkCoastSand,tkGrass),
+   //362
+  (tkGoldMount,tkGoldMount,tkGrass,tkCoastSand), (tkGoldMount,tkGoldMount,tkGrass,tkCoastSand), (tkGoldMount,tkGoldMount,tkCoastSand,tkGrass), (tkCoastSand,tkGoldMount,tkGrass,tkGrass),
+   //366
+  (tkGrass,tkGoldMount,tkCoastSand,tkCoastSand), (tkGoldMount,tkGrass,tkCoastSand,tkCoastSand), (tkGoldMount,tkCoastSand,tkGrass,tkGrass), (tkGoldMount,tkGoldMount,tkDirt,tkCoastSand),
+   //370
+  (tkGoldMount,tkGoldMount,tkCoastSand,tkDirt), (tkGoldMount,tkGoldMount,tkCoastSand,tkDirt), (tkGoldMount,tkGoldMount,tkDirt,tkCoastSand), (tkGoldMount,tkGoldMount,tkDirt,tkDirt),
+   //374
+  (tkCoastSand,tkGoldMount,tkDirt,tkDirt), (tkDirt,tkGoldMount,tkCoastSand,tkCoastSand), (tkGoldMount,tkCoastSand,tkDirt,tkDirt), (tkGoldMount,tkDirt,tkCoastSand,tkCoastSand),
+   //378
+  (tkGoldMount,tkGoldMount,tkDirt,tkGrass), (tkGoldMount,tkGoldMount,tkGrass,tkDirt), (tkGoldMount,tkGoldMount,tkDirt,tkGrass), (tkGoldMount,tkGoldMount,tkGrass,tkDirt),
+   //382
+  (tkGoldMount,tkGoldMount,tkGrassDirt,tkGrass), (tkGoldMount,tkGoldMount,tkGrass,tkGrassDirt), (tkGoldMount,tkGoldMount,tkGrassDirt,tkGrassDirt), (tkDirt,tkGoldMount,tkGrass,tkGrass),
+   //386
+  (tkGrass,tkGoldMount,tkDirt,tkDirt), (tkGoldMount,tkDirt,tkGrass,tkGrass), (tkGoldMount,tkGrass,tkDirt,tkDirt), (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkDirt),
+   //390
+  (tkGoldMount,tkGoldMount,tkDirt,tkSnowOnDirt), (tkSnowOnDirt,tkGoldMount,tkDirt,tkDirt), (tkDirt,tkGoldMount,tkSnowOnDirt,tkSnowOnDirt), (tkGoldMount,tkSnowOnDirt,tkDirt,tkDirt),
+   //394
+  (tkGoldMount,tkDirt,tkSnowOnDirt,tkSnowOnDirt), (tkGoldMount,tkGoldMount,tkSnow,tkSnowOnDirt), (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkSnow), (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkSnowOnDirt),
+   //398
+  (tkSnow,tkGoldMount,tkSnowOnDirt,tkSnowOnDirt), (tkSnowOnDirt,tkGoldMount,tkSnow,tkSnow), (tkGoldMount,tkSnow,tkSnowOnDirt,tkSnowOnDirt), (tkGoldMount,tkSnowOnDirt,tkSnow,tkSnow),
+   //402
+  (tkIronMount,tkIronMount,tkCoastSand,tkGrassSand3), (tkIronMount,tkIronMount,tkCoastSand,tkGrassSand2), (tkIronMount,tkIronMount,tkCoastSand,tkCoastSand), (tkIronMount,tkIronMount,tkSand,tkCoastSand),
+   //406
+  (tkIronMount,tkIronMount,tkCoastSand,tkSand), (tkIronMount,tkIronMount,tkGrassSand2,tkCoastSand), (tkIronMount,tkIronMount,tkCoastSand,tkGrassSand2), (tkIronMount,tkIronMount,tkGrassSand3,tkCoastSand),
+   //410
+  (tkIronMount,tkIronMount,tkCoastSand,tkGrassSand3), (tkIronMount,tkIronMount,tkDirt,tkGrass), (tkIronMount,tkIronMount,tkGrass,tkDirt), (tkIronMount,tkIronMount,tkGrassDirt,tkGrass),
+   //414
+  (tkIronMount,tkIronMount,tkGrass,tkGrassDirt), (tkIronMount,tkIronMount,tkDirt,tkGrass), (tkIronMount,tkIronMount,tkGrass,tkDirt), (tkIronMount,tkIronMount,tkGrassDirt,tkGrass),
+   //418
+  (tkIronMount,tkIronMount,tkGrass,tkGrassDirt), (tkDirt,tkIronMount,tkGrass,tkGrass), (tkGrass,tkIronMount,tkDirt,tkDirt), (tkIronMount,tkDirt,tkGrass,tkGrass),
+   //422
+  (tkIronMount,tkGrass,tkDirt,tkDirt), (tkIronMount,tkIronMount,tkCoastSand,tkGrass), (tkIronMount,tkIronMount,tkGrass,tkCoastSand), (tkIronMount,tkIronMount,tkCoastSand,tkGrass),
+   //426
+  (tkIronMount,tkIronMount,tkGrass,tkCoastSand), (tkCoastSand,tkIronMount,tkGrass,tkGrass), (tkGrass,tkIronMount,tkSand,tkSand), (tkIronMount,tkCoastSand,tkGrass,tkGrass),
+   //430
+  (tkIronMount,tkGrass,tkCoastSand,tkCoastSand), (tkIronMount,tkIronMount,tkCoastSand,tkDirt), (tkIronMount,tkIronMount,tkDirt,tkCoastSand), (tkIronMount,tkIronMount,tkCoastSand,tkDirt),
+   //434
+  (tkIronMount,tkIronMount,tkDirt,tkCoastSand), (tkCoastSand,tkIronMount,tkDirt,tkDirt), (tkDirt,tkIronMount,tkCoastSand,tkCoastSand), (tkIronMount,tkCoastSand,tkDirt,tkDirt),
+   //438
+  (tkIronMount,tkDirt,tkCoastSand,tkCoastSand), (tkIronMount,tkIronMount,tkSnowOnDirt,tkDirt), (tkIronMount,tkIronMount,tkDirt,tkSnowOnDirt), (tkIronMount,tkIronMount,tkDirt,tkDirt),
+   //442
+  (tkIronMount,tkIronMount,tkSnowOnDirt,tkDirt), (tkIronMount,tkIronMount,tkDirt,tkSnowOnDirt), (tkSnowOnDirt,tkIronMount,tkDirt,tkDirt), (tkDirt,tkIronMount,tkSnowOnDirt,tkSnowOnDirt),
+   //446
+  (tkIronMount,tkSnowOnDirt,tkDirt,tkDirt), (tkIronMount,tkDirt,tkSnowOnDirt,tkSnowOnDirt), (tkIronMount,tkIronMount,tkSnowOnDirt,tkSnowOnDirt), (tkIronMount,tkIronMount,tkSnow,tkSnowOnDirt),
+   //450
+  (tkIronMount,tkIronMount,tkSnowOnDirt,tkSnow), (tkIronMount,tkIronMount,tkSnowOnDirt,tkSnowOnDirt), (tkIronMount,tkIronMount,tkSnowOnDirt,tkSnowOnDirt), (tkSnow,tkIronMount,tkSnow,tkSnowOnDirt),
+   //454
+  (tkSnowOnDirt,tkIronMount,tkSnow,tkSnow), (tkIronMount,tkSnow,tkSnowOnDirt,tkSnowOnDirt), (tkIronMount,tkSnowOnDirt,tkSnow,tkSnow),
+   //457
+  (tkGrassDirt,tkGoldMount,tkGrassDirt,tkGrassDirt), (tkGoldMount,tkGoldMount,tkGoldMount,tkGrassDirt), (tkGrassDirt,tkIronMount,tkGrassDirt,tkGrassDirt), (tkIronMount,tkIronMount,tkGrassDirt,tkGrassDirt),
+   //461
+  (tkIronMount,tkIronMount,tkIronMount,tkGrassDirt), (tkCustom,tkCustom,tkCustom,tkCustom),
+   //463
+  (tkGrassSand2,tkIronMount,tkCoastSand,tkCoastSand), (tkCoastSand,tkIronMount,tkGrassSand2,tkGrassSand2), (tkIronMount,tkGrassSand2,tkCoastSand,tkCoastSand), (tkIronMount,tkCoastSand,tkGrassSand2,tkGrassSand2),
+   //467
+  (tkGoldMount,tkGoldMount,tkGrassDirt,tkGrass), (tkGoldMount, tkGoldMount,tkGrass,tkGrassDirt), (tkIronMount,tkIronMount,tkDirt,tkDirt),
+   //470
+  (tkGoldMount,tkGoldMount,tkSand,tkCoastSand), (tkGoldMount,tkGoldMount,tkCoastSand,tkSand), (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkDirt), (tkGoldMount,tkGoldMount,tkDirt,tkSnowOnDirt),
+   //474
+  (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkSnowOnDirt), (tkGoldMount,tkGoldMount,tkSnowOnDirt,tkSnowOnDirt), (tkGoldMount,tkGoldMount,tkDirt,tkDirt)
   );
 
 type
@@ -495,7 +563,7 @@ type
 
 implementation
 uses
-  KM_CommonUtils;
+  KM_CommonUtils, Math;
 
 const
   TILES_NOT_ALLOWED_TO_SET: array[0..16] of Word = (55,59,60,61,62,63, //wine and corn
@@ -516,13 +584,18 @@ end;
 procedure TKMResTileset.InitRemakeTiles;
 const
   //ID in png_name
-  WalkBuild:     array[0..23] of Integer = (257,262,264,274,275,283,291,299,302,303,304,305,306,313,314,315,316,317,318,319,//20
-                                            320,321,322,338);
-  WalkNoBuild:   array[0..22] of Integer = (258,263,269,270,271,272,278,279,280,281,286,287,288,289,294,295,296,297,309,310,//20
-                                            311,312,339);
-  NoWalkNoBuild: array[0..42] of Integer = (259,260,261,265,266,267,268,273,276,277,282,284,285,290,292,293,298,300,301,307,//20
+  WalkBuild:     array[0..73] of Integer = (257,262,264,274,275,283,291,299,302,303,304,305,306,313,314,315,316,317,318,319,//20
+                                            320,321,322,338,358,359,360,361,366,367,368,369,375,376,377,378,386,387,388,389,//40
+                                            392,393,394,395,399,400,401,402,420,421,422,423,428,429,430,431,436,437,438,439,//60
+                                            445,446,447,448,454,455,456,457,458,460,464,465,466,467);
+  WalkNoBuild:   array[0..98] of Integer = (258,263,269,270,271,272,278,279,280,281,286,287,288,289,294,295,296,297,309,310,//20
+                                            311,312,339,350,351,352,353,354,355,356,357,362,363,364,365,370,371,372,373,374,//40
+                                            379,380,381,382,383,384,385,390,391,396,397,398,403,304,405,406,407,408,409,410,//60
+                                            411,412,419,414,415,416,417,418,419,424,425,426,427,432,433,423,435,440,441,442,//80
+                                            443,444,449,450,451,452,453,461,463,468,469,470,471,472,473,474,475,476,477);
+  NoWalkNoBuild: array[0..44] of Integer = (259,260,261,265,266,267,268,273,276,277,282,284,285,290,292,293,298,300,301,307,//20
                                             308,323,324,325,326,327,328,329,330,331,332,333,334,335,336,337,340,341,342,343,//40
-                                            344,345,346);
+                                            344,345,346,459,462);
 var
   I: Integer;
 begin
@@ -640,8 +713,10 @@ end;
 {Check if requested tile is sand suitable for crabs}
 function TKMResTileset.TileIsSand(aTile: Word): Boolean;
 const
-  SAND_TILES: array[0..23] of Word =
-                (31,32,33,70,71,99,100,102,103,108,109,112,113,116,117,169,173,181,189,269,273,302,319,320);
+  SAND_TILES: array[0..67] of Word =
+                (31,32,33,70,71,99,100,102,103,108,109,112,113,116,117,169,173,181,189,269,273,302,319,320,
+                352,353,354,355,356,357,358,359,360,361,362,365,366,367,368,371,372,374,375,376,377,402,403,
+                404,405,406,407,410,425,426,427,428,429,430,433,434,435,436,437,438,464,465,466,467);
 begin
   Result := ArrayContains(aTile, SAND_TILES);
 end;
@@ -661,12 +736,13 @@ begin
 end;
 
 
-{Check if requested tile is sand suitable for crabs}
+{Check if requested tile is snow}
 function TKMResTileset.TileIsSnow(aTile: Word): Boolean;
 const
-  SNOW_TILES: array[0..30] of Word =
+  SNOW_TILES: array[0..57] of Word =
                 (45, 46, 47, 49, 52, 64, 65, 166, 171, 203, 204, 205, 212, 213, 220, 256, 257, 261, 262,
-                 286, 290, 294, 298, 304, 305, 312,313,314,315,317,318);
+                 286, 290, 294, 298, 304, 305, 312,313,314,315,317,318,391,392,393,394,395,396,397,398,
+                 399,400,401,441,442,443,444,445,446,447,448,449,450,451,452,453,454,455,456);
 begin
   Result := ArrayContains(aTile, SNOW_TILES);
 end;
@@ -688,13 +764,20 @@ end;
 
 function TKMResTileset.TileIsGoodForIronMine(aTile: Word): Boolean;
 begin
-  Result := (aTile in [109,166..170]) or (aTile = 338);
+  Result := (aTile in [109,166..170]) or (aTile = 338)
+  or (InRange(aTile, 402, 418)) or (InRange(aTile, 423,426))
+  or (InRange(aTile, 431, 434)) or (InRange(aTile, 439, 443))
+  or (InRange(aTile, 448, 452)) or (aTile = 460) or (aTile = 469);
 end;
 
 
 function TKMResTileset.TileIsGoodForGoldMine(aTile: Word): Boolean;
 begin
-  Result := aTile in [171..175];
+  Result := (aTile in [171..175]) or (InRange(aTile, 350, 356))
+  or (InRange(aTile, 361, 364)) or (InRange(aTile, 369, 373))
+  or (InRange(aTile, 378, 384)) or (InRange(aTile, 389,390))
+  or (InRange(aTile, 395, 397)) or (InRange(aTile, 467, 468))
+  or (InRange(aTile, 470, 476));
 end;
 
 
@@ -731,10 +814,11 @@ end;
 {Check if requested tile is soil suitable for fields and trees}
 function TKMResTileset.TileIsSoil(aTile: Word): Boolean;
 const
-  SOIL_TILES: array[0..78] of Word =
+  SOIL_TILES: array[0..96] of Word =
                 (0,1,2,3,5,6, 8,9,11,13,14, 16,17,18,19,20,21, 26,27,28, 34,35,36,37,38,39, 47, 49, 55,56,
                 57,58,64,65,66,67,68,69,72,73,74,75,76,77,78,79,80, 84,85,86,87,88,89, 93,94,95,96,97,98,
-                180,182,183,188,190,191,220,247,274,282,301,303, 312,313,314,315,316,317,318,337);
+                180,182,183,188,190,191,220,247,274,282,301,303, 312,313,314,315,316,317,318,337,385,386,
+                378,388,391,392,393,394,419,420,421,422,444,445,446,447,458,460);
 begin
   Result := ArrayContains(aTile, SOIL_TILES);
 end;
