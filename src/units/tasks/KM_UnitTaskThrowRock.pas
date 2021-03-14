@@ -24,7 +24,8 @@ type
 
 implementation
 uses
-  KM_HandsCollection, KM_Projectiles, KM_ResWares, KM_Hand;
+  KM_HandsCollection, KM_Projectiles, KM_Hand,
+  KM_ResTypes;
 
 
 { TTaskThrowRock }
@@ -32,7 +33,7 @@ constructor TKMTaskThrowRock.Create(aUnit, aTarget: TKMUnit);
 begin
   inherited Create(aUnit);
   fType := uttThrowRock;
-  fTarget := aTarget.GetUnitPointer;
+  fTarget := aTarget.GetPointer;
 end;
 
 
@@ -110,7 +111,6 @@ begin
     SaveStream.Write(Integer(0));
   SaveStream.Write(fFlightTime);
 end;
-
 
 
 end.

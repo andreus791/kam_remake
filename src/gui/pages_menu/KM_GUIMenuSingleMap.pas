@@ -4,7 +4,7 @@ interface
 uses
   Controls, Math, SysUtils,
   KM_Defaults,
-  KM_Maps, KM_MapTypes,
+  KM_Maps, KM_MapTypes, KM_GameTypes,
   KM_Controls, KM_Pics, KM_InterfaceDefaults, KM_Minimap, KM_CommonTypes;
 
 
@@ -79,6 +79,8 @@ type
       ColumnBox_Maps: TKMColumnBox;
       Button_Back, Button_Start: TKMButton;
   public
+    OnNewSingleMap: TKMNewSingleMapEvent;
+
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     destructor Destroy; override;
 
@@ -89,7 +91,7 @@ type
 
 implementation
 uses
-  KM_ResTexts, KM_GameApp, KM_CommonUtils, KM_RenderUI, KM_ResFonts;
+  KM_ResTexts, KM_CommonUtils, KM_RenderUI, KM_ResFonts, KM_GameSettings;
 
 const
   PAD_VERT = 44; //Padding from top/bottom
@@ -128,7 +130,7 @@ begin
   ListUpdate;
   ListRefresh(True);
   Update;
-  gGameApp.GameSettings.MenuMapSPType := Radio_MapType.ItemIndex;
+  gGameSettings.MenuMapSPType := Radio_MapType.ItemIndex;
 end;
 
 
@@ -136,7 +138,6 @@ function TKMMenuSingleMap.GetPanelHalf: Integer;
 begin
   Result := (Panel_Single.Width - PAD_SIDE) div 2 - PAD_SIDE;
 end;
-
 
 
 procedure TKMMenuSingleMap.Create_SingleMap(aParent: TKMPanel);
@@ -411,10 +412,10 @@ begin
 
       fLastMapCRC := fMaps[MapId].MapAndDatCRC;
       case Radio_MapType.ItemIndex of
-        0:  gGameApp.GameSettings.MenuSPScenarioMapCRC := fLastMapCRC;
-        1:  gGameApp.GameSettings.MenuSPMissionMapCRC := fLastMapCRC;
-        2:  gGameApp.GameSettings.MenuSPTacticMapCRC := fLastMapCRC;
-        3:  gGameApp.GameSettings.MenuSPSpecialMapCRC := fLastMapCRC;
+        0:  gGameSettings.MenuSPScenarioMapCRC := fLastMapCRC;
+        1:  gGameSettings.MenuSPMissionMapCRC := fLastMapCRC;
+        2:  gGameSettings.MenuSPTacticMapCRC := fLastMapCRC;
+        3:  gGameSettings.MenuSPSpecialMapCRC := fLastMapCRC;
       end;
 
       Label_Title.Caption   := fMaps[MapId].FileName;
@@ -525,10 +526,10 @@ begin
 
   fLastMapCRC := 0;
   case Radio_MapType.ItemIndex of
-    0:  fLastMapCRC := gGameApp.GameSettings.MenuSPScenarioMapCRC;
-    1:  fLastMapCRC := gGameApp.GameSettings.MenuSPMissionMapCRC;
-    2:  fLastMapCRC := gGameApp.GameSettings.MenuSPTacticMapCRC;
-    3:  fLastMapCRC := gGameApp.GameSettings.MenuSPSpecialMapCRC;
+    0:  fLastMapCRC := gGameSettings.MenuSPScenarioMapCRC;
+    1:  fLastMapCRC := gGameSettings.MenuSPMissionMapCRC;
+    2:  fLastMapCRC := gGameSettings.MenuSPTacticMapCRC;
+    3:  fLastMapCRC := gGameSettings.MenuSPSpecialMapCRC;
   end;
 end;
 
@@ -602,7 +603,7 @@ end;
 
 procedure TKMMenuSingleMap.Update(aForceUpdate: Boolean = False);
 const
-  GoalCondPic: array [TKMGoalCondition] of Word = (
+  GOAL_CONDITION_PIC: array [TKMGoalCondition] of Word = (
     41, 39, 592, 38, 62, 41, 303, 141, 312);
 var
   I,J,K: Integer;
@@ -610,83 +611,77 @@ var
   M: TKMapInfo;
   G: TKMMapGoalInfo;
 begin
-   if (fSingleLoc <> -1) and (ColumnBox_Maps.IsSelected) then
-  begin
-    MapId := ColumnBox_Maps.SelectedItem.Tag;
-    //Do not update same item several times
-    if aForceUpdate or (fUpdatedLastListId <> MapId) then
+  if (fSingleLoc = -1) or not ColumnBox_Maps.IsSelected then Exit;
+  MapId := ColumnBox_Maps.SelectedItem.Tag;
+  if (fUpdatedLastListId = MapId) and not aForceUpdate then Exit; // Do not update same item several times
+
+  fUpdatedLastListId := MapId;
+
+  ResetExtraInfo;
+
+  fMaps.Lock;
+  try
+    M := fMaps[MapId];
+
+    //Set default colour for this location
+    DropBox_Color.List.Rows[0].Cells[0].Color := fMaps[MapId].FlagColors[fSingleLoc];
+    if DropBox_Color.ItemIndex = 0 then
+      fSingleColor := fMaps[MapId].FlagColors[fSingleLoc];
+
+    //Refresh minimap with selected location and player color
+    fMinimap.LoadFromMission(M.FullPath('.dat'), [TKMHandID(fSingleLoc)]);
+    fMinimap.HandColors[fSingleLoc] := fSingleColor;
+    fMinimap.Update;
+    MinimapView.SetMinimap(fMinimap);
+
+    // Populate goals section
+    for I := 0 to Min(MAX_UI_GOALS, M.GoalsVictoryCount[fSingleLoc]) - 1 do
     begin
-      fUpdatedLastListId := MapId;
+      G := M.GoalsVictory[fSingleLoc,I];
+      Image_VictGoal[I].TexID := GOAL_CONDITION_PIC[G.Cond];
+      Image_VictGoal[I].FlagColor := fSingleColor;
+      Image_VictGoalSt[I].Show;
+      Label_VictGoal[I].Caption := IntToStr(G.Play + 1);
+    end;
+    for I := 0 to Min(MAX_UI_GOALS, M.GoalsSurviveCount[fSingleLoc]) - 1 do
+    begin
+      G := M.GoalsSurvive[fSingleLoc,I];
+      Image_SurvGoal[I].TexID := GOAL_CONDITION_PIC[G.Cond];
+      Image_SurvGoal[I].FlagColor := fSingleColor;
+      Image_SurvGoalSt[I].Show;
+      Label_SurvGoal[I].Caption := IntToStr(G.Play + 1);
+    end;
 
-      ResetExtraInfo;
-
-      fMaps.Lock;
-      try
-        M := fMaps[MapId];
-
-        //Set default colour for this location
-        DropBox_Color.List.Rows[0].Cells[0].Color := fMaps[MapId].FlagColors[fSingleLoc];
-        if DropBox_Color.ItemIndex = 0 then
-          fSingleColor := fMaps[MapId].FlagColors[fSingleLoc];
-
-        //Refresh minimap with selected location and player color
-        fMinimap.LoadFromMission(M.FullPath('.dat'), [TKMHandID(fSingleLoc)]);
-        fMinimap.HandColors[fSingleLoc] := fSingleColor;
-        fMinimap.Update;
-        MinimapView.SetMinimap(fMinimap);
-
-        //Populate goals section
-        for I := 0 to Min(MAX_UI_GOALS, M.GoalsVictoryCount[fSingleLoc]) - 1 do
-        begin
-          G := M.GoalsVictory[fSingleLoc,I];
-          Image_VictGoal[I].TexID := GoalCondPic[G.Cond];
-          Image_VictGoal[I].FlagColor := fSingleColor;
-          Image_VictGoalSt[I].Show;
-          Label_VictGoal[I].Caption := IntToStr(G.Play + 1);
-        end;
-        for I := 0 to Min(MAX_UI_GOALS, M.GoalsSurviveCount[fSingleLoc]) - 1 do
-        begin
-          G := M.GoalsSurvive[fSingleLoc,I];
-          Image_SurvGoal[I].TexID := GoalCondPic[G.Cond];
-          Image_SurvGoal[I].FlagColor := fSingleColor;
-          Image_SurvGoalSt[I].Show;
-          Label_SurvGoal[I].Caption := IntToStr(G.Play + 1);
-        end;
-
-        //Populate alliances section
-        J := 0; K := 0;
-        for I := 0 to M.LocCount - 1 do
-        if I <> fSingleLoc then
-        begin
-          case M.Alliances[fSingleLoc, I] of
-            atEnemy: begin
-                        Image_Enemies[J].Show;
-                        Image_Enemies[J].FlagColor := M.FlagColors[I];
-                        Inc(J);
-                      end;
-            atAlly:  begin
-                        Image_Allies[K].Show;
-                        Image_Allies[K].FlagColor := M.FlagColors[I];
-                        Inc(K);
-                      end;
-          end;
-        end;
-
-        for I := 0 to MAX_HANDS - 1 do
-        begin
-          if Image_Allies[I].Right > GetPanelHalf then
-            Image_Allies[I].Hide;
-
-          if Image_Enemies[I].Right > GetPanelHalf then
-            Image_Enemies[I].Hide;
-        end;
-      finally
-        fMaps.Unlock;
+    // Populate alliances section
+    J := 0; K := 0;
+    for I := 0 to M.LocCount - 1 do
+    if I <> fSingleLoc then
+      case M.Alliances[fSingleLoc, I] of
+        atEnemy:  begin
+                    Image_Enemies[J].Show;
+                    Image_Enemies[J].FlagColor := M.FlagColors[I];
+                    Inc(J);
+                  end;
+        atAlly:   begin
+                    Image_Allies[K].Show;
+                    Image_Allies[K].FlagColor := M.FlagColors[I];
+                    Inc(K);
+                  end;
       end;
 
-      Button_Start.Enable;
+    for I := 0 to MAX_HANDS - 1 do
+    begin
+      if Image_Allies[I].Right > GetPanelHalf then
+        Image_Allies[I].Hide;
+
+      if Image_Enemies[I].Right > GetPanelHalf then
+        Image_Enemies[I].Hide;
     end;
+  finally
+    fMaps.Unlock;
   end;
+
+  Button_Start.Enable;
 end;
 
 
@@ -714,7 +709,8 @@ begin
         fMaps.TerminateScan;
 
         //Provide mission FileName mask and title here
-        gGameApp.NewSingleMap(Map.FullPath('.dat'), Map.FileName, fSingleLoc, fSingleColor, fDifficulty, fAIType);
+        if Assigned(OnNewSingleMap) then
+          OnNewSingleMap(Map.FullPath('.dat'), Map.FileName, fSingleLoc, fSingleColor, fDifficulty, fAIType);
         Exit;
       end;
   finally
@@ -771,7 +767,7 @@ end;
 
 procedure TKMMenuSingleMap.Show;
 begin
-  Radio_MapType.ItemIndex := gGameApp.GameSettings.MenuMapSPType;
+  Radio_MapType.ItemIndex := gGameSettings.MenuMapSPType;
 
   ResetUI;
   //Terminate all

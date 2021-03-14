@@ -41,7 +41,7 @@ implementation
 uses
   SysUtils,
   KM_Defaults,
-  KM_Game,
+
   KM_DevPerfLog, KM_DevPerfLogTypes;
 
 
@@ -74,8 +74,8 @@ begin
 
   fNavMesh.AfterMissionInit();
   fInfluences.AfterMissionInit();
-  //fEye.AfterMissionInit(); Eye is updated from HandsCollection (so mines are already visible for game with random map and automatic selection of storehouse)
   fSupervisor.AfterMissionInit();
+  //fEye.AfterMissionInit(); Eye is updated from HandsCollection (so mines are already visible for game with random map and automatic selection of storehouse)
 end;
 
 
@@ -100,7 +100,7 @@ end;
 procedure TKMAIFields.UpdateState(aTick: Cardinal);
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psAIFields, gGame.GameTick);
+  gPerfLogs.SectionEnter(psAIFields);
   {$ENDIF}
   try
     fNavMesh.UpdateState(aTick);
@@ -126,8 +126,7 @@ begin
 
   fEye.Paint(aRect);
 
-  if OVERLAY_AI_SUPERVISOR then
-    fSupervisor.Paint(aRect);
+  fSupervisor.Paint(aRect);
 end;
 
 

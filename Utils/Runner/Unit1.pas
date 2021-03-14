@@ -44,6 +44,7 @@ type
     btnStop: TButton;
     btnPause: TButton;
     rgMaps: TRadioGroup;
+    rgTeams: TRadioGroup;
     procedure FormCreate(Sender: TObject);
     procedure btnRunClick(Sender: TObject);
     procedure PageControl1Change(Sender: TObject);
@@ -52,6 +53,7 @@ type
     procedure ListBox1Click(Sender: TObject);
     procedure btnStopClick(Sender: TObject);
     procedure btnPauseClick(Sender: TObject);
+    procedure FormShow(Sender: TObject);
   private
     fY: array of TLabel;
     fX: array of TLabel;
@@ -84,7 +86,7 @@ var
 implementation
 {$R *.dfm}
 uses
-  KM_CommonTypes;
+  KM_GameTypes;
 
 
 const
@@ -131,6 +133,36 @@ begin
   end;
 
   Caption := ExtractFileName(Application.ExeName);
+end;
+
+
+procedure TForm2.FormShow(Sender: TObject);
+const
+  LEFT_PARAM = '-left';
+  TOP_PARAM = '-top';
+var
+  I: Integer;
+  val: Integer;
+begin
+  I := 1;
+  while I <= ParamCount do
+  begin
+    if (paramstr(I) = LEFT_PARAM) then
+    begin
+      Inc(I);
+      if TryStrToInt(paramstr(I), val) then
+        Left := val;
+    end;
+
+    if (paramstr(I) = TOP_PARAM) then
+    begin
+      Inc(I);
+      if TryStrToInt(paramstr(I), val) then
+        Top := val;
+    end;
+
+    Inc(I);
+  end;
 end;
 
 
@@ -234,6 +266,7 @@ begin
         Runner.AIType := aitAdvanced;
 
       Runner.MapsType := TKMRunnerMapsType(rgMaps.ItemIndex);
+      Runner.TeamType := TKMRunnerTeamsType(rgTeams.ItemIndex);
 
       fResults := Runner.Run(Count);
       fRunTime := 'Done in ' + IntToStr(GetTickCount - T) + ' ms';

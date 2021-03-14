@@ -4,41 +4,33 @@ interface
 uses
   {$IFDEF WDC} Windows, Graphics, JPEG, {$ENDIF} //Lazarus doesn't have JPEG library yet -> FPReadJPEG?
   {$IFDEF Unix} LCLIntf, LCLType, OpenGLContext, {$ENDIF}
-  Math, dglOpenGL, KromOGLUtils, KromUtils, KM_RenderControl, KM_RenderQuery;
+  Math, dglOpenGL, KromOGLUtils, KromUtils,
+  KM_RenderControl, KM_RenderQuery, KM_RenderTypes;
 
 
-type
-  TTexFormat = (
-    tfRGB5A1,
-    tfRGBA8,
-    tfAlpha8 //Mask used for team colors and house construction steps (GL_ALPHA)
-    );
-  TFilterType = (
-    ftNearest,
-    ftLinear
-  );
-  const
-    TexFormatSize: array [TTexFormat] of Byte = (2, 4, 1);
-    TexFilter: array [TFilterType] of GLint = (GL_NEAREST, GL_LINEAR);
+const
+  TEX_FORMAT_SIZE: array [TTexFormat] of Byte = (2, 4, 1);
+  TEX_FILTER: array [TFilterType] of GLint = (GL_NEAREST, GL_LINEAR);
 
 type
-  TRenderMode = (rm2D, rm3D);
+  TKMRenderMode = (rm2D, rm3D);
 
   //General OpenGL handling
   TRender = class
+  private class var
+    fLastBindedTextureId: Cardinal;
+    fMaxTextureSize: Cardinal;
   private
     fRenderControl: TKMRenderControl;
     fOpenGL_Vendor, fOpenGL_Renderer, fOpenGL_Version: UnicodeString;
     fScreenX, fScreenY: Word;
     fBlind: Boolean;
     fQuery: TKMRenderQuery;
-    class var
-      fLastBindedTextureId: Cardinal;
   public
     constructor Create(aRenderControl: TKMRenderControl; ScreenX,ScreenY: Integer; aVSync: Boolean);
     destructor Destroy; override;
 
-    procedure SetRenderMode(aRenderMode: TRenderMode); //Switch between 2D and 3D perspectives
+    procedure SetRenderMode(aRenderMode: TKMRenderMode); //Switch between 2D and 3D perspectives
 
     class function GetMaxTexSize: Integer;
     class function GenerateTextureCommon(aMinFilter, aMagFilter: TFilterType): GLuint;
@@ -46,7 +38,9 @@ type
     class procedure DeleteTexture(aTex: GLUint);
     class procedure UpdateTexture(aTexture: GLuint; DestX, DestY: Word; Mode: TTexFormat; const Data: Pointer);
     class procedure BindTexture(aTexId: Cardinal);
-    class procedure FakeRender(aID: Cardinal);
+    // This is pointless. OGL does its own RAM/VRAM management. To be deleted in 2021
+    //class procedure FakeRender(aID: Cardinal);
+    class property MaxTextureSize: Cardinal read fMaxTextureSize;
 
     property RendererVersion: UnicodeString read fOpenGL_Version;
     function IsOldGLVersion: Boolean;
@@ -70,13 +64,11 @@ var
 
 implementation
 uses
-  SysUtils, KM_Log, KM_ResSprites;
+  SysUtils, KM_Log;
 
 
 { TRender }
 constructor TRender.Create(aRenderControl: TKMRenderControl; ScreenX,ScreenY: Integer; aVSync: Boolean);
-var
-  MaxTextureSize: Integer;
 begin
   inherited Create;
 
@@ -89,9 +81,8 @@ begin
 
     fRenderControl.CreateRenderContext;
 
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, @MaxTextureSize); //Get max supported texture size by video adapter
-    gLog.AddTime('GL_MAX_TEXTURE_SIZE = ' + IntToStr(MaxTextureSize));
-    TKMResSprites.SetMaxAtlasSize(MaxTextureSize);       //Save it for texture processing
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, @fMaxTextureSize); //Get max supported texture size by video adapter
+    gLog.AddTime('GL_MAX_TEXTURE_SIZE = ' + IntToStr(fMaxTextureSize));
 
     glClearColor(0, 0, 0, 0); 	   //Background
     glClearStencil(0);
@@ -156,7 +147,7 @@ begin
 end;
 
 
-procedure TRender.SetRenderMode(aRenderMode: TRenderMode);
+procedure TRender.SetRenderMode(aRenderMode: TKMRenderMode);
 begin
   if fBlind then Exit;
 
@@ -176,13 +167,13 @@ end;
 
 class function TRender.GenerateTextureCommon(aMinFilter, aMagFilter: TFilterType): GLuint;
 var
-  Texture: GLuint;
+  texture: GLuint;
 begin
   Result := 0;
   if not Assigned(glGenTextures) then Exit;
 
-  glGenTextures(1, @Texture);
-  BindTexture(Texture);
+  glGenTextures(1, @texture);
+  BindTexture(texture);
 
   {Enable color blending into texture}
   glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
@@ -191,14 +182,14 @@ begin
   //can't use GL_REPLACE cos it disallows blending of texture with custom color (e.g. trees in FOW)
 
   {Use nearest filter to keep original KaM grainy look}
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TexFilter[aMinFilter]);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TexFilter[aMagFilter]);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEX_FILTER[aMinFilter]);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEX_FILTER[aMagFilter]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
   {Clamping UVs solves edge artifacts}
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  Result := Texture;
+  Result := texture;
 end;
 
 
@@ -226,6 +217,7 @@ end;
 class procedure TRender.UpdateTexture(aTexture: GLuint; DestX, DestY: Word; Mode: TTexFormat; const Data: Pointer);
 begin
   if not Assigned(glTexImage2D) then Exit;
+
   Assert((DestX * DestY > 0) and (DestX = MakePOT(DestX)) and (DestY = MakePOT(DestY)),
          Format('Game designed to handle only POT textures. Texture size: [%d:%d]', [DestX,DestY]));
 
@@ -257,7 +249,7 @@ end;
 procedure TRender.DoPrintScreen(const aFileName: string);
 {$IFDEF WDC}
 var
-  i, k, W, H: integer;
+  I, K, W, H: integer;
   jpg: TJpegImage;
   mkbmp: TBitMap;
   bmp: array of Cardinal;
@@ -272,8 +264,8 @@ begin
 
   //Mirror verticaly
   for i := 0 to (H div 2) - 1 do
-    for k := 0 to W - 1 do
-      SwapInt(bmp[i * W + k], bmp[((H - 1) - i) * W + k]);
+    for K := 0 to W - 1 do
+      SwapInt(bmp[i * W + K], bmp[((H - 1) - i) * W + K]);
 
   mkbmp := TBitmap.Create;
   mkbmp.Handle := CreateBitmap(W, H, 1, 32, @bmp[0]);
@@ -334,6 +326,8 @@ begin
 end;
 
 
+// This is pointless. OGL does its own RAM/VRAM management. To be deleted in 2021
+{
 //Fake Render from Atlas, to force copy of it into video RAM, where it is supposed to be
 class procedure TRender.FakeRender(aID: Cardinal);
 begin
@@ -346,6 +340,7 @@ begin
     glVertex2f(0, 0);
   glEnd;
 end;
+}
 
 
 end.

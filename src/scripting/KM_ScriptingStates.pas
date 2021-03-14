@@ -4,7 +4,9 @@ interface
 uses
   Classes, Math, SysUtils, StrUtils,
   KM_CommonTypes, KM_Defaults, KM_Points, KM_HandsCollection, KM_Houses, KM_ScriptingIdCache, KM_Units, KM_MapTypes,
-  KM_UnitGroup, KM_ResHouses, KM_HouseCollection, KM_ResWares, KM_ScriptingEvents, KM_Terrain, KM_ResTileset;
+  KM_UnitGroup, KM_ResHouses, KM_HouseCollection, KM_ResWares, KM_ScriptingEvents, KM_Terrain, KM_ResTileset,
+  KM_UnitGroupTypes,
+  KM_ResTypes;
 
 
 type
@@ -16,6 +18,7 @@ type
     function AIAutoDefence(aPlayer: Byte): Boolean;
     function AIAutoRepair(aPlayer: Byte): Boolean;
     function AIDefendAllies(aPlayer: Byte): Boolean;
+    procedure AIDefencePositionGet(aPlayer, aID: Byte; out aX, aY: Integer; out aGroupType: Byte; out aRadius: Word; out aDefType: Byte);
     function AIEquipRate(aPlayer: Byte; aType: Byte): Integer;
     procedure AIGroupsFormationGet(aPlayer, aType: Byte; out aCount, aColumns: Integer);
     function AIRecruitDelay(aPlayer: Byte): Integer;
@@ -116,6 +119,7 @@ type
     function MapTileIsCoal(X, Y: Integer): Word;
     function MapTileIsGold(X, Y: Integer): Word;
     function MapTileIsIce(X, Y: Integer): Boolean;
+    function MapTileIsInMapCoords(X, Y: Integer): Boolean;
     function MapTileIsIron(X, Y: Integer): Word;
     function MapTileIsSand(X, Y: Integer): Boolean;
     function MapTileIsSnow(X, Y: Integer): Boolean;
@@ -202,6 +206,7 @@ type
     function UnitsGroup(aUnitID: Integer): Integer;
     function UnitType(aUnitID: Integer): Integer;
     function UnitTypeName(aUnitType: Byte): AnsiString;
+    function UnitUnlocked(aPlayer: Word; aUnitType: Integer): Boolean;
 
     function WareTypeName(aWareType: Byte): AnsiString;
     function WarriorInFight(aUnitID: Integer; aCountCitizens: Boolean): Boolean;
@@ -210,7 +215,7 @@ type
 
 implementation
 uses
-  KM_AI, KM_Game, KM_UnitWarrior,
+  KM_AI, KM_Game, KM_GameParams, KM_UnitWarrior,
   KM_HouseBarracks, KM_HouseSchool, KM_ResUnits, KM_CommonUtils, KM_HouseMarket,
   KM_Resource, KM_UnitTaskSelfTrain, KM_Hand, KM_AIDefensePos,
   KM_UnitsCollection, KM_HouseWoodcutters, KM_HouseTownHall,
@@ -225,8 +230,8 @@ uses
 
 function HouseTypeValid(aHouseType: Integer): Boolean; inline;
 begin
-  Result := (aHouseType in [Low(HouseIndexToType)..High(HouseIndexToType)])
-            and (HouseIndexToType[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
+  Result := (aHouseType in [Low(HOUSE_ID_TO_TYPE)..High(HOUSE_ID_TO_TYPE)])
+            and (HOUSE_ID_TO_TYPE[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
 end;
 
 
@@ -339,6 +344,38 @@ begin
 end;
 
 
+//* Version: 12000+
+//* Gets the parameters of AI defence position
+//* Parameters are returned in aX, aY, aGroupType, aRadius, aDefType variables
+//* Group types: 0 = Melee; 1	= Anti-horse; 2	= Ranged; 3	= Mounted
+//* Defence type: 0 = Defenders; 1 = Attackers
+procedure TKMScriptStates.AIDefencePositionGet(aPlayer, aID: Byte; out aX, aY: Integer; out aGroupType: Byte; out aRadius: Word; out aDefType: Byte);
+var
+  DP: TAIDefencePosition;
+begin
+  try
+    if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
+    and InRange(aID, 0, gHands[aPlayer].AI.General.DefencePositions.Count - 1) then
+    begin
+      DP := gHands[aPlayer].AI.General.DefencePositions.Positions[aID];
+      if DP <> nil then
+      begin
+        aX := DP.Position.Loc.X;
+        aY := DP.Position.Loc.Y;
+        aGroupType := Byte(DP.GroupType);
+        aRadius := DP.Radius;
+        aDefType := Byte(DP.DefenceType);
+      end;
+    end
+    else
+      LogParamWarning('States.AIDefencePositionGet', [aPlayer, aID]);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
 //* Version: 7000+
 //* Gets the warriors equip rate for AI.
 //* aType: type: 0 - leather, 1 - iron
@@ -382,7 +419,7 @@ begin
         aColumns := gHands[aPlayer].AI.ArmyManagement.Defence.TroopFormations[gt].UnitsPerRow;
       end
       else
-      begin;
+      begin
         aCount := gHands[aPlayer].AI.General.DefencePositions.TroopFormations[gt].NumUnits;
         aColumns := gHands[aPlayer].AI.General.DefencePositions.TroopFormations[gt].UnitsPerRow;
       end
@@ -599,7 +636,7 @@ begin
       if aHouseType = -1 then
         HTS := [Low(TKMHouseType)..High(TKMHouseType)]
       else
-        HTS := [HouseIndexToType[aHouseType]];
+        HTS := [HOUSE_ID_TO_TYPE[aHouseType]];
 
       H := gHands[aPlayer].Houses.FindHouse(HTS, X, Y);
       if H <> nil then
@@ -632,9 +669,9 @@ begin
   try
     Result := -1;
     HTS := [];
-    for B := Low(HouseIndexToType) to High(HouseIndexToType) do
-      if (B in aHouseTypes) and (HouseIndexToType[B] <> htNone) then
-        HTS := HTS + [HouseIndexToType[B]];
+    for B := Low(HOUSE_ID_TO_TYPE) to High(HOUSE_ID_TO_TYPE) do
+      if (B in aHouseTypes) and (HOUSE_ID_TO_TYPE[B] <> htNone) then
+        HTS := HTS + [HOUSE_ID_TO_TYPE[B]];
 
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and gTerrain.TileInMapCoords(X, Y) then
@@ -669,12 +706,12 @@ begin
     Result := -1;
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and gTerrain.TileInMapCoords(X, Y)
-    and ((aUnitType = -1) or (aUnitType in [Low(UnitIndexToType)..High(UnitIndexToType)]))  then
+    and ((aUnitType = -1) or (aUnitType in [Low(UNIT_ID_TO_TYPE)..High(UNIT_ID_TO_TYPE)]))  then
     begin
       if aUnitType = -1 then
         UTS := [Low(TKMUnitType)..High(TKMUnitType)]
       else
-        UTS := [UnitIndexToType[aUnitType]];
+        UTS := [UNIT_ID_TO_TYPE[aUnitType]];
 
       U := gHands[aPlayer].Units.GetClosestUnit(KMPoint(X,Y), UTS);
       if U <> nil then
@@ -707,9 +744,9 @@ begin
   try
     Result := -1;
     UTS := [];
-    for B in [Low(UnitIndexToType)..High(UnitIndexToType)] do
+    for B in [Low(UNIT_ID_TO_TYPE)..High(UNIT_ID_TO_TYPE)] do
       if B in aUnitTypes then
-        UTS := UTS + [UnitIndexToType[B]];
+        UTS := UTS + [UNIT_ID_TO_TYPE[B]];
 
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and gTerrain.TileInMapCoords(X, Y) then
@@ -778,7 +815,6 @@ begin
     raise;
   end;
 end;
-
 
 
 //* Version: 6323
@@ -854,13 +890,12 @@ end;
 function TKMScriptStates.GameSpeed: Single;
 begin
   try
-    Result := gGame.GameSpeedGIP; //Return recorded as GIP speed, not actual!
+    Result := gGame.SpeedGIP; //Return recorded as GIP speed, not actual!
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
   end;
 end;
-
 
 
 //* Version: 11000
@@ -869,7 +904,7 @@ end;
 function TKMScriptStates.GameSpeedChangeAllowed: Boolean;
 begin
   try
-    Result := gGame.GameSpeedChangeAllowed;
+    Result := gGame.SpeedChangeAllowed;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -883,7 +918,7 @@ end;
 function TKMScriptStates.GameTime: Cardinal;
 begin
   try
-    Result := gGame.GameTick;
+    Result := gGameParams.Tick;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -897,7 +932,7 @@ end;
 function TKMScriptStates.PeaceTime: Cardinal;
 begin
   try
-    Result := 600 * gGame.GameOptions.Peacetime;
+    Result := 600 * gGame.Options.Peacetime;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -961,9 +996,9 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled) then
     begin
-      for B := Low(HouseIndexToType) to High(HouseIndexToType) do
-        if (B in aTypes) and (HouseIndexToType[B] <> htNone) then
-          inc(Result, gHands[aPlayer].Stats.GetHouseQty(HouseIndexToType[B]));
+      for B := Low(HOUSE_ID_TO_TYPE) to High(HOUSE_ID_TO_TYPE) do
+        if (B in aTypes) and (HOUSE_ID_TO_TYPE[B] <> htNone) then
+          inc(Result, gHands[aPlayer].Stats.GetHouseQty(HOUSE_ID_TO_TYPE[B]));
     end
     else
       LogParamWarning('States.StatHouseMultipleTypesCount', [aPlayer]);
@@ -982,7 +1017,7 @@ begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and HouseTypeValid(aHouseType) then
-      Result := gHands[aPlayer].Stats.GetHouseQty(HouseIndexToType[aHouseType])
+      Result := gHands[aPlayer].Stats.GetHouseQty(HOUSE_ID_TO_TYPE[aHouseType])
     else
     begin
       Result := 0;
@@ -1004,7 +1039,7 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled)
     and HouseTypeValid(aHouseType) then
-      Result := gHands[aPlayer].Stats.GetHousePlans(HouseIndexToType[aHouseType])
+      Result := gHands[aPlayer].Stats.GetHousePlans(HOUSE_ID_TO_TYPE[aHouseType])
     else
     begin
       Result := 0;
@@ -1083,9 +1118,9 @@ function TKMScriptStates.PlayerWareDistribution(aPlayer, aWareType, aHouseType: 
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and(aWareType in [Low(WareIndexToType) .. High(WareIndexToType)])
+    and(aWareType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)])
     and HouseTypeValid(aHouseType) then
-      Result := gHands[aPlayer].Stats.WareDistribution[WareIndexToType[aWareType], HouseIndexToType[aHouseType]]
+      Result := gHands[aPlayer].Stats.WareDistribution[WARE_ID_TO_TYPE[aWareType], HOUSE_ID_TO_TYPE[aHouseType]]
     else
     begin
       Result := 0;
@@ -1223,7 +1258,7 @@ function TKMScriptStates.PlayerIsAI(aPlayer: Byte): Boolean;
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled) then
-      Result := gHands[aPlayer].HandType = hndComputer
+      Result := gHands[aPlayer].IsComputer
     else
     begin
       Result := False;
@@ -1269,9 +1304,9 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled) then
     begin
-      for B := Low(UnitIndexToType) to High(UnitIndexToType) do
+      for B := Low(UNIT_ID_TO_TYPE) to High(UNIT_ID_TO_TYPE) do
         if B in aTypes then
-          inc(Result, gHands[aPlayer].Stats.GetUnitQty(UnitIndexToType[B]));
+          inc(Result, gHands[aPlayer].Stats.GetUnitQty(UNIT_ID_TO_TYPE[B]));
     end
     else
       LogParamWarning('States.StatUnitMultipleTypesCount', [aPlayer]);
@@ -1289,9 +1324,9 @@ function TKMScriptStates.StatUnitTypeCount(aPlayer, aUnitType: Byte): Integer;
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aUnitType in [Low(UnitIndexToType)..High(UnitIndexToType)])
+    and (aUnitType in [Low(UNIT_ID_TO_TYPE)..High(UNIT_ID_TO_TYPE)])
     then
-      Result := gHands[aPlayer].Stats.GetUnitQty(UnitIndexToType[aUnitType])
+      Result := gHands[aPlayer].Stats.GetUnitQty(UNIT_ID_TO_TYPE[aUnitType])
     else
     begin
       Result := 0;
@@ -1311,9 +1346,9 @@ function TKMScriptStates.StatUnitKilledCount(aPlayer, aUnitType: Byte): Integer;
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aUnitType in [Low(UnitIndexToType)..High(UnitIndexToType)])
+    and (aUnitType in [Low(UNIT_ID_TO_TYPE)..High(UNIT_ID_TO_TYPE)])
     then
-      Result := gHands[aPlayer].Stats.GetUnitKilledQty(UnitIndexToType[aUnitType])
+      Result := gHands[aPlayer].Stats.GetUnitKilledQty(UNIT_ID_TO_TYPE[aUnitType])
     else
     begin
       Result := 0;
@@ -1338,9 +1373,9 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled) then
     begin
-      for B := Low(UnitIndexToType) to High(UnitIndexToType) do
+      for B := Low(UNIT_ID_TO_TYPE) to High(UNIT_ID_TO_TYPE) do
         if B in aTypes then
-          inc(Result, gHands[aPlayer].Stats.GetUnitKilledQty(UnitIndexToType[B]));
+          inc(Result, gHands[aPlayer].Stats.GetUnitKilledQty(UNIT_ID_TO_TYPE[B]));
     end
     else
       LogParamWarning('States.StatUnitKilledMultipleTypesCount', [aPlayer]);
@@ -1358,9 +1393,9 @@ function TKMScriptStates.StatUnitLostCount(aPlayer, aUnitType: Byte): Integer;
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aUnitType in [Low(UnitIndexToType)..High(UnitIndexToType)])
+    and (aUnitType in [Low(UNIT_ID_TO_TYPE)..High(UNIT_ID_TO_TYPE)])
     then
-      Result := gHands[aPlayer].Stats.GetUnitLostQty(UnitIndexToType[aUnitType])
+      Result := gHands[aPlayer].Stats.GetUnitLostQty(UNIT_ID_TO_TYPE[aUnitType])
     else
     begin
       Result := 0;
@@ -1386,9 +1421,9 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled) then
     begin
-      for B := Low(UnitIndexToType) to High(UnitIndexToType) do
+      for B := Low(UNIT_ID_TO_TYPE) to High(UNIT_ID_TO_TYPE) do
         if B in aTypes then
-          inc(Result, gHands[aPlayer].Stats.GetUnitLostQty(UnitIndexToType[B]));
+          inc(Result, gHands[aPlayer].Stats.GetUnitLostQty(UNIT_ID_TO_TYPE[B]));
     end
     else
       LogParamWarning('States.StatUnitLostMultipleTypesCount', [aPlayer]);
@@ -1406,9 +1441,9 @@ function TKMScriptStates.StatResourceProducedCount(aPlayer, aResType: Byte): Int
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aResType in [Low(WareIndexToType)..High(WareIndexToType)])
+    and (aResType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)])
     then
-      Result := gHands[aPlayer].Stats.GetWaresProduced(WareIndexToType[aResType])
+      Result := gHands[aPlayer].Stats.GetWaresProduced(WARE_ID_TO_TYPE[aResType])
     else
     begin
       Result := 0;
@@ -1434,9 +1469,9 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1)
     and (gHands[aPlayer].Enabled) then
     begin
-      for B := Low(WareIndexToType) to High(WareIndexToType) do
+      for B := Low(WARE_ID_TO_TYPE) to High(WARE_ID_TO_TYPE) do
         if B in aTypes then
-          inc(Result, gHands[aPlayer].Stats.GetWaresProduced(WareIndexToType[B]));
+          inc(Result, gHands[aPlayer].Stats.GetWaresProduced(WARE_ID_TO_TYPE[B]));
     end
     else
       LogParamWarning('States.StatResourceProducedMultipleTypesCount', [aPlayer]);
@@ -1997,9 +2032,9 @@ var
 begin
   try
     Result := -1; //-1 if house id is invalid
-    if (aHouseID > 0) and (aResource in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    if (aHouseID > 0) and (aResource in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aResource];
+      Res := WARE_ID_TO_TYPE[aResource];
       H := fIDCache.GetHouse(aHouseID);
       if H <> nil then
         Result := H.CheckResIn(Res) + H.CheckResOut(Res); //Count both in and out
@@ -2029,7 +2064,7 @@ begin
     begin
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil) and (H is TKMHouseSchool) then
-        Result := UnitTypeToIndex[TKMHouseSchool(H).Queue[QueueIndex]];
+        Result := UNIT_TYPE_TO_ID[TKMHouseSchool(H).Queue[QueueIndex]];
     end
     else
       LogParamWarning('States.HouseSchoolQueue', [aHouseID, QueueIndex]);
@@ -2103,7 +2138,7 @@ begin
     begin
       H := fIDCache.GetHouse(aHouseID);
       if H <> nil then
-        Result := HouseTypeToIndex[H.HouseType] - 1;
+        Result := HOUSE_TYPE_TO_ID[H.HouseType] - 1;
     end
     else
       LogParamWarning('States.HouseType', [aHouseID]);
@@ -2122,7 +2157,7 @@ begin
   try
     Result := 0;
     if HouseTypeValid(aHouseType) then
-      Result := gRes.Houses[HouseIndexToType[aHouseType]].MaxHealth
+      Result := gRes.Houses[HOUSE_ID_TO_TYPE[aHouseType]].MaxHealth
     else
       LogParamWarning('States.HouseTypeMaxHealth', [aHouseType]);
   except
@@ -2142,7 +2177,7 @@ function TKMScriptStates.HouseTypeName(aHouseType: Byte): AnsiString;
 begin
   try
     if HouseTypeValid(aHouseType) then
-      Result := '<%' + AnsiString(IntToStr(gRes.Houses[HouseIndexToType[aHouseType]].HouseNameTextID)) + '>'
+      Result := '<%' + AnsiString(IntToStr(gRes.Houses[HOUSE_ID_TO_TYPE[aHouseType]].HouseNameTextID)) + '>'
     else
     begin
       Result := '';
@@ -2164,7 +2199,7 @@ begin
     Result := -1;
     if HouseTypeValid(aHouseType) then
     begin
-      Result := UnitTypeToIndex[gRes.Houses[HouseIndexToType[aHouseType]].OwnerType];
+      Result := UNIT_TYPE_TO_ID[gRes.Houses[HOUSE_ID_TO_TYPE[aHouseType]].OwnerType];
     end
     else
       LogParamWarning('States.HouseTypeToOccupantType', [aHouseType]);
@@ -2183,7 +2218,7 @@ begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and HouseTypeValid(aHouseType) then
-      Result := gHands[aPlayer].Locks.HouseCanBuild(HouseIndexToType[aHouseType])
+      Result := gHands[aPlayer].Locks.HouseCanBuild(HOUSE_ID_TO_TYPE[aHouseType])
     else
     begin
       Result := False;
@@ -2206,9 +2241,9 @@ var
 begin
   try
     Result := False;
-    if (aHouseID > 0) and (aWareType in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    if (aHouseID > 0) and (aWareType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aWareType];
+      Res := WARE_ID_TO_TYPE[aWareType];
       H := fIDCache.GetHouse(aHouseID);
       if (H is TKMHouseStore) then
         Result := TKMHouseStore(H).NotAcceptFlag[Res];
@@ -2235,9 +2270,9 @@ var
 begin
   try
     Result := 0;
-    if (aHouseID > 0) and (aWareType in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    if (aHouseID > 0) and (aWareType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aWareType];
+      Res := WARE_ID_TO_TYPE[aWareType];
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil) then
         for I := 1 to 4 do
@@ -2384,7 +2419,7 @@ function TKMScriptStates.IsPlanAt(var aPlayer: Integer; var aFieldType: TKMField
   var
     FT: TKMFieldType;
   begin
-    FT := gHands[aHandId].BuildList.FieldworksList.HasField(KMPoint(aX, aY));
+    FT := gHands[aHandId].Constructions.FieldworksList.HasField(KMPoint(aX, aY));
     if aFieldType = ftNone then
     begin
       Result := FT in [ftCorn, ftRoad, ftWine];
@@ -2448,7 +2483,7 @@ function TKMScriptStates.IsFieldPlanAt(var aPlayer: Integer; X, Y: Word): Boolea
 
   function FindPlan(aHandId, aX, aY: Word): Boolean; inline;
   begin
-    Result := gHands[aHandId].BuildList.FieldworksList.HasField(KMPoint(aX, aY)) = ftCorn;
+    Result := gHands[aHandId].Constructions.FieldworksList.HasField(KMPoint(aX, aY)) = ftCorn;
   end;
 
 var
@@ -2495,7 +2530,7 @@ function TKMScriptStates.IsHousePlanAt(var aPlayer: Integer; var aHouseType: TKM
   var
     HT: TKMHouseType;
   begin
-    Result := gHands[aHandId].BuildList.HousePlanList.HasPlan(KMPoint(aX, aY), HT);
+    Result := gHands[aHandId].Constructions.HousePlanList.HasPlan(KMPoint(aX, aY), HT);
     if Result then
     begin
       if aHouseType = htNone then
@@ -2559,7 +2594,7 @@ function TKMScriptStates.IsRoadPlanAt(var aPlayer: Integer; X, Y: Word): Boolean
 
   function FindPlan(aHandId, aX, aY: Word): Boolean; inline;
   begin
-    Result := gHands[aHandId].BuildList.FieldworksList.HasField(KMPoint(aX, aY)) = ftRoad;
+    Result := gHands[aHandId].Constructions.FieldworksList.HasField(KMPoint(aX, aY)) = ftRoad;
   end;
 
 var
@@ -2593,7 +2628,6 @@ begin
 end;
 
 
-
 //* Version: 7000+
 //* Returns true if the specified player has a field plan (ftWine) at the specified location.
 //* If aPlayer index is -1 it will return true if any player has winefield plan at the specified location.
@@ -2603,7 +2637,7 @@ function TKMScriptStates.IsWinefieldPlanAt(var aPlayer: Integer; X, Y: Word): Bo
 
   function FindPlan(aHandId, aX, aY: Word): Boolean; inline;
   begin
-    Result := gHands[aHandId].BuildList.FieldworksList.HasField(KMPoint(aX, aY)) = ftWine;
+    Result := gHands[aHandId].Constructions.FieldworksList.HasField(KMPoint(aX, aY)) = ftWine;
   end;
 
 var
@@ -2642,7 +2676,7 @@ end;
 function TKMScriptStates.IsMissionBuildType: Boolean;
 begin
   try
-    Result := gGame.MissionMode = mmNormal;
+    Result := gGameParams.IsNormalMission;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -2655,7 +2689,7 @@ end;
 function TKMScriptStates.IsMissionFightType: Boolean;
 begin
   try
-    Result := gGame.MissionMode = mmTactic;
+    Result := gGameParams.IsTactic;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -2713,7 +2747,6 @@ begin
     raise;
   end;
 end;
-
 
 
 //* Version: 7000+
@@ -2869,7 +2902,7 @@ end;
 function TKMScriptStates.MissionDifficulty: TKMMissionDifficulty;
 begin
   try
-    Result := gGame.MissionDifficulty;
+    Result := gGameParams.MissionDifficulty;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -2906,7 +2939,7 @@ end;
 //* Version: 6587
 //* Returns the tile type ID of the tile at the specified XY coordinates.
 //* Tile IDs can be seen by hovering over the tiles on the terrain tiles tab in the map editor.
-//* Result: Tile type (0..255)
+//* Result: Tile type (0..597)
 function TKMScriptStates.MapTileType(X, Y: Integer): Integer;
 begin
   try
@@ -3199,6 +3232,21 @@ begin
 end;
 
 
+//* Version: 11750
+//* Check if tile at the specified XY coordinates is within map borders (map has specified XY coordinates).
+//* F.e. coordinates (150, 200) are invalid for 128x128 map and not within map borders
+//* Result: tile is in map coordinates
+function TKMScriptStates.MapTileIsInMapCoords(X, Y: Integer): Boolean;
+begin
+  try
+    Result := gTerrain.TileInMapCoords(X, Y);
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
 //* Version: 11000
 //* Check iron deposit size at the specified XY coordinates.
 //* Result: Iron deposit size at X, Y
@@ -3345,7 +3393,7 @@ begin
       and (TKMHouseMarket(H).ResTo in [WARE_MIN .. WARE_MAX]) then
       begin
         ResFrom := TKMHouseMarket(H).ResFrom;
-        Result := WareTypeToIndex[ResFrom];
+        Result := WARE_TY_TO_ID[ResFrom];
       end;
     end
     else
@@ -3421,7 +3469,7 @@ begin
       and (TKMHouseMarket(H).ResTo in [WARE_MIN .. WARE_MAX]) then
       begin
         ResTo := TKMHouseMarket(H).ResTo;
-        Result := WareTypeToIndex[ResTo];
+        Result := WARE_TY_TO_ID[ResTo];
       end;
     end
     else
@@ -3447,9 +3495,9 @@ var
 begin
   try
     Result := -1; //-1 if ware is invalid
-    if aRes in [Low(WareIndexToType)..High(WareIndexToType)] then
+    if aRes in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)] then
     begin
-      Res := WareIndexToType[aRes];
+      Res := WARE_ID_TO_TYPE[aRes];
       Result := gRes.Wares[Res].MarketPrice;
     end
     else
@@ -3520,7 +3568,7 @@ begin
     begin
       U := fIDCache.GetUnit(aUnitID);
       if U <> nil then
-        Result := U.CurrPosition;
+        Result := U.Position;
     end
     else
       LogParamWarning('States.UnitPosition', [aUnitID]);
@@ -3544,7 +3592,7 @@ begin
     begin
       U := fIDCache.GetUnit(aUnitID);
       if U <> nil then
-        Result := U.CurrPosition.X;
+        Result := U.Position.X;
     end
     else
       LogParamWarning('States.UnitPositionX', [aUnitID]);
@@ -3568,7 +3616,7 @@ begin
     begin
       U := fIDCache.GetUnit(aUnitID);
       if U <> nil then
-        Result := U.CurrPosition.Y;
+        Result := U.Position.Y;
     end
     else
       LogParamWarning('States.UnitPositionY', [aUnitID]);
@@ -3688,7 +3736,7 @@ begin
     begin
       U := fIDCache.GetUnit(aUnitID);
       if U <> nil then
-        Result := UnitTypeToIndex[U.UnitType];
+        Result := UNIT_TYPE_TO_ID[U.UnitType];
     end
     else
       LogParamWarning('States.UnitType', [aUnitID]);
@@ -3708,12 +3756,34 @@ end;
 function TKMScriptStates.UnitTypeName(aUnitType: Byte): AnsiString;
 begin
   try
-    if (aUnitType in [Low(UnitIndexToType) .. High(UnitIndexToType)]) then
-      Result := '<%' + AnsiString(IntToStr(gRes.Units[UnitIndexToType[aUnitType]].GUITextID)) + '>'
+    if (aUnitType in [Low(UNIT_ID_TO_TYPE) .. High(UNIT_ID_TO_TYPE)]) then
+      Result := '<%' + AnsiString(IntToStr(gRes.Units[UNIT_ID_TO_TYPE[aUnitType]].GUITextID)) + '>'
     else
     begin
       Result := '';
       LogParamWarning('States.UnitTypeName', [aUnitType]);
+    end;
+  except
+    gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
+    raise;
+  end;
+end;
+
+
+//* Version: 11750
+//* Returns true if the specified player can train/equip the specified unit type
+//* Result: Unit unlocked
+function TKMScriptStates.UnitUnlocked(aPlayer: Word; aUnitType: Integer): Boolean;
+begin
+  try
+    if InRange(aPlayer, 0, gHands.Count - 1)
+    and (gHands[aPlayer].Enabled)
+    and (aUnitType in [UNIT_TYPE_TO_ID[HUMANS_MIN]..UNIT_TYPE_TO_ID[HUMANS_MAX]]) then
+      Result := not gHands[aPlayer].Locks.GetUnitBlocked(UNIT_ID_TO_TYPE[aUnitType])
+    else
+    begin
+      Result := False;
+      LogParamWarning('States.UnitUnlocked', [aPlayer, aUnitType]);
     end;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
@@ -3731,8 +3801,8 @@ end;
 function TKMScriptStates.WareTypeName(aWareType: Byte): AnsiString;
 begin
   try
-    if (aWareType in [Low(WareIndexToType) .. High(WareIndexToType)]) then
-      Result := '<%' + AnsiString(IntToStr(gRes.Wares[WareIndexToType[aWareType]].TextID)) + '>'
+    if (aWareType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)]) then
+      Result := '<%' + AnsiString(IntToStr(gRes.Wares[WARE_ID_TO_TYPE[aWareType]].TextID)) + '>'
     else
     begin
       Result := '';
@@ -3879,7 +3949,7 @@ begin
     begin
       U := fIDCache.GetUnit(aUnitID);
       if (U <> nil) and (U is TKMUnitSerf) and (TKMUnitSerf(U).Carry in [WARE_MIN..WARE_MAX]) then
-        Result := WareTypeToIndex[TKMUnitSerf(U).Carry];
+        Result := WARE_TY_TO_ID[TKMUnitSerf(U).Carry];
     end
     else
       LogParamWarning('States.UnitCarrying', [aUnitID]);

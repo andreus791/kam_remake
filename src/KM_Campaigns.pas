@@ -3,7 +3,7 @@ unit KM_Campaigns;
 interface
 uses
   Classes,
-  KM_ResTexts, KM_Pics, KM_Maps, KM_MapTypes,
+  KM_ResTexts, KM_Pics, KM_Maps, KM_MapTypes, KM_CampaignTypes,
   KM_CommonClasses, KM_Points;
 
 
@@ -13,9 +13,6 @@ const
 
 type
   TKMBriefingCorner = (bcBottomRight, bcBottomLeft);
-  //Unique campaign identification, stored as 3 ANSI letters (TSK, TPR, etc)
-  //3 bytes are used to avoid string types issues
-  TKMCampaignId = array [0..2] of Byte;
 
   TKMCampaignMapProgressData = record
     Completed: Boolean;
@@ -38,7 +35,7 @@ type
     fPath: UnicodeString;
     fTextLib: TKMTextLibrarySingle;
     fUnlockedMap: Byte;
-    fScriptData: TKMemoryStreamBinary;
+    fScriptData: TKMemoryStream;
 
     //Saved in CMP
     fCampaignId: TKMCampaignId; //Used to identify the campaign
@@ -81,7 +78,7 @@ type
     property CampaignId: TKMCampaignId read fCampaignId write SetCampaignId;
     property ShortName: UnicodeString read fShortName;
     property UnlockedMap: Byte read fUnlockedMap write SetUnlockedMap;
-    property ScriptData: TKMemoryStreamBinary read fScriptData;
+    property ScriptData: TKMemoryStream read fScriptData;
     property MapsInfo: TKMCampaignMapDataArray read fMapsInfo;
     property MapsProgressData: TKMCampaignMapProgressDataArray read fMapsProgressData;
     property Viewed: Boolean read fViewed write fViewed;
@@ -137,7 +134,7 @@ const
 implementation
 uses
   SysUtils, Math, KromUtils,
-  KM_Game, KM_Resource, KM_ResLocales, KM_ResSprites,
+  KM_GameParams, KM_Resource, KM_ResLocales, KM_ResSprites,
   KM_Log, KM_Defaults;
 
 
@@ -242,7 +239,7 @@ end;
 //Read progress from file trying to find matching campaigns
 procedure TKMCampaignsCollection.LoadProgress(const aFileName: UnicodeString);
 var
-  M: TKMemoryStreamBinary;
+  M: TKMemoryStream;
   C: TKMCampaign;
   I, J, campCount: Integer;
   campName: TKMCampaignId;
@@ -293,7 +290,7 @@ end;
 
 procedure TKMCampaignsCollection.SaveProgress;
 var
-  M: TKMemoryStreamBinary;
+  M: TKMemoryStream;
   I,J: Integer;
   FilePath: UnicodeString;
 begin
@@ -347,7 +344,7 @@ begin
     if (Campaigns[I].CampaignId[0] = aCampaignId[0])
     and (Campaigns[I].CampaignId[1] = aCampaignId[1])
     and (Campaigns[I].CampaignId[2] = aCampaignId[2]) then
-      Result := Campaigns[I];
+    Result := Campaigns[I];
 end;
 
 
@@ -358,8 +355,8 @@ begin
     ActiveCampaign.UnlockedMap := fActiveCampaignMap + 1;
     ActiveCampaign.MapsProgressData[fActiveCampaignMap].Completed := True;
     //Update BestDifficulty if we won harder game
-    if Byte(ActiveCampaign.MapsProgressData[fActiveCampaignMap].BestCompleteDifficulty) < Byte(gGame.MissionDifficulty)  then
-      ActiveCampaign.MapsProgressData[fActiveCampaignMap].BestCompleteDifficulty := gGame.MissionDifficulty;
+    if Byte(ActiveCampaign.MapsProgressData[fActiveCampaignMap].BestCompleteDifficulty) < Byte(gGameParams.MissionDifficulty)  then
+      ActiveCampaign.MapsProgressData[fActiveCampaignMap].BestCompleteDifficulty := gGameParams.MissionDifficulty;
   end;
 end;
 
@@ -414,7 +411,7 @@ end;
 //It should be private, but it is used by CampaignBuilder
 procedure TKMCampaign.LoadFromFile(const aFileName: UnicodeString);
 var
-  M: TKMemoryStreamBinary;
+  M: TKMemoryStream;
   I, K: Integer;
   cmp: TBytes;
 begin
@@ -450,7 +447,7 @@ end;
 
 procedure TKMCampaign.SaveToFile(const aFileName: UnicodeString);
 var
-  M: TKMemoryStreamBinary;
+  M: TKMemoryStream;
   I, K: Integer;
   cmp: TBytes;
 begin

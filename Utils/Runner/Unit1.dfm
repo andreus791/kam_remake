@@ -13,6 +13,7 @@ object Form2: TForm2
   Font.Style = []
   OldCreateOrder = False
   OnCreate = FormCreate
+  OnShow = FormShow
   DesignSize = (
     1097
     641)
@@ -329,5 +330,18 @@ object Form2: TForm2
       'Fight'
       'Coop')
     TabOrder = 11
+  end
+  object rgTeams: TRadioGroup
+    Left = 79
+    Top = 328
+    Width = 113
+    Height = 73
+    Caption = 'Teams'
+    ItemIndex = 2
+    Items.Strings = (
+      'FFA'
+      'Random alliances'
+      'Random teams')
+    TabOrder = 12
   end
 end

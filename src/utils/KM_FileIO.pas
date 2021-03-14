@@ -2,12 +2,12 @@
 {$I KaM_Remake.inc}
 interface
 uses
-  {$IFDEF FPC} lconvencoding, FileUtil, LazUTF8, {$ENDIF}
+  {$IFDEF FPC} lconvencoding, FileUtil, LazUTF8, windirs, {$ENDIF}
   {$IFDEF WDC} System.IOUtils, {$ENDIF}
   {$IFDEF MSWindows} Windows, {$ENDIF}
   {$IFDEF Unix} LCLType, {$ENDIF}
-  Classes, SysUtils,
-  KM_WorkerThread;
+  Classes, SysUtils
+  {$IFDEF WDC OR FPC_FULLVERSION >= 30200}, KM_WorkerThread{$ENDIF};
 
   //Read text file into ANSI string (scripts, locale texts)
   function ReadTextA(const afilename: UnicodeString): AnsiString;
@@ -19,10 +19,13 @@ uses
   procedure KMCopyFile(const aSrc, aDest: UnicodeString); overload;
   procedure KMCopyFile(const aSrc, aDest: UnicodeString; aOverwrite: Boolean); overload;
 
+  {$IFDEF WDC OR FPC_FULLVERSION >= 30200}
   procedure KMCopyFileAsync(const aSrc, aDest: UnicodeString; aOverwrite: Boolean; aWorkerThread: TKMWorkerThread);
+  {$ENDIF}
 
   //Delete a folder (DeleteFolder is different between Delphi and Lazarus)
   procedure KMDeleteFolder(const aPath: UnicodeString);
+  procedure KMDeleteFolderContent(const aPath: UnicodeString);
 
   //Rename a file (RenameFile is different between Delphi and Lazarus)
   procedure KMRenamePath(const aSourcePath, aDestPath: UnicodeString);
@@ -33,36 +36,16 @@ uses
   //Rename all the files inside folder (MoveFolder is different between Delphi and Lazarus)
   procedure KMRenameFilesInFolder(const aPathToFolder, aFromName, aToName: UnicodeString);
 
-
   function IsFilePath(const aPath: UnicodeString): Boolean;
 
-{$IFDEF WDC}
-const
-  FILE_READ_DATA = $0001;
-  FILE_WRITE_DATA = $0002;
-  FILE_APPEND_DATA = $0004;
-  FILE_READ_EA = $0008;
-  FILE_WRITE_EA = $0010;
-  FILE_EXECUTE = $0020;
-  FILE_READ_ATTRIBUTES = $0080;
-  FILE_WRITE_ATTRIBUTES = $0100;
-  FILE_GENERIC_READ = (STANDARD_RIGHTS_READ or FILE_READ_DATA or
-    FILE_READ_ATTRIBUTES or FILE_READ_EA or SYNCHRONIZE);
-  FILE_GENERIC_WRITE = (STANDARD_RIGHTS_WRITE or FILE_WRITE_DATA or
-    FILE_WRITE_ATTRIBUTES or FILE_WRITE_EA or FILE_APPEND_DATA or SYNCHRONIZE);
-  FILE_GENERIC_EXECUTE = (STANDARD_RIGHTS_EXECUTE or FILE_READ_ATTRIBUTES or
-    FILE_EXECUTE or SYNCHRONIZE);
-  FILE_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED or SYNCHRONIZE or $1FF;
+  function GetDocumentsSavePath: string;
 
-  // example from https://stackoverflow.com/questions/6908152/how-to-get-permission-level-of-a-folder
-  function CheckFileAccess(const FileName: string; const CheckedAccess: Cardinal): Cardinal;
-{$ENDIF}
-
-
+  procedure CheckFolderPermission(const aPath: string; var aRead, aWrite, aExec: Boolean);
 
 implementation
 uses
-  StrUtils, KM_CommonUtils;
+  StrUtils, KM_CommonUtils,
+  KM_Defaults;
 
 
 function ReadTextA(const aFilename: UnicodeString): AnsiString;
@@ -72,9 +55,9 @@ var
 begin
   MS := TMemoryStream.Create;
   try
-    //We can't rely on StringList because it applies default codepage encoding,
-    //which may differ between MP players.
-    //Instead we read plain ansi text. If there's BOM - clip it
+    // We can't rely on StringList because it applies default codepage encoding,
+    // which may differ between MP players.
+    // Instead we read plain ANSI text. If there's BOM - clip it
     MS.LoadFromFile(aFileName);
 
     MS.Read(Head, 4);
@@ -153,7 +136,7 @@ end;
 procedure KMCopyFile(const aSrc, aDest: UnicodeString);
 begin
   {$IFDEF FPC}
-  CopyFile(aSrc, aDest);
+  CopyFile(pchar(aSrc), pchar(aDest), True);
   {$ENDIF}
   {$IFDEF WDC}
   TFile.Copy(aSrc, aDest);
@@ -167,7 +150,7 @@ begin
     DeleteFile(aDest);
 
   {$IFDEF FPC}
-  CopyFile(aSrc, aDest);
+  CopyFile(pchar(aSrc), pchar(aDest), True);
   {$ENDIF}
   {$IFDEF WDC}
   TFile.Copy(aSrc, aDest);
@@ -175,22 +158,25 @@ begin
 end;
 
 
+{$IFDEF WDC OR FPC_FULLVERSION >= 30200}
 procedure KMCopyFileAsync(const aSrc, aDest: UnicodeString; aOverwrite: Boolean; aWorkerThread: TKMWorkerThread);
 begin
   {$IFDEF WDC}
   aWorkerThread.QueueWork(procedure
   begin
     KMCopyFile(aSrc, aDest, aOverwrite);
-  end);
+  end, 'KMCopyFile');
   {$ELSE}
   KMCopyFile(aSrc, aDest, aOverwrite);
   {$ENDIF}
 end;
+{$ENDIF}
 
 
 procedure KMDeleteFolder(const aPath: UnicodeString);
 {$IFDEF WDC}
-var S: string;
+var
+  S: string;
 {$ENDIF}
 begin
   if DirectoryExists(aPath) then
@@ -219,6 +205,44 @@ begin
       for S in TDirectory.GetFiles(aPath) do
         DeleteFile(S);
       TDirectory.Delete(aPath, True);
+      //Assert(not DirectoryExists(aPath));
+    {$ENDIF}
+  end;
+end;
+
+
+procedure KMDeleteFolderContent(const aPath: UnicodeString);
+{$IFDEF WDC}
+var
+  S: string;
+{$ENDIF}
+begin
+  if DirectoryExists(aPath) then
+  begin
+    {$IFDEF FPC}
+      DeleteDirectory(aPath, False);
+      ForceDirectories(aPath); // We do not care too much about FPC now, recreating directory is ok
+    {$ENDIF}
+    {$IFDEF WDC}
+
+      //TDirectory.Delete will sometimes delay deletion due to Windows behaviour
+      //Suggested workarounds:
+      // - Empty the directory first (seems to work, commented out below)
+      // - Move the directory to a temporary name then delete it (sounds more robust)
+      //Discussions of workarounds:
+      //https://stackoverflow.com/questions/42809389/tdirectory-delete-seems-to-be-asynchronous
+      //https://github.com/dotnet/runtime/issues/27958
+
+      //Generate a temporary name based on time and random number
+      //S := TDirectory.GetParent(ExcludeTrailingPathDelimiter(aPath)) + PathDelim + IntToStr(Random(MaxInt)) + UIntToStr(TimeGet);
+      //TDirectory.Move(aPath, S);
+      //TDirectory.Delete(S, True);
+
+      // Rename folder approach could trigger antivirus sometimes (f.e. Kaspersky)
+      // so there could be many (almost) empty folders after antivirus block folders deletion
+      // "(folder deletion is potentionly dangeroues operation because of data corruption)"
+      for S in TDirectory.GetFiles(aPath) do
+        DeleteFile(S);
       //Assert(not DirectoryExists(aPath));
     {$ENDIF}
   end;
@@ -331,22 +355,57 @@ begin
 end;
 
 
+function GetDocumentsSavePath: string;
+begin
+  // Returns C:\Users\Username\My Documents\My Games\GAME_TITLE\
+  // According to GDSE this is the most commonly used savegame location (https://gamedev.stackexchange.com/a/108243)
+  if FEAT_SETTINGS_IN_MYDOC then
+  {$IFDEF WDC}
+    Result := TPath.GetDocumentsPath + PathDelim + 'My Games' + PathDelim + GAME_TITLE + PathDelim
+  {$ELSE}
+    Result := GetWindowsSpecialDir(CSIDL_PERSONAL) + PathDelim + 'My Games' + PathDelim + GAME_TITLE + PathDelim
+  {$ENDIF}
+  else
+    Result := ExtractFilePath(ParamStr(0));
+end;
+
+
 {$IFDEF WDC}
-function CheckFileAccess(const FileName: string; const CheckedAccess: Cardinal): Cardinal;
-var Token: THandle;
-    Status: LongBool;
-    Access: Cardinal;
-    SecDescSize: Cardinal;
-    PrivSetSize: Cardinal;
-    PrivSet: PRIVILEGE_SET;
-    Mapping: GENERIC_MAPPING;
-    SecDesc: PSECURITY_DESCRIPTOR;
+const
+  FILE_READ_DATA = $0001;
+  FILE_WRITE_DATA = $0002;
+  FILE_APPEND_DATA = $0004;
+  FILE_READ_EA = $0008;
+  FILE_WRITE_EA = $0010;
+  FILE_EXECUTE = $0020;
+  FILE_READ_ATTRIBUTES = $0080;
+  FILE_WRITE_ATTRIBUTES = $0100;
+  FILE_GENERIC_READ = (STANDARD_RIGHTS_READ or FILE_READ_DATA or
+    FILE_READ_ATTRIBUTES or FILE_READ_EA or SYNCHRONIZE);
+  FILE_GENERIC_WRITE = (STANDARD_RIGHTS_WRITE or FILE_WRITE_DATA or
+    FILE_WRITE_ATTRIBUTES or FILE_WRITE_EA or FILE_APPEND_DATA or SYNCHRONIZE);
+  FILE_GENERIC_EXECUTE = (STANDARD_RIGHTS_EXECUTE or FILE_READ_ATTRIBUTES or
+    FILE_EXECUTE or SYNCHRONIZE);
+  FILE_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED or SYNCHRONIZE or $1FF;
+
+
+// example from https://stackoverflow.com/questions/6908152/how-to-get-permission-level-of-a-folder
+function CheckFileAccess(const aFileName: string; const aCheckedAccess: Cardinal): Cardinal;
+var
+  Token: THandle;
+  Status: LongBool;
+  Access: Cardinal;
+  SecDescSize: Cardinal;
+  PrivSetSize: Cardinal;
+  PrivSet: PRIVILEGE_SET;
+  Mapping: GENERIC_MAPPING;
+  SecDesc: PSECURITY_DESCRIPTOR;
 begin
   Result := 0;
-  GetFileSecurity(PChar(Filename), OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or DACL_SECURITY_INFORMATION, nil, 0, SecDescSize);
+  GetFileSecurity(PChar(aFileName), OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or DACL_SECURITY_INFORMATION, nil, 0, SecDescSize);
   SecDesc := GetMemory(SecDescSize);
 
-  if GetFileSecurity(PChar(Filename), OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or DACL_SECURITY_INFORMATION, SecDesc, SecDescSize, SecDescSize) then
+  if GetFileSecurity(PChar(aFileName), OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or DACL_SECURITY_INFORMATION, SecDesc, SecDescSize, SecDescSize) then
   begin
     ImpersonateSelf(SecurityImpersonation);
     OpenThreadToken(GetCurrentThread, TOKEN_QUERY, False, Token);
@@ -359,7 +418,7 @@ begin
 
       MapGenericMask(Access, Mapping);
       PrivSetSize := SizeOf(PrivSet);
-      AccessCheck(SecDesc, Token, CheckedAccess, Mapping, PrivSet, PrivSetSize, Access, Status);
+      AccessCheck(SecDesc, Token, aCheckedAccess, Mapping, PrivSet, PrivSetSize, Access, Status);
       CloseHandle(Token);
       if Status then
         Result := Access;
@@ -369,6 +428,23 @@ begin
   FreeMem(SecDesc, SecDescSize);
 end;
 {$ENDIF}
+
+
+// Check game execution dir generic permissions
+procedure CheckFolderPermission(const aPath: string; var aRead, aWrite, aExec: Boolean);
+begin
+  {$IFDEF WDC}
+  aRead   := (CheckFileAccess(aPath, FILE_GENERIC_READ) = FILE_GENERIC_READ);
+  aWrite  := (CheckFileAccess(aPath, FILE_GENERIC_WRITE) = FILE_GENERIC_WRITE);
+  aExec   := (CheckFileAccess(aPath, FILE_GENERIC_EXECUTE) = FILE_GENERIC_EXECUTE);
+  {$ENDIF}
+  {$IFDEF FPC}
+  // No folder permissions check for FPC yet
+  aRead   := True;
+  aWrite  := True;
+  aExec   := True;
+  {$ENDIF}
+end;
 
 
 end.

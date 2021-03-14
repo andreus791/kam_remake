@@ -21,7 +21,6 @@ const
 
 
 type
-
   TKMNavMeshByteArray = array[-1..257,-1..257] of Byte;
 
   // Borders
@@ -48,6 +47,7 @@ type
       Poly2PointStart, Poly2PointCnt: Word; // Indexes of fPolygon2PointArr (points which are part of this polygon)
       Indices: array [0..2] of Word; //Neighbour nodes
       Nearby: array [0..2] of Word; //Neighbour polygons
+      NearbyLineLength: array [0..2] of Byte; //Neighbour polygons
       NearbyPoints: array [0..2] of TKMPoint; // Center points
     end;
   TPolygonArray = array of TPolygon;
@@ -64,6 +64,8 @@ type
     fBorderNodeCount: Integer;
     fDL: TDebugLines;
     fBorderNodes: TKMPointArray;
+    fTimeAvrgExtrNodes, fTimeAvrgAddInNodes, fTimeAvrgPolyTrian, fTimeAvrgPrettyPoly, fTimeAvrgSum: Int64;
+    fTimePeakExtrNodes, fTimePeakAddInNodes, fTimePeakPolyTrian, fTimePeakPrettyPoly, fTimePeakSum: Int64;
     {$ENDIF}
 
     //Working data
@@ -89,6 +91,8 @@ type
     property PolygonCount: Integer read fPolyCount;
     property Nodes: TKMPointArray read fNodes;
     property Polygons: TPolygonArray read fPolygons;
+    property InnerPointStartIdx: Word read fInnerPointStartIdx;
+    property InnerPointEndIdx: Word read fInnerPointEndIdx;
 
     constructor Create();
     destructor Destroy(); override;
@@ -103,9 +107,10 @@ type
 implementation
 uses
   SysUtils, Math,
-  KM_Terrain,
-
-  Dialogs;
+  {$IFDEF DEBUG_NavMesh}
+  KM_RenderAux,
+  {$ENDIF}
+  KM_Terrain;
 
 
 const
@@ -123,12 +128,22 @@ const
 { TKMNavMeshGenerator }
 constructor TKMNavMeshGenerator.Create();
 begin
-  fInnerPointStartIdx := 0;
-  fInnerPointEndIdx := 0;
-  fNodeCount := 0;
-  fPolyCount := 0;
+  fInnerPointStartIdx   := 0;
+  fInnerPointEndIdx     := 0;
+  fNodeCount            := 0;
+  fPolyCount            := 0;
   {$IFDEF DEBUG_NavMesh}
-  fBorderNodeCount := 0;
+    fBorderNodeCount    := 0;
+    fTimeAvrgExtrNodes  := 0;
+    fTimeAvrgAddInNodes := 0;
+    fTimeAvrgPolyTrian  := 0;
+    fTimeAvrgPrettyPoly := 0;
+    fTimeAvrgSum        := 0;
+    fTimePeakExtrNodes  := 0;
+    fTimePeakAddInNodes := 0;
+    fTimePeakPolyTrian  := 0;
+    fTimePeakPrettyPoly := 0;
+    fTimePeakSum        := 0;
   {$ENDIF}
   inherited Create;
 end;
@@ -157,37 +172,47 @@ end;
 
 
 procedure TKMNavMeshGenerator.GenerateNewNavMesh();
+  {$IFDEF DEBUG_NavMesh}
+  var
+    tStart,tStop,tSum: Int64;
+  procedure UpdateTimer(var aTimeAvrg, aTimePeak: Int64);
+  begin
+    tStop := TimeGetUsec() - tStart;
+    tSum := tSum + tStop;
+    aTimePeak := Max(aTimePeak, tStop);
+    aTimeAvrg := Round((aTimeAvrg * 5 + tStop)/6);
+    tStart := TimeGetUsec();
+  end;
+  {$ENDIF}
 var
   W: TKMNavMeshByteArray;
-{$IFDEF DEBUG_NavMesh}
-  tStart,tExtrNodes,tAddInNodes,tPolyTrian,tPrettyPoly, tSum: UInt64;
-{$ENDIF}
 begin
-    {$IFDEF DEBUG_NavMesh}
+  {$IFDEF DEBUG_NavMesh}
+    tSum := 0;
     tStart := TimeGetUsec();
-    {$ENDIF}
+  {$ENDIF}
 
   W := ExtractNodes();
-    {$IFDEF DEBUG_NavMesh}
-    tExtrNodes := TimeGetUsec() - tStart;
-    {$ENDIF}
-  AddInnerNodes(W);
-    {$IFDEF DEBUG_NavMesh}
-    tAddInNodes := TimeGetUsec() - tStart - tExtrNodes;
-    {$ENDIF}
-  PolygonTriangulation();
-    {$IFDEF DEBUG_NavMesh}
-    tPolyTrian := TimeGetUsec() - tStart - tAddInNodes;
-    {$ENDIF}
-  PrettyPoly();
-    {$IFDEF DEBUG_NavMesh}
-    tPrettyPoly := TimeGetUsec() - tStart - tPolyTrian;
-    {$ENDIF}
+  {$IFDEF DEBUG_NavMesh}
+    UpdateTimer(fTimeAvrgExtrNodes, fTimePeakExtrNodes);
+  {$ENDIF}
 
-    {$IFDEF DEBUG_NavMesh}
-    tSum := tExtrNodes + tAddInNodes + tPolyTrian + tPrettyPoly;
-    if (tSum > 0) then tSum := tSum * 1; // Make sure that compiler does not f--ck up the variable TimeDiff
-    {$ENDIF}
+  AddInnerNodes(W);
+  {$IFDEF DEBUG_NavMesh}
+    UpdateTimer(fTimeAvrgAddInNodes, fTimePeakAddInNodes);
+  {$ENDIF}
+
+  PolygonTriangulation();
+  {$IFDEF DEBUG_NavMesh}
+    UpdateTimer(fTimeAvrgPolyTrian, fTimePeakPolyTrian);
+  {$ENDIF}
+
+  PrettyPoly();
+  {$IFDEF DEBUG_NavMesh}
+    UpdateTimer(fTimeAvrgPrettyPoly, fTimePeakPrettyPoly);
+    fTimePeakSum := Max(fTimePeakSum, tSum);
+    fTimeAvrgSum := Round((fTimeAvrgSum * 5 + tSum)/6);
+  {$ENDIF}
 
   SetLength(fNodes, fNodeCount);
   SetLength(fPolygons, fPolyCount);
@@ -259,8 +284,6 @@ begin
       Result := True;
   end;
 end;
-
-
 
 
 function TKMNavMeshGenerator.ExtractNodes(): TKMNavMeshByteArray;
@@ -546,8 +569,6 @@ begin
 end;
 
 
-
-
 procedure TKMNavMeshGenerator.AddInnerNodes(var aW: TKMNavMeshByteArray);
 var
   E: TKMNavMeshByteArray;
@@ -595,8 +616,6 @@ begin
 end;
 
 
-
-
 procedure TKMNavMeshGenerator.PolygonTriangulation();
 type
   // PolyLines
@@ -610,19 +629,12 @@ type
   	LeftEdge, RightEdge, FutureLeftEdge, FutureRightEdge: Word;
     FirstLine, LastLine: PPolyLine;
   end;
-const
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $7700FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
 var
   LineArrayCnt: Word;
   LineArray: array of PPolyLines;
 
   {$IFDEF DEBUG_NavMesh}
-  procedure AddLine(aP1,aP2: TKMPoint; aColor: Cardinal = COLOR_BLACK);
+  procedure AddLine(aP1,aP2: TKMPoint; aColor: Cardinal = tcBlack);
   begin
     with fDL.Lines[fDL.Count] do
     begin
@@ -632,7 +644,7 @@ var
     end;
     Inc(fDL.Count);
   end;
-  procedure ConfirmLine(aIdx1, aIdx2: Word; aColor: Cardinal = COLOR_BLACK);
+  procedure ConfirmLine(aIdx1, aIdx2: Word; aColor: Cardinal = tcBlack);
   begin
     AddLine(fNodes[ fBord.Borders[aIdx1].Node ], fNodes[ fBord.Borders[aIdx2].Node ], aColor);
   end;
@@ -727,18 +739,18 @@ var
          )) OR IsRightSide(fNodes[ PPoly3^.Node ],fNodes[ PPoly2^.Node ],fNodes[ PPoly1^.Node ])
          OR aCloseArea then // Force to create polygon in case that area will be closed
       begin
-        {$IFDEF DEBUG_NavMesh} AddLine(fNodes[ PPoly3^.Node ],fNodes[ PPoly1^.Node ],COLOR_GREEN); {$ENDIF}
+        {$IFDEF DEBUG_NavMesh} AddLine(fNodes[ PPoly3^.Node ],fNodes[ PPoly1^.Node ],tcGreen); {$ENDIF}
         AddPolygon(PPoly3, PPoly2);
         PPoly3^.Next := PPoly1;
         Dispose(PPoly2); // Remove verticle from memory
-        TryConnect( ifthen(aLeftDirection, PPoly1^.Node, PPoly3^.Node), aLineIdx, aLeftDirection, aBorderPoly, aCloseArea)
+        TryConnect( IfThen(aLeftDirection, PPoly1^.Node, PPoly3^.Node), aLineIdx, aLeftDirection, aBorderPoly, aCloseArea)
       end;
     end;
   end;
   // Add new border point
   procedure AddNewBorder(aIdx, aFutureIdx, aLineIdx: Word; aLeftDirection: Boolean; aTryConnect: Boolean = True; aCloseArea: Boolean = False);
   begin
-    {$IFDEF DEBUG_NavMesh} ConfirmLine(aIdx, aFutureIdx,COLOR_BLACK); {$ENDIF}
+    {$IFDEF DEBUG_NavMesh} ConfirmLine(aIdx, aFutureIdx,tcBlack); {$ENDIF}
     with LineArray[aLineIdx]^ do
     begin
       if aLeftDirection then
@@ -797,8 +809,8 @@ var
       FutureLeftEdge := fBord.Borders[aIdx].Next;
       FutureRightEdge := fBord.Borders[aIdx].Prev;
       {$IFDEF DEBUG_NavMesh}
-        ConfirmLine(aIdx, FutureLeftEdge, COLOR_YELLOW);
-        ConfirmLine(aIdx, FutureRightEdge, COLOR_YELLOW);
+        ConfirmLine(aIdx, FutureLeftEdge, tcYellow);
+        ConfirmLine(aIdx, FutureRightEdge, tcYellow);
       {$ENDIF}
     end;
     Inc(LineArrayCnt);
@@ -807,8 +819,8 @@ var
   procedure RemoveWalkableArea(aIdx, ConIdx: Word);
   begin
     {$IFDEF DEBUG_NavMesh}
-      ConfirmLine(aIdx, LineArray[ConIdx]^.LeftEdge, COLOR_RED);
-      ConfirmLine(aIdx, LineArray[ConIdx]^.RightEdge, COLOR_RED);
+      ConfirmLine(aIdx, LineArray[ConIdx]^.LeftEdge, tcRed);
+      ConfirmLine(aIdx, LineArray[ConIdx]^.RightEdge, tcRed);
     {$ENDIF}
     AddNewBorder(aIdx, fBord.Borders[aIdx].Prev, ConIdx, False, True, True); // Add new border which leads to add new polygon
     DisposeArea(ConIdx);
@@ -817,8 +829,8 @@ var
   procedure MergeWalkableAreas(aIdx, aLeftEdgeLineIdx, aRightEdgeLineIdx: Word);
   begin
     {$IFDEF DEBUG_NavMesh}
-      ConfirmLine(aIdx, LineArray[aLeftEdgeLineIdx]^.LeftEdge, COLOR_RED);
-      ConfirmLine(aIdx, LineArray[aRightEdgeLineIdx]^.RightEdge, COLOR_RED);
+      ConfirmLine(aIdx, LineArray[aLeftEdgeLineIdx]^.LeftEdge, tcRed);
+      ConfirmLine(aIdx, LineArray[aRightEdgeLineIdx]^.RightEdge, tcRed);
     {$ENDIF}
     // Add border points and everything around it
     AddNewBorder(aIdx, aIdx, aLeftEdgeLineIdx, True); // aIdx in second parameter is OK
@@ -863,13 +875,13 @@ var
       aPPrevLine := aPPrevLine^.Next;
     end;
     // Mark left side
-    {$IFDEF DEBUG_NavMesh} AddLine(fNodes[  fBord.Borders[ aIdx ].Node  ], fNodes[ aPPrevLine^.Node ], COLOR_RED ); {$ENDIF}
+    {$IFDEF DEBUG_NavMesh} AddLine(fNodes[  fBord.Borders[ aIdx ].Node  ], fNodes[ aPPrevLine^.Node ], tcRed ); {$ENDIF}
     LineArray[LineArrayCnt]^.LastLine := aPPrevLine;
     AddNewBorder(aIdx, fBord.Borders[aIdx].Prev, LineArrayCnt, False, False);
     NewPolyIdx := fPolyCount; // Polygon with this index does not exist yet
     TryConnect(aPPrevLine.Node, LineArrayCnt, False); // Now new polygons may be created (first one will be connected with second side)
     // Mark right side
-    {$IFDEF DEBUG_NavMesh} AddLine(fNodes[  fBord.Borders[ aIdx ].Node  ], fNodes[ aPActLine^.Node ], COLOR_RED ); {$ENDIF}
+    {$IFDEF DEBUG_NavMesh} AddLine(fNodes[  fBord.Borders[ aIdx ].Node  ], fNodes[ aPActLine^.Node ], tcRed ); {$ENDIF}
     LineArray[aLineIdx]^.FirstLine := aPActLine;
     AddNewBorder(aIdx, fBord.Borders[aIdx].Next, aLineIdx, True, False);
     // New polygon was created -> copy information to the second area so it will be connected automatically
@@ -899,7 +911,7 @@ var
     PPrevLine, PActLine: PPolyLine;
   begin
     // Find relative position of point in stack
-    Point := fNodes[ ifthen(aBorder, fBord.Borders[aIdx].Node, aIdx) ];
+    Point := fNodes[ IfThen(aBorder, fBord.Borders[aIdx].Node, aIdx) ];
     PPrevLine := nil;
     PActLine := LineArray[aLineIdx]^.FirstLine;
     repeat
@@ -914,8 +926,8 @@ var
     else if (PPrevLine <> nil) AND (PActLine <> nil) then // In case of ordinary point just add new element + ignore border points
     begin
       {$IFDEF DEBUG_NavMesh}
-        AddLine(fNodes[ aIdx ], fNodes[ PPrevLine^.Node ], COLOR_WHITE );
-        AddLine(fNodes[ aIdx ], fNodes[ PActLine^.Node ], COLOR_WHITE );
+        AddLine(fNodes[ aIdx ], fNodes[ PPrevLine^.Node ], tcWhite );
+        AddLine(fNodes[ aIdx ], fNodes[ PActLine^.Node ], tcWhite );
       {$ENDIF}
       PPrevLine^.Next := NewLine(aIdx, PActLine, AddPolygon(aIdx, PPrevLine)); // Add line
       // Try to connect point into new triangles
@@ -932,7 +944,7 @@ var
     Point, LeftP, FutureLeftP, RightP, FutureRightP: TKMPoint;
   begin
     Inserted := False;
-    Point := fNodes[ ifthen(aBorder, fBord.Borders[aIdx].Node, aIdx) ];
+    Point := fNodes[ IfThen(aBorder, fBord.Borders[aIdx].Node, aIdx) ];
     // Check position of point in area
     for I := 0 to LineArrayCnt - 1 do
     begin
@@ -1010,8 +1022,6 @@ begin
   while (LineArrayCnt > 0) do
     DisposeArea(LineArrayCnt - 1);
 end;
-
-
 
 
 // Polygon optimalization
@@ -1166,16 +1176,7 @@ begin
 end;
 
 
-
-
 function TKMNavMeshGenerator.Paint(const aRect: TKMRect): Boolean;
-const
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $7700FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
 {$IFDEF DEBUG_NavMesh}
 var
   X,K: Integer;
@@ -1193,13 +1194,13 @@ begin
 
   //{ Border Nodes
   for X := 1 to fBorderNodeCount-1 do
-    gRenderAux.Text(fBorderNodes[X].X+0.25, fBorderNodes[X].Y+0.4, IntToStr(X), $FF000000 OR COLOR_GREEN);
+    gRenderAux.Text(fBorderNodes[X].X+0.25, fBorderNodes[X].Y+0.4, IntToStr(X), $FF000000 OR tcGreen);
   //}
   //{ Nodes
   for K := 1 to fNodeCount - 1 do
-      gRenderAux.Text(fNodes[K].X+0.25, fNodes[K].Y+0.4, IntToStr(K), $FF000000 OR COLOR_RED);
+      gRenderAux.Text(fNodes[K].X+0.25, fNodes[K].Y+0.4, IntToStr(K), $FF000000 OR tcRed);
   for K := fInnerPointStartIdx to fInnerPointEndIdx do
-      gRenderAux.Text(fNodes[K].X+0.25, fNodes[K].Y+0.4, IntToStr(K), $FF000000 OR COLOR_GREEN);
+      gRenderAux.Text(fNodes[K].X+0.25, fNodes[K].Y+0.4, IntToStr(K), $FF000000 OR tcGreen);
   //}
   //{ Border Lines
   for K := 0 to fBord.Count - 1 do
@@ -1208,8 +1209,8 @@ begin
       p1 := fNodes[ Node ];
       p2 := fNodes[ fBord.Borders[Next].Node ];
       p3 := fNodes[ fBord.Borders[Prev].Node ];
-      gRenderAux.LineOnTerrain(p1, p2, $70000000 OR COLOR_RED);
-      gRenderAux.LineOnTerrain(p1, p3, $70000000 OR COLOR_RED);
+      gRenderAux.LineOnTerrain(p1, p2, $70000000 OR tcRed);
+      gRenderAux.LineOnTerrain(p1, p3, $70000000 OR tcRed);
     end;
   //}
   //{ Debug lines of triangulation

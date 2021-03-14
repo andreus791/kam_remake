@@ -25,7 +25,8 @@ uses
   KM_Defaults in '..\..\src\common\KM_Defaults.pas',
   KM_Points in '..\..\src\common\KM_Points.pas',
   KM_Log in '..\..\src\KM_Log.pas',
-  KM_Settings in '..\..\src\KM_Settings.pas',
+  KM_Settings in '..\..\src\settings\KM_Settings.pas',
+  KM_ServerSettings in '..\..\src\settings\KM_ServerSettings.pas',
   KM_NetworkTypes in '..\..\src\net\KM_NetworkTypes.pas',
   KM_DedicatedServer in '..\..\src\net\other\KM_DedicatedServer.pas',
   {$IFDEF WDC}
@@ -36,7 +37,7 @@ uses
 var
   fEventHandler: TKMServerEventHandler;
   fDedicatedServer: TKMDedicatedServer;
-  fSettings: TKMGameSettings;
+  fSettings: TKMServerSettings;
   fSettingsLastModified: Integer;
   fLastSettingsFileCheck: Cardinal;
 
@@ -65,6 +66,7 @@ begin
                                                 fSettings.MasterServerAddress,
                                                 fSettings.HTMLStatusFile,
                                                 fSettings.ServerWelcomeMessage,
+                                                fSettings.ServerPacketsAccumulatingDelay,
                                                 True);
   GameFilter := TKMPGameFilter.Create(fSettings.ServerDynamicFOW,
                                       fSettings.ServerMapsRosterEnabled,
@@ -80,7 +82,7 @@ begin
   begin
     fDedicatedServer.UpdateState;
     //Reload the INI file if it has changed, by checking the file age every 5 seconds
-    if GetTimeSince(fLastSettingsFileCheck) >= 5000 then
+    if TimeSince(fLastSettingsFileCheck) >= 5000 then
     begin
       fLastSettingsFileCheck := TimeGet;
       if FileAge(ExeDir+SETTINGS_FILE) <> fSettingsLastModified then
@@ -188,7 +190,7 @@ begin
 
   fEventHandler.ServerStatusMessage('Using protocol for clients running '+NET_PROTOCOL_REVISON);
 
-  fSettings := TKMGameSettings.Create;
+  fSettings := TKMServerSettings.Create;
   fSettings.SaveSettings(true);
   fSettingsLastModified := FileAge(ExeDir+SETTINGS_FILE);
   fLastSettingsFileCheck := TimeGet;

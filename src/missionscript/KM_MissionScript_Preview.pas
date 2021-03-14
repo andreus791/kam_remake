@@ -32,15 +32,15 @@ type
 
     function GetTileInfo(X, Y: Integer): TKMTilePreview;
     function GetPlayerInfo(aIndex: Byte): TKMHandPreview;
-    function LoadMapData(const aFileName: string): Boolean;
+    procedure LoadMapData(const aFileName: string);
   protected
-    function ProcessCommand(CommandType: TKMCommandType; P: array of Integer; const TextParam: AnsiString = ''): Boolean; override;
+    procedure ProcessCommand(CommandType: TKMCommandType; P: array of Integer; const TextParam: AnsiString = ''); override;
   public
     property MapPreview[X, Y: Integer]: TKMTilePreview read GetTileInfo;
     property PlayerPreview[aIndex: Byte]: TKMHandPreview read GetPlayerInfo;
     property MapX: Integer read fMapX;
     property MapY: Integer read fMapY;
-    function LoadMission(const aFileName: string; const aRevealFor: array of TKMHandID): Boolean; reintroduce;
+    procedure LoadMission(const aFileName: string; const aRevealFor: array of TKMHandID); reintroduce;
   end;
 
 
@@ -49,7 +49,8 @@ uses
   Classes, SysUtils, Math,
   KM_Terrain,
   KM_Resource, KM_ResHouses, KM_ResUnits,
-  KM_CommonClasses, KM_CommonUtils, KM_Utils;
+  KM_CommonClasses, KM_CommonUtils, KM_Utils,
+  KM_ResTypes;
 
 
 { TMissionParserPreview }
@@ -66,17 +67,15 @@ end;
 
 
 //Load terrain data into liteweight structure, take only what we need for preview
-function TKMMissionParserPreview.LoadMapData(const aFileName: string): Boolean;
+procedure TKMMissionParserPreview.LoadMapData(const aFileName: string);
 var
   I: Integer;
-  S: TKMemoryStreamBinary;
+  S: TKMemoryStream;
   TileBasic: TKMTerrainTileBasic;
   GameRev: Integer;
 begin
-  Result := False;
-
   if not FileExists(aFileName) then
-    Exit;
+    raise Exception.Create('Map file couldn''t be found');
 
   S := TKMemoryStreamBinary.Create;
   try
@@ -99,12 +98,10 @@ begin
   finally
     S.Free;
   end;
-
-  Result := True;
 end;
 
 
-function TKMMissionParserPreview.ProcessCommand(CommandType: TKMCommandType; P: array of Integer; const TextParam: AnsiString = ''): Boolean;
+procedure TKMMissionParserPreview.ProcessCommand(CommandType: TKMCommandType; P: array of Integer; const TextParam: AnsiString = '');
 
   function PointInMap(X, Y: Integer): Boolean;
   begin
@@ -124,10 +121,7 @@ function TKMMissionParserPreview.ProcessCommand(CommandType: TKMCommandType; P: 
     Result := False;
     for I := 0 to Length(fRevealFor)-1 do
     if (fRevealFor[I] = aPlayerIndex) then
-    begin
-      Result := True;
-      Exit;
-    end;
+      Exit(True);
   end;
 
   procedure RevealCircle(X,Y,Radius: Word);
@@ -152,11 +146,11 @@ begin
   case CommandType of
     ctSetCurrPlayer:   fLastHand := P[0];
 
-    ctSetHouse:        if InRange(P[0], Low(HouseIndexToType), High(HouseIndexToType))
+    ctSetHouse:        if InRange(P[0], Low(HOUSE_ID_TO_TYPE), High(HOUSE_ID_TO_TYPE))
                           and PointInMap(P[1]+1, P[2]+1) then
                         begin
-                          RevealCircle(P[1]+1, P[2]+1, gRes.Houses[HouseIndexToType[P[0]]].Sight);
-                          HA := gRes.Houses[HouseIndexToType[P[0]]].BuildArea;
+                          RevealCircle(P[1]+1, P[2]+1, gRes.Houses[HOUSE_ID_TO_TYPE[P[0]]].Sight);
+                          HA := gRes.Houses[HOUSE_ID_TO_TYPE[P[0]]].BuildArea;
                           for i:=1 to 4 do for k:=1 to 4 do
                             if HA[i,k]<>0 then
                               if InRange(P[1]+1+k-3, 1, fMapX) and InRange(P[2]+1+i-4, 1, fMapY) then
@@ -194,10 +188,10 @@ begin
                           SetOwner(P[0]+1, P[1]+1);
 
     ctSetUnit:         if PointInMap(P[1]+1, P[2]+1) and
-                          not (UnitOldIndexToType[P[0]] in [ANIMAL_MIN..ANIMAL_MAX]) then //Skip animals
+                          not (UNIT_OLD_ID_TO_TYPE[P[0]] in [ANIMAL_MIN..ANIMAL_MAX]) then //Skip animals
                         begin
                           SetOwner(P[1]+1, P[2]+1);
-                          RevealCircle(P[1]+1, P[2]+1, gRes.Units[UnitOldIndexToType[P[0]]].Sight);
+                          RevealCircle(P[1]+1, P[2]+1, gRes.Units[UNIT_OLD_ID_TO_TYPE[P[0]]].Sight);
                         end;
 
     ctSetStock:        if PointInMap(P[1]+1, P[2]+1) then
@@ -209,7 +203,7 @@ begin
                           ProcessCommand(ctSetRoad, [   P[0]  ,P[1]+1]);
                         end;
 
-    ctSetGroup:        if InRange(P[0], Low(UnitIndexToType), High(UnitIndexToType)) and (UnitIndexToType[P[0]] <> utNone)
+    ctSetGroup:        if InRange(P[0], Low(UNIT_ID_TO_TYPE), High(UNIT_ID_TO_TYPE)) and (UNIT_ID_TO_TYPE[P[0]] <> utNone)
                           and PointInMap(P[1]+1, P[2]+1) then
                           for I := 0 to P[5] - 1 do
                           begin
@@ -217,7 +211,7 @@ begin
                             if Valid then
                             begin
                               SetOwner(Loc.X,Loc.Y);
-                              RevealCircle(P[1]+1, P[2]+1, gRes.Units[UnitOldIndexToType[P[0]]].Sight);
+                              RevealCircle(P[1]+1, P[2]+1, gRes.Units[UNIT_OLD_ID_TO_TYPE[P[0]]].Sight);
                             end;
                           end;
 
@@ -232,13 +226,11 @@ begin
                             RevealCircle(P[0]+1, P[1]+1, P[2]);
                         end;
   end;
-
-  Result := True;
 end;
 
 
 //We use custom mission loader for speed (compare only used commands)
-function TKMMissionParserPreview.LoadMission(const aFileName: string; const aRevealFor: array of TKMHandID): Boolean;
+procedure TKMMissionParserPreview.LoadMission(const aFileName: string; const aRevealFor: array of TKMHandID);
 const
   Commands: array [0..16] of AnsiString = (
     '!SET_MAP', '!SET_MAP_COLOR', '!SET_RGB_COLOR', '!SET_AI_PLAYER', '!SET_ADVANCED_AI_PLAYER', '!CENTER_SCREEN',
@@ -251,8 +243,6 @@ var
 begin
   inherited LoadMission(aFileName);
 
-  Result := False;
-
   SetLength(fRevealFor, Length(aRevealFor));
   for I := Low(aRevealFor) to High(aRevealFor) do
     fRevealFor[I] := aRevealFor[I];
@@ -263,16 +253,12 @@ begin
 
   FileText := ReadMissionFile(aFileName);
   if FileText = '' then
-    Exit;
+    raise Exception.Create('Script is empty');
 
-  //We need to load map dimensions first, so that SetGroup could access map bounds
-  if not LoadMapData(ChangeFileExt(fMissionFileName, '.map')) then
-    Exit;
+  // We need to load map dimensions first, so that SetGroup could access map bounds
+  LoadMapData(ChangeFileExt(fMissionFileName, '.map'));
 
-  if not TokenizeScript(FileText, 6, Commands) then
-    Exit;
-
-  Result := (fFatalErrors = '');
+  TokenizeScript(FileText, 6, Commands);
 end;
 
 

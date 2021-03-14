@@ -4,12 +4,13 @@ interface
 uses
   Classes, SysUtils,
   KM_CommonClasses, KM_CommonTypes, KM_Defaults, KM_Points,
-  KM_ResWares;
+  KM_ResWares,
+  KM_ResTypes;
 
 
-//Used to separate close-combat units from archers (they use different fighting logic)
 type
-  TFightType = (ftMelee, ftRanged);
+  // Used to separate close-combat units from archers (they use different fighting logic)
+  TKMFightType = (ftMelee, ftRanged);
 
   TKMUnitDat = packed record
     HitPoints, Attack, AttackHorse, x4, Defence, Speed, x7, Sight: SmallInt;
@@ -34,7 +35,7 @@ type
     function GetAllowedPassability: TKMTerrainPassability;
     function GetDescription: UnicodeString;
     function GetDesiredPassability: TKMTerrainPassability;
-    function GetFightType: TFightType;
+    function GetFightType: TKMFightType;
     function GetGUIIcon: Word;
     function GetGUIScroll: Word;
     function GetMinimapColor: Cardinal;
@@ -53,23 +54,23 @@ type
     function GetDefenceVsProjectiles(aIsBolt: Boolean): Single;
     procedure LoadFromStream(Stream: TMemoryStream);
     //Derived from KaM
-    property HitPoints:smallint read fUnitDat.HitPoints;
-    property Attack:smallint read fUnitDat.Attack;
-    property AttackHorse:smallint read fUnitDat.AttackHorse;
-    property Defence:smallint read fUnitDat.Defence;
+    property HitPoints: SmallInt read fUnitDat.HitPoints;
+    property Attack: SmallInt read fUnitDat.Attack;
+    property AttackHorse: SmallInt read fUnitDat.AttackHorse;
+    property Defence: SmallInt read fUnitDat.Defence;
     property Description: UnicodeString read GetDescription;
-    property Sight:smallint read fUnitDat.Sight;
+    property Sight: SmallInt read fUnitDat.Sight;
     //Additional properties added by Remake
-    property AllowedPassability:TKMTerrainPassability read GetAllowedPassability;
-    property DesiredPassability:TKMTerrainPassability read GetDesiredPassability;
-    property FightType:TFightType read GetFightType;
-    property GUIIcon:word read GetGUIIcon;
-    property GUIScroll:word read GetGUIScroll;
+    property AllowedPassability: TKMTerrainPassability read GetAllowedPassability;
+    property DesiredPassability: TKMTerrainPassability read GetDesiredPassability;
+    property FightType: TKMFightType read GetFightType;
+    property GUIIcon: Word read GetGUIIcon;
+    property GUIScroll: Word read GetGUIScroll;
     property MinimapColor: Cardinal read GetMinimapColor;
-    property MiningRange:byte read GetMiningRange;
-    property Speed:single read GetSpeed;
-    function SupportsAction(aAct: TKMUnitActionType):boolean;
-    property UnitAnim[aAction:TKMUnitActionType; aDir:TKMDirection]: TKMAnimLoop read GetUnitAnim;
+    property MiningRange: Byte read GetMiningRange;
+    property Speed: Single read GetSpeed;
+    function SupportsAction(aAct: TKMUnitActionType): Boolean;
+    property UnitAnim[aAction: TKMUnitActionType; aDir: TKMDirection]: TKMAnimLoop read GetUnitAnim;
     property GUIName: UnicodeString read GetUnitName;
     property GUITextID: Integer read GetUnitTextID;
   end;
@@ -102,7 +103,7 @@ type
 const
   //This is a map of the valid values for !SET_UNIT,
   //TSK did not had place for new warriors that were inserted in the middle(!)
-  UnitOldIndexToType: array[0..31] of TKMUnitType = (
+  UNIT_OLD_ID_TO_TYPE: array[0..31] of TKMUnitType = (
     utSerf,utWoodcutter,utMiner,utAnimalBreeder,utFarmer,
     utLamberjack,utBaker,utButcher,utFisher,utWorker,
     utStoneCutter,utSmith,utMetallurgist,utRecruit, //Units
@@ -112,15 +113,15 @@ const
     utWaterflower,utWaterleaf,utDuck); //Animals
 
   //and the corresponing unit that will be created (matches KaM behavior)
-  UnitTypeToOldIndex: array[TKMUnitType] of integer = (
-  -1, -1, //utNone, utAny
-  0,1,2,3,4,5,6,7,8,9,10,11,12,13, //Citizens
-  14,15,16,17,18,19,20,21,22,23, //Warriors
-  -1,-1,-1,-1, {-1,-1,} //TPR warriors (can't be placed with SET_UNIT)
-  24,25,26,27,28,29,30,31); //Animals
+  UNIT_TYPE_TO_OLD_ID: array[TKMUnitType] of integer = (
+    -1, -1, //utNone, utAny
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13, //Citizens
+    14,15,16,17,18,19,20,21,22,23, //Warriors
+    -1,-1,-1,-1, {-1,-1,} //TPR warriors (can't be placed with SET_UNIT)
+    24,25,26,27,28,29,30,31); //Animals
 
   //This is a map of the valid values for !SET_GROUP, and the corresponing unit that will be created (matches KaM behavior)
-  UnitIndexToType: array[0..40] of TKMUnitType = (
+  UNIT_ID_TO_TYPE: array[0..40] of TKMUnitType = (
     utSerf,utWoodcutter,utMiner,utAnimalBreeder,utFarmer,
     utLamberjack,utBaker,utButcher,utFisher,utWorker,
     utStoneCutter,utSmith,utMetallurgist,utRecruit, //Units
@@ -133,12 +134,12 @@ const
     utNone, utNone, utNone
     );
 
-  UnitTypeToIndex: array[TKMUnitType] of ShortInt = (
-  -1, -1, //utNone, utAny
-  0,1,2,3,4,5,6,7,8,9,10,11,12,13, //Citizens
-  14,15,16,17,18,19,20,21,22,23, //Warriors
-  24,25,26,27, {28,29,} //TPR warriors
-  30,31,32,33,34,35,36,37); //Animals
+  UNIT_TYPE_TO_ID: array[TKMUnitType] of ShortInt = (
+    -1, -1, //utNone, utAny
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13, //Citizens
+    14,15,16,17,18,19,20,21,22,23, //Warriors
+    24,25,26,27, {28,29,} //TPR warriors
+    30,31,32,33,34,35,36,37); //Animals
 
 
   //Number means ResourceType as it is stored in Barracks, hence it's not rtSomething
@@ -155,9 +156,8 @@ const
   );
 
 
-
   //The frame shown when a unit is standing still in uaWalk. Same for all units!
-  UnitStillFrames: array [TKMDirection] of Byte = (0,3,2,2,1,6,7,6,6);
+  UNIT_STILL_FRAMES: array [TKMDirection] of Byte = (0,3,2,2,1,6,7,6,6);
 
 var
   //TownHall default units troops cost (number of gold chests needed)
@@ -235,7 +235,8 @@ end;
 
 
 function TKMUnitSpec.SupportsAction(aAct: TKMUnitActionType): Boolean;
-const UnitSupportedActions: array [TKMUnitType] of TKMUnitActionTypeSet = (
+const
+  UnitSupportedActions: array [TKMUnitType] of TKMUnitActionTypeSet = (
     [], [], //None, Any
     [uaWalk, uaDie, uaEat, uaWalkArm], //Serf
     [uaWalk, uaWork, uaDie, uaWork1, uaEat..uaWalkTool2],
@@ -265,25 +266,28 @@ const UnitSupportedActions: array [TKMUnitType] of TKMUnitActionTypeSet = (
     [uaWalk, uaWork, uaSpec, uaDie, uaEat], //Slingshot
     [uaWalk, uaWork, uaSpec, uaDie, uaEat], //Warrior
     [uaWalk, uaWork, uaDie, uaEat],
-    [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk]); //Animals
+    [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk], [uaWalk] //Animals
+  );
 begin
   Result := aAct in UnitSupportedActions[fUnitType];
 end;
 
 
 function TKMUnitSpec.GetAllowedPassability: TKMTerrainPassability;
-//Defines which animal prefers which terrain
-const AnimalTerrain: array[ANIMAL_MIN .. ANIMAL_MAX] of TKMTerrainPassability = (
+const
+  // Defines which animal prefers which terrain
+  AnimalTerrain: array[ANIMAL_MIN .. ANIMAL_MAX] of TKMTerrainPassability = (
     tpWolf, tpFish, tpFish, tpFish, tpCrab, tpFish, tpFish, tpFish);
 begin
   case fUnitType of
     ANIMAL_MIN..ANIMAL_MAX:  Result := AnimalTerrain[fUnitType]; //Animals
-    else                     Result := tpWalk; //Worker, Warriors
+  else
+    Result := tpWalk; // Worker, Warriors
   end;
 end;
 
 
-//Where unit would like to be
+// Where unit would like to be
 function TKMUnitSpec.GetDesiredPassability: TKMTerrainPassability;
 begin
   if fUnitType in [CITIZEN_MIN..CITIZEN_MAX] - [utWorker] then
@@ -293,8 +297,9 @@ begin
 end;
 
 
-function TKMUnitSpec.GetFightType: TFightType;
-const WarriorFightType: array[WARRIOR_MIN..WARRIOR_MAX] of TFightType = (
+function TKMUnitSpec.GetFightType: TKMFightType;
+const
+  WarriorFightType: array[WARRIOR_MIN..WARRIOR_MAX] of TKMFightType = (
     ftMelee,ftMelee,ftMelee, //Militia, AxeFighter, Swordsman
     ftRanged,ftRanged,        //Bowman, Arbaletman
     ftMelee,ftMelee,          //Pikeman, Hallebardman,
@@ -305,7 +310,7 @@ const WarriorFightType: array[WARRIOR_MIN..WARRIOR_MAX] of TFightType = (
     ftMelee,                   //utMetalBarbarian
     ftMelee                    //utHorseman
     {ftRanged,ftRanged,       //utCatapult, utBallista,}
-    );
+  );
 begin
   Assert(fUnitType in [Low(WarriorFightType)..High(WarriorFightType)]);
   Result := WarriorFightType[fUnitType];
@@ -316,14 +321,14 @@ function TKMUnitSpec.GetGUIIcon: Word;
 begin
   case fUnitType of
     utNone, utAny:  Result := 0;
-    utBarbarian:     Result := 70;
+    utBarbarian:    Result := 70;
   else
     if IsCitizen then
-      Result := 141 + UnitTypeToIndex[fUnitType]
+      Result := 141 + UNIT_TYPE_TO_ID[fUnitType]
     else if IsWarriorEquipable then
-      Result := 47 + UnitTypeToIndex[fUnitType]
+      Result := 47 + UNIT_TYPE_TO_ID[fUnitType]
     else if IsWarrior then
-      Result := 55 + UnitTypeToIndex[fUnitType]
+      Result := 55 + UNIT_TYPE_TO_ID[fUnitType]
     else
       Result := 0;
   end;
@@ -333,7 +338,7 @@ end;
 function TKMUnitSpec.GetGUIScroll: Word;
 begin
   if IsValid then
-    Result := 521 + UnitTypeToIndex[fUnitType]
+    Result := 521 + UNIT_TYPE_TO_ID[fUnitType]
   else
     Result := 0;
 end;
@@ -343,7 +348,7 @@ end;
 //Animals don't have team and thus are rendered in their own prefered clors
 function TKMUnitSpec.GetMinimapColor: Cardinal;
 const
-  MMColor:array[TKMUnitType] of Cardinal = (
+  MMColor: array[TKMUnitType] of Cardinal = (
     0,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,0,
@@ -361,7 +366,8 @@ begin
     utFarmer:      Result := 10;
     utStonecutter: Result := 16;
     utFisher:      Result := 14;
-    else            raise Exception.Create(GUIName + ' has no mining range');
+  else
+    raise Exception.Create(GUIName + ' has no mining range');
   end;
 end;
 
@@ -382,20 +388,20 @@ end;
 
 function TKMUnitSpec.GetUnitTextID: Integer;
 begin
-  if IsValid then
-    case fUnitType of
-      utWolf:        Result := TX_UNITS_WOLF;
-      utFish:        Result := TX_UNITS_FISH;
-      utWatersnake:  Result := TX_UNITS_WATERSNAKE;
-      utSeastar:     Result := TX_UNITS_SEASTAR;
-      utCrab:        Result := TX_UNITS_CRAB;
-      utWaterflower: Result := TX_UNITS_WATERFLOWER;
-      utWaterleaf:   Result := TX_UNITS_WATERLEAF;
-      utDuck:        Result := TX_UNITS_DUCK;
-      else            Result := TX_UNITS_NAMES__29 + UnitTypeToIndex[fUnitType];
-    end
+  if not IsValid then Exit(-1);
+
+  case fUnitType of
+    utWolf:        Result := TX_UNITS_WOLF;
+    utFish:        Result := TX_UNITS_FISH;
+    utWatersnake:  Result := TX_UNITS_WATERSNAKE;
+    utSeastar:     Result := TX_UNITS_SEASTAR;
+    utCrab:        Result := TX_UNITS_CRAB;
+    utWaterflower: Result := TX_UNITS_WATERFLOWER;
+    utWaterleaf:   Result := TX_UNITS_WATERLEAF;
+    utDuck:        Result := TX_UNITS_DUCK;
   else
-    Result := -1;
+    Result := TX_UNITS_NAMES__29 + UNIT_TYPE_TO_ID[fUnitType];
+  end;
 end;
 
 
@@ -404,7 +410,8 @@ begin
   case fUnitType of
     utAny:             Result := gResTexts[TX_UNITS_ALL];
     utNone:            Result := 'N/A';
-    else                Result := gResTexts[GetUnitTextID];
+  else
+    Result := gResTexts[GetUnitTextID];
   end;
 end;
 
@@ -412,7 +419,7 @@ end;
 function TKMUnitSpec.GetDescription: UnicodeString;
 begin
   if IsValid and not IsAnimal then
-    Result := gResTexts[TX_UNITS_DESCRIPTIONS__13 + UnitTypeToIndex[fUnitType]]
+    Result := gResTexts[TX_UNITS_DESCRIPTIONS__13 + UNIT_TYPE_TO_ID[fUnitType]]
   else
     Result := 'N/A';
 end;
@@ -438,7 +445,8 @@ end;
 
 
 destructor TKMResUnits.Destroy;
-var U:TKMUnitType;
+var
+  U: TKMUnitType;
 begin
   for U := Low(TKMUnitType) to High(TKMUnitType) do
     fItems[U].Free;
@@ -462,54 +470,56 @@ end;
 
 
 procedure TKMResUnits.ExportCSV(const aPath: UnicodeString);
-var ft:textfile; ii:TKMUnitType;
+var
+  ft: textfile;
+  ii: TKMUnitType;
 begin
-    AssignFile(ft,aPath); rewrite(ft);
-    writeln(ft,'Name;HitPoints;Attack;AttackHorse;Defence;Speed;Sight;');
-    for ii:=Low(TKMUnitType) to High(TKMUnitType) do
-    if Items[ii].IsValid then
-    begin
-      write(ft,Items[ii].GUIName+';');
-      write(ft,inttostr(Items[ii].HitPoints)+';');
-      write(ft,inttostr(Items[ii].Attack)+';');
-      write(ft,inttostr(Items[ii].AttackHorse)+';');
-      //write(ft,inttostr(Items[ii].x4)+';');
-      write(ft,inttostr(Items[ii].Defence)+';');
-      write(ft,floattostr(Items[ii].Speed)+';');
-      //write(ft,inttostr(Items[ii].x7)+';');
-      write(ft,inttostr(Items[ii].Sight)+';');
-      //write(ft,inttostr(Items[ii].x9)+';');
-      //write(ft,inttostr(Items[ii].x10)+';');
-      //write(ft,inttostr(Items[ii].CanWalkOut)+';');
-      //write(ft,inttostr(Items[ii].x11)+';');
-      //for kk:=1 to 18 do
-      //  write(ft,inttostr(UnitSprite2[ii,kk])+';');
-      writeln(ft);
-    end;
-    closefile(ft);
+  AssignFile(ft,aPath); rewrite(ft);
+  writeln(ft,'Name;HitPoints;Attack;AttackHorse;Defence;Speed;Sight;');
+  for ii := Low(TKMUnitType) to High(TKMUnitType) do
+  if Items[ii].IsValid then
+  begin
+    write(ft,Items[ii].GUIName+';');
+    write(ft,inttostr(Items[ii].HitPoints)+';');
+    write(ft,inttostr(Items[ii].Attack)+';');
+    write(ft,inttostr(Items[ii].AttackHorse)+';');
+    //write(ft,inttostr(Items[ii].x4)+';');
+    write(ft,inttostr(Items[ii].Defence)+';');
+    write(ft,floattostr(Items[ii].Speed)+';');
+    //write(ft,inttostr(Items[ii].x7)+';');
+    write(ft,inttostr(Items[ii].Sight)+';');
+    //write(ft,inttostr(Items[ii].x9)+';');
+    //write(ft,inttostr(Items[ii].x10)+';');
+    //write(ft,inttostr(Items[ii].CanWalkOut)+';');
+    //write(ft,inttostr(Items[ii].x11)+';');
+    //for kk:=1 to 18 do
+    //  write(ft,inttostr(UnitSprite2[ii,kk])+';');
+    writeln(ft);
+  end;
+  closefile(ft);
 
-    {AssignFile(ft,ExeDir+'Units.txt'); rewrite(ft);
-    for ii:=Low(TKMUnitType) to High(TKMUnitType) do
-    if UnitsDat[ii].IsValid then
-    begin
-      writeln(ft);
-      writeln(ft);
-      writeln(ft,'NewUnit'+inttostr(ii));
-      for kk:=1 to 14 do
-      for hh:=1 to 8 do
-      //  if UnitSprite[ii].Act[kk].Dir[hh].Step[1]>0 then
-          begin
-            write(ft,inttostr(kk)+'.'+inttostr(hh)+#9);
-            for jj:=1 to 30 do
-            if UnitSprite[ii].Act[kk].Dir[hh].Step[jj]>0 then //write(ft,'#');
-            write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].Step[jj])+'. ');
-            write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].Count)+' ');
-            write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].MoveX)+' ');
-            write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].MoveY)+' ');
-            writeln(ft);
-          end;
-    end;
-    closefile(ft);}
+  {AssignFile(ft,ExeDir+'Units.txt'); rewrite(ft);
+  for ii:=Low(TKMUnitType) to High(TKMUnitType) do
+  if UnitsDat[ii].IsValid then
+  begin
+    writeln(ft);
+    writeln(ft);
+    writeln(ft,'NewUnit'+inttostr(ii));
+    for kk:=1 to 14 do
+    for hh:=1 to 8 do
+    //  if UnitSprite[ii].Act[kk].Dir[hh].Step[1]>0 then
+        begin
+          write(ft,inttostr(kk)+'.'+inttostr(hh)+#9);
+          for jj:=1 to 30 do
+          if UnitSprite[ii].Act[kk].Dir[hh].Step[jj]>0 then //write(ft,'#');
+          write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].Step[jj])+'. ');
+          write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].Count)+' ');
+          write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].MoveX)+' ');
+          write(ft,inttostr(UnitSprite[ii].Act[kk].Dir[hh].MoveY)+' ');
+          writeln(ft);
+        end;
+  end;
+  closefile(ft);}
 end;
 
 
@@ -536,9 +546,10 @@ end;
 
 
 function TKMResUnits.LoadUnitsDat(const aPath: UnicodeString): Cardinal;
-const UNIT_DAT_COUNT = 41;
+const
+  UNIT_DAT_COUNT = 41;
 var
-  S: TKMemoryStreamBinary;
+  S: TKMemoryStream;
   I: Integer;
 begin
   Assert(FileExists(aPath));
@@ -550,8 +561,8 @@ begin
     S.Read(fSerfCarry, SizeOf(fSerfCarry){28*8*70});
 
     for I := 0 to UNIT_DAT_COUNT - 1 do
-    if UnitIndexToType[I] <> utNone then
-      fItems[UnitIndexToType[I]].LoadFromStream(S)
+    if UNIT_ID_TO_TYPE[I] <> utNone then
+      fItems[UNIT_ID_TO_TYPE[I]].LoadFromStream(S)
     else //Skip
       S.Seek(SizeOf(TKMUnitDat) + SizeOf(TKMUnitSprite) + SizeOf(TKMUnitSprite2), soFromCurrent);
 

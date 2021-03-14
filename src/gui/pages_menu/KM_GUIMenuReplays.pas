@@ -68,6 +68,8 @@ type
         Edit_Rename: TKMEdit;
         Button_Rename, Button_RenameConfirm, Button_RenameCancel: TKMButton;
   public
+    OnNewReplay: TUnicodeStringEvent;
+
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     destructor Destroy; override;
 
@@ -78,7 +80,7 @@ type
 
 implementation
 uses
-  KM_Log, KM_ResTexts, KM_GameApp, KM_RenderUI, KM_ResFonts;
+  KM_Log, KM_ResTexts, KM_RenderUI, KM_ResFonts, KM_GameSettings;
 
 const
   MINIMAP_NOT_LOADED = -100; // smth, but not -1, as -1 is used for ColumnBox.ItemIndex, when no item is selected
@@ -274,8 +276,8 @@ procedure TKMMenuReplays.SetSelectedSaveName(const aName: UnicodeString);
 begin
   fSelectedSaveName := aName;
   case Radio_Replays_Type.ItemIndex of
-    0:  gGameApp.GameSettings.MenuReplaySPSaveName := aName;
-    1:  gGameApp.GameSettings.MenuReplayMPSaveName := aName;
+    0:  gGameSettings.MenuReplaySPSaveName := aName;
+    1:  gGameSettings.MenuReplayMPSaveName := aName;
   end;
 end;
 
@@ -350,8 +352,8 @@ begin
   fMinimapLastListId := MINIMAP_NOT_LOADED;
 
   case Radio_Replays_Type.ItemIndex of
-    0:  fSelectedSaveName := gGameApp.GameSettings.MenuReplaySPSaveName;
-    1:  fSelectedSaveName := gGameApp.GameSettings.MenuReplayMPSaveName;
+    0:  fSelectedSaveName := gGameSettings.MenuReplaySPSaveName;
+    1:  fSelectedSaveName := gGameSettings.MenuReplayMPSaveName;
   end;
 
   ColumnBox_Replays.Clear;
@@ -362,11 +364,11 @@ end;
 
 procedure TKMMenuReplays.Replay_TypeChange(Sender: TObject);
 begin
-  gGameApp.GameSettings.MenuReplaysType := Radio_Replays_Type.ItemIndex;
+  gGameSettings.MenuReplaysType := Radio_Replays_Type.ItemIndex;
   ListUpdate;
   DeleteConfirm(False);
   RenameConfirm(False);
-  gGameApp.GameSettings.MenuReplaysType := Radio_Replays_Type.ItemIndex;
+  gGameSettings.MenuReplaysType := Radio_Replays_Type.ItemIndex;
 end;
 
 
@@ -493,7 +495,8 @@ var
 
   procedure DoPlay;
   begin
-    gGameApp.NewReplay(fSaves[ID].Path + fSaves[ID].FileName + EXT_SAVE_BASE_DOT);
+    if Assigned(OnNewReplay) then
+      OnNewReplay(fSaves[ID].Path + fSaves[ID].FileName + EXT_SAVE_BASE_DOT);
   end;
 
 begin
@@ -553,12 +556,10 @@ begin
   if aVisible then
   begin
     PopUp_Delete.Show;
-    ColumnBox_Replays.Focusable := False;
-    gGameApp.MainMenuInterface.MyControls.UpdateFocus(ColumnBox_Replays);
+    ColumnBox_Replays.Focusable := False; // Will update focus automatically
   end else begin
     PopUp_Delete.Hide;
-    ColumnBox_Replays.Focusable := True;
-    gGameApp.MainMenuInterface.MyControls.UpdateFocus(ColumnBox_Replays);
+    ColumnBox_Replays.Focusable := True; // Will update focus automatically
   end;
 end;
 
@@ -622,6 +623,7 @@ begin
                 else if PopUp_Delete.Visible and Button_DeleteConfirm.IsClickable then
                   DeleteClick(Button_DeleteConfirm);
     VK_F2:      RenameClick(Button_Rename);
+    VK_DELETE:  DeleteClick(Button_Delete);
   end;
 end;
 
@@ -651,7 +653,7 @@ begin
   Panel_Replays.Show;
   //Copy/Pasted from SwitchPage for now (needed that for ResultsMP BackClick)
   //Probably needs some cleanup when we have GUIMenuReplays
-  Radio_Replays_Type.ItemIndex := gGameApp.GameSettings.MenuReplaysType;
+  Radio_Replays_Type.ItemIndex := gGameSettings.MenuReplaysType;
   Replay_TypeChange(nil); //Select SP as this will refresh everything
   Replays_Sort(ColumnBox_Replays.SortIndex); //Apply sorting from last time we were on this page
 end;

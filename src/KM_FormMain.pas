@@ -3,17 +3,15 @@ unit KM_FormMain;
 interface
 uses
   Classes, ComCtrls, Controls, Buttons, Dialogs, ExtCtrls, Forms, Graphics, Math, Menus, StdCtrls, SysUtils, StrUtils,
-  KM_RenderControl, KM_Settings, KM_Video, KM_CommonTypes,
-
+  KM_RenderControl, KM_CommonTypes,
+  KM_WindowParams,
   {$IFDEF FPC} LResources, {$ENDIF}
-  {$IFDEF MSWindows} ShellAPI, Windows, Messages; {$ENDIF}
+  {$IFDEF MSWindows} ShellAPI, Windows, Messages, Vcl.Samples.Spin; {$ENDIF}
   {$IFDEF Unix} LCLIntf, LCLType; {$ENDIF}
 
 
 type
-
   { TFormMain }
-
   TFormMain = class(TForm)
     chkAIEye: TCheckBox;
     chkLogGameTick: TCheckBox;
@@ -100,7 +98,6 @@ type
     SaveDialog1: TSaveDialog;
     chkLogCommands: TCheckBox;
     ScriptData1: TMenuItem;
-    chkBevel: TCheckBox;
     chkTilesGrid: TCheckBox;
     N6: TMenuItem;
     GameStats: TMenuItem;
@@ -117,7 +114,6 @@ type
     chkSelectedObjInfo: TCheckBox;
     chkShowFPS: TCheckBox;
     chkHands: TCheckBox;
-    btnUpdateUI: TButton;
     {$IFDEF WDC}
     mainGroup: TCategoryPanelGroup;
     cpGameControls: TCategoryPanel;
@@ -129,15 +125,16 @@ type
     cpGameAdv: TCategoryPanel;
     cpPerfLogs: TCategoryPanel;
     chkSnowHouses: TCheckBox;
+    chkInterpolatedRender: TCheckBox;
     chkLoadUnsupSaves: TCheckBox;
     chkJamMeter: TCheckBox;
     chkShowTerrainOverlays: TCheckBox;
     chkDebugScripting: TCheckBox;
     chkLogSkipTempCmd: TCheckBox;
     chkShowDefencesAnimate: TCheckBox;
-    chkShowSupervisorAnimate: TCheckBox;
-    chkShowSupervisorDistances: TCheckBox;
-    chkShowSupervisorMarks: TCheckBox;
+    chkShowArmyVectorField: TCheckBox;
+    chkShowClusters: TCheckBox;
+    chkShowAlliedGroups: TCheckBox;
     chkHeight: TCheckBox;
     chkTreeAge: TCheckBox;
     chkFieldAge: TCheckBox;
@@ -146,6 +143,19 @@ type
     chkTileUnit: TCheckBox;
     chkVertexUnit: TCheckBox;
     chkTileObject: TCheckBox;
+
+    chkSupervisor: TCheckBox;
+    cpScripting: TCategoryPanel;
+    chkShowDefencePos: TCheckBox;
+    chkShowUnitRadius: TCheckBox;
+    chkShowTowerRadius: TCheckBox;
+    chkShowMiningRadius: TCheckBox;
+    chkShowDeposits: TCheckBox;
+    chkShowOverlays: TCheckBox;
+    chkShowUnits: TCheckBox;
+    chkShowHouses: TCheckBox;
+    chkShowObjects: TCheckBox;
+    chkShowFlatTerrain: TCheckBox;
     {$ENDIF}
     {$IFDEF FPC}
     mainGroup: TGroupBox;
@@ -165,22 +175,62 @@ type
     Debug_UnlockCmpMissions: TMenuItem;
     N11: TMenuItem;
     mnExportRngChecks: TMenuItem;
-    chkSupervisor: TCheckBox;
-    cpScripting: TCategoryPanel;
+    chkGIP: TCheckBox;
+    sePauseBeforeTick: TSpinEdit;
+    Label8: TLabel;
+    Label9: TLabel;
+    seMakeSaveptBeforeTick: TSpinEdit;
+    Label12: TLabel;
+    seCustomSeed: TSpinEdit;
+    chkUIFocusedControl: TCheckBox;
+    chkUIControlOver: TCheckBox;
+    chkPaintSounds: TCheckBox;
+    GroupBox1: TGroupBox;
+    seFindObjByUID: TSpinEdit;
+    btFindObjByUID: TButton;
+    Label14: TLabel;
+    seEntityUID: TSpinEdit;
+    Label15: TLabel;
+    seWarriorUID: TSpinEdit;
+    GroupBox2: TGroupBox;
+    Label10: TLabel;
+    Label11: TLabel;
+    seDebugValue: TSpinEdit;
+    edDebugText: TEdit;
+    Label13: TLabel;
+    cpMisc: TCategoryPanel;
+    chkBevel: TCheckBox;
+    rgDebugFont: TRadioGroup;
+    chkMonospacedFont: TCheckBox;
+    mnExportRPL: TMenuItem;
+    chkPathfinding: TCheckBox;
+    chkGipAsBytes: TCheckBox;
 
-    procedure Export_TreeAnim1Click(Sender: TObject);
-    procedure MenuItem1Click(Sender: TObject);
-    procedure FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure Debug_ExportMenuClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
-    procedure FormKeyPress(Sender: TObject; var Key: Char);
-    procedure Debug_EnableCheatsClick(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+
+    procedure FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormKeyPress(Sender: TObject; var Key: Char);
+    procedure FormMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+
+    procedure RenderAreaMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure RenderAreaMouseMove(Sender: TObject; Shift: TShiftState; X,Y: Integer);
+    procedure RenderAreaMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure RenderAreaMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+
+    procedure RenderAreaResize(aWidth, aHeight: Integer);
+    procedure RenderAreaRender(aSender: TObject);
+
+    procedure Debug_ExportMenuClick(Sender: TObject);
+    procedure Debug_EnableCheatsClick(Sender: TObject);
     procedure AboutClick(Sender: TObject);
     procedure ExitClick(Sender: TObject);
     procedure Debug_PrintScreenClick(Sender: TObject);
+    procedure MenuItem1Click(Sender: TObject);
+
     procedure Export_TreesRXClick(Sender: TObject);
     procedure Export_HousesRXClick(Sender: TObject);
     procedure Export_UnitsRXClick(Sender: TObject);
@@ -191,49 +241,47 @@ type
     procedure Export_TilesetClick(Sender: TObject);
     procedure Export_Sounds1Click(Sender: TObject);
     procedure Export_HouseAnim1Click(Sender: TObject);
+    procedure Export_TreeAnim1Click(Sender: TObject);
     procedure Export_Fonts1Click(Sender: TObject);
     procedure Export_DeliverLists1Click(Sender: TObject);
+    procedure UnitAnim_AllClick(Sender: TObject);
+    procedure SoldiersClick(Sender: TObject);
+    procedure Civilians1Click(Sender: TObject);
+
     procedure Button_StopClick(Sender: TObject);
     procedure RGPlayerClick(Sender: TObject);
     procedure Open_MissionMenuClick(Sender: TObject);
     procedure chkSuperSpeedClick(Sender: TObject);
     procedure Debug_ShowPanelClick(Sender: TObject);
-    procedure FormMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
     procedure Debug_ExportUIPagesClick(Sender: TObject);
     procedure HousesDat1Click(Sender: TObject);
     procedure ExportGameStatsClick(Sender: TObject);
-    procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure ResourceValues1Click(Sender: TObject);
-    procedure RenderAreaMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-    procedure RenderAreaMouseMove(Sender: TObject; Shift: TShiftState; X,Y: Integer);
-    procedure RenderAreaMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-    procedure RenderAreaMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
-    procedure RenderAreaResize(aWidth, aHeight: Integer);
-    procedure RenderAreaRender(aSender: TObject);
     procedure Debug_ShowLogisticsClick(Sender: TObject);
-    procedure UnitAnim_AllClick(Sender: TObject);
-    procedure SoldiersClick(Sender: TObject);
-    procedure Civilians1Click(Sender: TObject);
     procedure ReloadSettingsClick(Sender: TObject);
     procedure SaveSettingsClick(Sender: TObject);
     procedure SaveEditableMission1Click(Sender: TObject);
     procedure ValidateGameStatsClick(Sender: TObject);
-    procedure Button_UpdateUI_Click(Sender: TObject);
     procedure LoadSavThenRplClick(Sender: TObject);
     procedure ReloadLibxClick(Sender: TObject);
     procedure Debug_UnlockCmpMissionsClick(Sender: TObject);
     procedure mnExportRngChecksClick(Sender: TObject);
+    procedure btFindObjByUIDClick(Sender: TObject);
+    procedure mnExportRPLClick(Sender: TObject);
 
     procedure ControlsUpdate(Sender: TObject);
   private
-    fShowStartVideo: Boolean;
+    fDevSettingsFilepath: string;
+    fStartVideoPlayed: Boolean;
     fUpdating: Boolean;
     fMissionDefOpenPath: UnicodeString;
-    fOnControlsUpdated: TEvent;
+    fOnControlsUpdated: TObjectIntegerEvent;
     procedure FormKeyDownProc(aKey: Word; aShift: TShiftState);
     procedure FormKeyUpProc(aKey: Word; aShift: TShiftState);
-    function ConfirmExport: Boolean;
+//    function ConfirmExport: Boolean;
     function GetMouseWheelStepsCnt(aWheelData: Integer): Integer;
+    procedure ResetControl(aCtrl: TControl);
+    procedure ResetSubPanel(aPanel: TWinControl);
     {$IFDEF MSWindows}
     function GetWindowParams: TKMWindowParamsRecord;
     procedure WMSysCommand(var Msg: TWMSysCommand); message WM_SYSCOMMAND;
@@ -254,7 +302,10 @@ type
     procedure SetSaveEditableMission(aEnabled: Boolean);
     procedure SetExportGameStats(aEnabled: Boolean);
     procedure ShowFolderPermissionError;
-    property OnControlsUpdated: TEvent read fOnControlsUpdated write fOnControlsUpdated;
+    procedure SetEntitySelected(aEntityUID: Integer; aEntity2UID: Integer = 0);
+    property OnControlsUpdated: TObjectIntegerEvent read fOnControlsUpdated write fOnControlsUpdated;
+    procedure LoadDevSettings;
+    procedure SaveDevSettings;
   end;
 
 
@@ -271,9 +322,9 @@ uses
   KM_Main,
   //Use these units directly to avoid pass-through methods in fMain
   KM_Resource,
-  KM_ResSprites,
+
   KM_ResTexts,
-  KM_GameApp,
+  KM_GameApp, KM_GameParams,
   KM_HandsCollection,
   KM_ResSound,
   KM_Pics,
@@ -281,13 +332,195 @@ uses
   KM_Hand,
   KM_ResKeys, KM_FormLogistics, KM_Game,
   KM_RandomChecks,
-  KM_Log, KM_CommonClasses, KM_Helpers;
+  KM_Log, KM_CommonClasses, KM_Helpers, KM_Video,
+  KM_GameSettings,
+
+  KM_IoXML,
+  KM_GameInputProcess,
+  KM_ResTypes,
+  KM_XmlHelper,
+  KM_GameAppSettings;
+
+
+procedure ExportDone(aResourceName: String);
+begin
+  MessageDlg(Format(gResTexts[TX_RESOURCE_EXPORT_DONE_MSG], [aResourceName]), mtInformation, [mbOk], 0);
+end;
+
+
+// Load dev settings from kmr_dev.xml
+procedure TFormMain.LoadDevSettings;
+
+  procedure ManageSubPanel(aPanel: TWinControl; anParent: TXMLNode);
+  var
+    I: Integer;
+    actrl: TControl;
+    nSection: TXMLNode;
+  begin
+    for I := 0 to aPanel.ControlCount - 1 do
+    begin
+      actrl := aPanel.Controls[I];
+
+      if aCtrl is TGroupBox then
+        ManageSubPanel(TGroupBox(aCtrl), anParent)
+      else
+      if   (aCtrl is TCheckBox)
+        or (aCtrl is TTrackBar)
+        or (aCtrl is TRadioGroup)
+        or (aCtrl is TSpinEdit)
+        or (aCtrl is TEdit) then
+        if anParent.HasChild(actrl.Name) then
+        begin
+          nSection := anParent.ChildNodes.FindNode(actrl.Name); // Add section only if its needed
+
+          if (aCtrl is TCheckBox) and nSection.HasAttribute('Checked') then
+            TCheckBox(aCtrl).Checked := nSection.Attributes['Checked'].AsBoolean
+          else
+          if (aCtrl is TTrackBar) and nSection.HasAttribute('Position') then
+            TTrackBar(aCtrl).Position := nSection.Attributes['Position'].AsInteger
+          else
+          if (aCtrl is TRadioGroup) and nSection.HasAttribute('ItemIndex')  then
+            TRadioGroup(aCtrl).ItemIndex := nSection.Attributes['ItemIndex'].AsInteger
+          else
+          if (aCtrl is TSpinEdit) and nSection.HasAttribute('Value')  then
+            TSpinEdit(aCtrl).Value := nSection.Attributes['Value'].AsInteger
+          else
+          if (aCtrl is TEdit) and nSection.HasAttribute('Text') then
+            TEdit(aCtrl).Text := nSection.Attributes['Text'].AsString;
+        end;
+    end;
+  end;
+
+var
+  I: Integer;
+  newXML: TKMXMLDocument;
+  cp: TCategoryPanel;
+  cpSurface: TCategoryPanelSurface;
+  cpName: string;
+  nRoot, nSection: TXMLNode;
+begin
+  fUpdating := True;
+
+  try
+    // Apply default settings
+    if not FileExists(fDevSettingsFilepath) then
+    begin
+      for I := 0 to mainGroup.Panels.Count - 1 do
+        TCategoryPanel(mainGroup.Panels[I]).Collapsed := True;
+      
+      cpGameControls.Collapsed := False; //The only not collapsed section
+      Exit;
+    end;
+  
+    //Load dev data from XML
+    newXML := TKMXMLDocument.Create;
+    newXML.LoadFromFile(ExeDir + DEV_SETTINGS_XML_FILENAME);
+    nRoot := newXML.Root;
+
+    for I := 0 to mainGroup.Panels.Count - 1 do
+    begin
+      cp := TCategoryPanel(mainGroup.Panels[I]);
+      cpName := cp.XmlSectionName;
+
+      if nRoot.HasChild(cpName) then
+      begin
+        nSection := nRoot.ChildNodes.FindNode(cpName);
+        cp.Collapsed := nSection.Attributes['Collapsed'].AsBoolean(True);
+
+        if (cp.ControlCount > 0) and (cp.Controls[0] is TCategoryPanelSurface) then
+        begin
+          cpSurface := TCategoryPanelSurface(cp.Controls[0]);
+          ManageSubPanel(cpSurface, nSection);
+        end;
+      end;
+    end;
+
+    newXML.Free;
+  finally
+    fUpdating := False;
+    ControlsUpdate(nil); // Update controls after load all of them
+  end;
+end;
+
+
+// Save dev settings to kmr_dev.xml
+procedure TFormMain.SaveDevSettings;
+
+  procedure ManageSubPanel(aPanel: TWinControl; anParent: TXMLNode);
+  var
+    I: Integer;
+    actrl: TControl;
+    nSection: TXMLNode;
+  begin
+    for I := 0 to aPanel.ControlCount - 1 do
+    begin
+      actrl := aPanel.Controls[I];
+
+      if aCtrl is TGroupBox then
+        ManageSubPanel(TGroupBox(aCtrl), anParent)
+      else
+      if   (aCtrl is TCheckBox)
+        or (aCtrl is TTrackBar)
+        or (aCtrl is TRadioGroup)
+        or (aCtrl is TSpinEdit)
+        or (aCtrl is TEdit) then
+      begin
+        nSection := anParent.AddOrFindChild(actrl.Name); // Add section only if its needed
+        if aCtrl is TCheckBox then
+          nSection.Attributes['Checked'] := TCheckBox(aCtrl).Checked
+        else
+        if aCtrl is TTrackBar then
+          nSection.Attributes['Position'] := TTrackBar(aCtrl).Position
+        else
+        if aCtrl is TRadioGroup then
+          nSection.Attributes['ItemIndex'] := TRadioGroup(aCtrl).ItemIndex
+        else
+        if aCtrl is TSpinEdit then
+          nSection.Attributes['Value'] := TSpinEdit(aCtrl).Value
+        else
+        if aCtrl is TEdit then
+          nSection.Attributes['Text'] := TEdit(aCtrl).Text;
+      end;
+    end;
+  end;
+
+var
+  I: Integer;
+  newXML: TKMXMLDocument;
+  cp: TCategoryPanel;
+  cpSurface: TCategoryPanelSurface;
+  nRoot, nSection: TXMLNode;
+begin
+  //Save dev data to XML
+  newXML := TKMXMLDocument.Create;
+  newXML.LoadFromFile(fDevSettingsFilepath);
+  nRoot := newXML.Root;
+
+  for I := 0 to mainGroup.Panels.Count - 1 do
+  begin
+    cp := TCategoryPanel(mainGroup.Panels[I]);
+
+    nSection := nRoot.AddOrFindChild(cp.XmlSectionName);
+
+    nSection.Attributes['Collapsed'] := cp.Collapsed;
+
+    if (cp.ControlCount > 0) and (cp.Controls[0] is TCategoryPanelSurface) then
+    begin
+      cpSurface := TCategoryPanelSurface(cp.Controls[0]);
+      ManageSubPanel(cpSurface, nSection);
+    end;
+  end;
+
+  newXML.SaveToFile(fDevSettingsFilepath);
+  newXML.Free;
+end;
 
 
 //Remove VCL panel and use flicker-free TMyPanel instead
 procedure TFormMain.FormCreate(Sender: TObject);
 begin
-  fShowStartVideo := True;
+  fDevSettingsFilepath := ExeDir + DEV_SETTINGS_XML_FILENAME;
+  fStartVideoPlayed := False;
   RenderArea := TKMRenderControl.Create(Self);
   RenderArea.Parent := Self;
   RenderArea.Align := alClient;
@@ -320,18 +553,22 @@ begin
   RenderArea.SendToBack;
   mainGroup.BringToFront;
   {$ENDIF}
+
+  chkShowFlatTerrain.Tag := Ord(dcFlatTerrain);
 end;
 
+
 procedure TFormMain.FormShow(Sender: TObject);
-var BordersWidth, BordersHeight: Integer;
+var
+  bordersWidth, bordersHeight: Integer;
 begin
   //We do this in OnShow rather than OnCreate as the window borders aren't
   //counted properly in OnCreate
-  BordersWidth := Width - ClientWidth;
-  BordersHeight := Height - ClientHeight;
+  bordersWidth := Width - ClientWidth;
+  bordersHeight := Height - ClientHeight;
   //Constraints includes window borders, so we add them on as Margin
-  Constraints.MinWidth := MIN_RESOLUTION_WIDTH + BordersWidth;
-  Constraints.MinHeight := MIN_RESOLUTION_HEIGHT + BordersHeight;
+  Constraints.MinWidth := MIN_RESOLUTION_WIDTH + bordersWidth;
+  Constraints.MinHeight := MIN_RESOLUTION_HEIGHT + bordersHeight;
 
   // We have to put it here, to proper window positioning for multimonitor systems
   if not gMain.Settings.FullScreen then
@@ -344,13 +581,13 @@ begin
 
   Application.ProcessMessages;
 
-  if fShowStartVideo and (gGameApp.GameSettings <> nil) and gGameApp.GameSettings.VideoStartup then
+  if not fStartVideoPlayed and (gGameSettings <> nil) and gGameSettings.VideoStartup then
   begin
-    gVideoPlayer.AddVideo('Campaigns\The Shattered Kingdom\Logo');
-    gVideoPlayer.AddVideo('KaM');
+    gVideoPlayer.AddVideo('Campaigns' + PathDelim + 'The Peasants Rebellion' + PathDelim + 'Logo', vfkStarting);
+    gVideoPlayer.AddVideo('KaM', vfkStarting);
     gVideoPlayer.Play;
+    fStartVideoPlayed := True;
   end;
-  fShowStartVideo := False;
 end;
 
 
@@ -368,7 +605,7 @@ end;
 
 procedure TFormMain.FormKeyDownProc(aKey: Word; aShift: TShiftState);
 begin
-  if aKey = gResKeys[SC_DEBUG_WINDOW].Key then
+  if aKey = gResKeys[kfDebugWindow].Key then
   begin
     SHOW_DEBUG_CONTROLS := not SHOW_DEBUG_CONTROLS;
     ControlsSetVisibile(SHOW_DEBUG_CONTROLS, not (ssCtrl in aShift)); //Hide groupbox when Ctrl is pressed
@@ -408,14 +645,13 @@ end;
 
 procedure TFormMain.ReloadLibxClick(Sender: TObject);
 begin
-  gRes.LoadLocaleAndFonts(gGameApp.GameSettings.Locale, gGameApp.GameSettings.LoadFullFonts);
+  gRes.LoadLocaleAndFonts(gGameSettings.Locale, gGameSettings.LoadFullFonts);
 end;
 
 
 procedure TFormMain.ReloadSettingsClick(Sender: TObject);
 begin
-  gMain.Settings.ReloadSettings;
-  gGameApp.GameSettings.ReloadSettings;
+  gGameAppSettings.ReloadSettings;
 end;
 
 
@@ -458,8 +694,7 @@ end;
 
 procedure TFormMain.RenderAreaMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
 begin
-  if gGameApp <> nil then
-    gGameApp.MouseWheel(Shift, WheelDelta, MousePos.X, MousePos.Y);
+  gGameApp.MouseWheel(Shift, WheelDelta, MousePos.X, MousePos.Y, Handled);
 end;
 
 
@@ -512,11 +747,24 @@ begin
 end;
 
 
+procedure TFormMain.mnExportRPLClick(Sender: TObject);
+var
+  gip: TKMGameInputProcess;
+begin
+  if RunOpenDialog(OpenDialog1, '', ExeDir, 'KaM Remake replay commands (*.rpl)|*.rpl') then
+  begin
+    gip := TKMGameInputProcess.Create(gipReplaying);
+    gip.LoadFromFile(OpenDialog1.FileName);
+    gip.SaveToFileAsText(OpenDialog1.FileName + '.log');
+  end;
+end;
+
+
 procedure TFormMain.SaveEditableMission1Click(Sender: TObject);
 begin
   if gGameApp.Game = nil then Exit;
 
-  if not gGameApp.Game.IsMapEditor then Exit;
+  if not gGameApp.Game.Params.IsMapEditor then Exit;
 
   if RunSaveDialog(SaveDialog1, gGameApp.Game.MapEditor.MissionDefSavePath, ExtractFileDir(gGameApp.Game.MapEditor.MissionDefSavePath), 'Knights & Merchants Mission (*.dat)|*.dat') then
     gGameApp.SaveMapEditor(SaveDialog1.FileName);
@@ -570,52 +818,49 @@ begin
   end;
 end;
 
+
 //Exports
 procedure TFormMain.Export_TreesRXClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.Sprites.ExportToPNG(rxTrees);
+  gRes.ExportSpritesToPNG(rxTrees, ExportDone);
 end;
 
 procedure TFormMain.Export_HousesRXClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.Sprites.ExportToPNG(rxHouses);
+  gRes.ExportSpritesToPNG(rxHouses, ExportDone);
 end;
 
 procedure TFormMain.Export_UnitsRXClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.Sprites.ExportToPNG(rxUnits);
+  gRes.ExportSpritesToPNG(rxUnits, ExportDone);
 end;
 
 procedure TFormMain.Export_ScriptDataClick(Sender: TObject);
 begin
-  if (gGame <> nil)
+  if    (gGameApp <> nil)
+    and (gGameApp.Game <> nil)
     and (gGame.Scripting <> nil) then
     gGame.Scripting.ExportDataToText;
 end;
 
 procedure TFormMain.Export_GUIClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.Sprites.ExportToPNG(rxGUI);
+  gRes.ExportSpritesToPNG(rxGUI, ExportDone);
 end;
 
 procedure TFormMain.Export_GUIMainRXClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.Sprites.ExportToPNG(rxGUIMain);
+  gRes.ExportSpritesToPNG(rxGUIMain, ExportDone);
 end;
 
 procedure TFormMain.Export_CustomClick(Sender: TObject);
 begin
-  gRes.Sprites.ExportToPNG(rxCustom);
+  gRes.ExportSpritesToPNG(rxCustom, ExportDone);
 end;
 
 procedure TFormMain.Export_TilesetClick(Sender: TObject);
 begin
-  gRes.Sprites.ExportToPNG(rxTiles);
+  gRes.ExportSpritesToPNG(rxTiles, ExportDone);
 end;
 
 procedure TFormMain.Export_Sounds1Click(Sender: TObject);
@@ -625,14 +870,12 @@ end;
 
 procedure TFormMain.Export_TreeAnim1Click(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.ExportTreeAnim;
+  gRes.ExportTreeAnim(ExportDone);
 end;
 
 procedure TFormMain.Export_HouseAnim1Click(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.ExportHouseAnim;
+  gRes.ExportHouseAnim(ExportDone);
 end;
 
 
@@ -644,17 +887,17 @@ end;
 
 procedure TFormMain.LoadSavThenRplClick(Sender: TObject);
 var
-  SavPath, RplPath: UnicodeString;
+  savPath, rplPath: UnicodeString;
 begin
   if RunOpenDialog(OpenDialog1, '', fMissionDefOpenPath, 'Knights & Merchants Save (*.sav)|*.sav') then
   begin
-    SavPath := OpenDialog1.FileName;
+    savPath := OpenDialog1.FileName;
     fMissionDefOpenPath := ExtractFileDir(OpenDialog1.FileName);
     if RunOpenDialog(OpenDialog1, '', fMissionDefOpenPath, 'Knights & Merchants Replay (*.rpl)|*.rpl') then
     begin
-      RplPath := OpenDialog1.FileName;
+      rplPath := OpenDialog1.FileName;
 
-      gGameApp.NewSaveAndReplay(SavPath, RplPath);
+      gGameApp.NewSaveAndReplay(savPath, rplPath);
     end;
   end;
 end;
@@ -662,14 +905,14 @@ end;
 
 procedure TFormMain.ExportGameStatsClick(Sender: TObject);
 var
-  DateS: UnicodeString;
+  dateS: UnicodeString;
 begin
-  if (gGame <> nil) and not gGame.IsMapEditor then
+  if (gGame <> nil) and not gGame.Params.IsMapEditor then
   begin
     gResTexts.ForceDefaultLocale := True; //Use only eng for exported csv
-    DateS := FormatDateTime('yyyy-mm-dd_hh-nn', Now);
-    gHands.ExportGameStatsToCSV(ExeDir + 'Export' + PathDelim + gGame.GameName + '_' + DateS + '.csv',
-                            Format('Statistics for game at map ''%s'' on %s', [gGame.GameName, DateS]));
+    dateS := FormatDateTime('yyyy-mm-dd_hh-nn', Now);
+    gHands.ExportGameStatsToCSV(ExeDir + 'Export' + PathDelim + gGameParams.Name + '_' + dateS + '.csv',
+                            Format('Statistics for game at map ''%s'' on %s', [gGameParams.Name, dateS]));
     gResTexts.ForceDefaultLocale := False;
   end;
 end;
@@ -683,11 +926,12 @@ end;
 
 
 procedure TFormMain.Export_DeliverLists1Click(Sender: TObject);
-var I: Integer;
+var
+  I: Integer;
 begin
   if gHands = nil then Exit;
   //You could possibly cheat in multiplayer by seeing what supplies your enemy has
-  if (gGameApp.Game <> nil) and (not gGameApp.Game.IsMultiPlayerOrSpec or MULTIPLAYER_CHEATS) then
+  if (gGameApp.Game <> nil) and (not gGameApp.Game.Params.IsMultiPlayerOrSpec or MULTIPLAYER_CHEATS) then
   for I := 0 to gHands.Count - 1 do
     gHands[I].Deliveries.Queue.ExportToFile(ExeDir + 'Player_' + IntToStr(I) + '_Deliver_List.txt');
 end;
@@ -696,8 +940,8 @@ end;
 procedure TFormMain.RGPlayerClick(Sender: TObject);
 begin
   if (gGameApp.Game = nil)
-    or gGameApp.Game.IsMapEditor
-    or gGameApp.Game.IsMultiPlayerOrSpec then
+    or gGameApp.Game.Params.IsMapEditor
+    or gGameApp.Game.Params.IsMultiPlayerOrSpec then
     Exit;
 
   if (gHands <> nil) and (RGPlayer.ItemIndex < gHands.Count) then
@@ -707,8 +951,7 @@ end;
 
 procedure TFormMain.SaveSettingsClick(Sender: TObject);
 begin
-  gMain.Settings.SaveSettings(True);
-  gGameApp.GameSettings.SaveSettings(True);
+  gGameAppSettings.SaveSettings(True);
 end;
 
 
@@ -720,32 +963,51 @@ begin
 end;
 
 
+procedure TFormMain.UnitAnim_AllClick(Sender: TObject);
+begin
+  gRes.ExportUnitAnim(UNIT_MIN, UNIT_MAX, True, ExportDone);
+end;
+
+
+procedure TFormMain.Civilians1Click(Sender: TObject);
+begin
+  gRes.ExportUnitAnim(CITIZEN_MIN, CITIZEN_MAX, False, ExportDone);
+end;
+
+
 procedure TFormMain.SoldiersClick(Sender: TObject);
 begin
-  if ConfirmExport then
-    gRes.ExportUnitAnim(WARRIOR_MIN, WARRIOR_MAX);
+  gRes.ExportUnitAnim(WARRIOR_MIN, WARRIOR_MAX, False, ExportDone);
 end;
 
 
 procedure TFormMain.chkSuperSpeedClick(Sender: TObject);
 begin
   if (gGameApp.Game = nil)
-    or (gGameApp.Game.IsMultiPlayerOrSpec
-      and not gGameApp.Game.IsMPGameSpeedChangeAllowed
+    or (gGameApp.Game.Params.IsMultiPlayerOrSpec
+      and not gGameApp.Game.CanChangeMPGameSpeed
       and not MULTIPLAYER_SPEEDUP
-      and not gGameApp.Game.IsReplay) then
+      and not gGameApp.Game.Params.IsReplay) then
     Exit;
 
-  gGameApp.Game.SetGameSpeed(IfThen(chkSuperSpeed.Checked, DEBUG_SPEEDUP_SPEED, 1), False);
+  gGameApp.Game.SetSpeed(IfThen(chkSuperSpeed.Checked, DEBUG_SPEEDUP_SPEED, 1), False);
 
   ActiveControl := nil; //Do not allow to focus on anything on debug panel
+end;
+
+
+procedure TFormMain.btFindObjByUIDClick(Sender: TObject);
+begin
+  if gGameApp.Game.GamePlayInterface = nil then Exit;
+
+  gGameApp.Game.GamePlayInterface.SelectEntityByUID(seFindObjByUID.Value);
 end;
 
 
 procedure TFormMain.Button_StopClick(Sender: TObject);
 begin
   if gGameApp.Game <> nil then
-    if gGameApp.Game.IsMapEditor then
+    if gGameApp.Game.Params.IsMapEditor then
       gGameApp.StopGame(grMapEdEnd)
     else
       gGameApp.StopGame(grCancel);
@@ -754,24 +1016,7 @@ begin
 end;
 
 
-procedure TFormMain.Button_UpdateUI_Click(Sender: TObject);
-begin
-  if gGameApp.Game <> nil then
-    gGameApp.Game.ActiveInterface.UpdateState(gGameApp.GlobalTickCount); //UpdateUI, even on game Pause
-
-  ActiveControl := nil; //Do not allow to focus on anything on debug panel
-end;
-
-
-procedure TFormMain.Civilians1Click(Sender: TObject);
-begin
-  if ConfirmExport then
-    gRes.ExportUnitAnim(CITIZEN_MIN, CITIZEN_MAX);
-end;
-
-
-//Revert all controls to defaults (e.g. before MP session)
-procedure TFormMain.ControlsReset;
+procedure TFormMain.ResetControl(aCtrl: TControl);
 
   function SkipReset(aCtrl: TControl): Boolean;
   begin
@@ -783,31 +1028,59 @@ procedure TFormMain.ControlsReset;
               {$IFDEF FPC} False; {$ENDIF}
   end;
 
+begin
+  if SkipReset(aCtrl) then Exit; //Skip reset for some controls
+
+  if aCtrl is TCheckBox then
+    TCheckBox(aCtrl).Checked :=   (aCtrl = chkBevel)
+                               or (aCtrl = chkLogNetConnection)
+                               or (aCtrl = chkLogSkipTempCmd)
+                               or ((aCtrl = chkSnowHouses) and gGameSettings.AllowSnowHouses)
+                               or ((aCtrl = chkInterpolatedRender) and gGameSettings.InterpolatedRender)
+                               or (aCtrl = chkShowObjects)
+                               or (aCtrl = chkShowHouses)
+                               or (aCtrl = chkShowUnits)
+                               or (aCtrl = chkShowOverlays)
+  else
+  if aCtrl is TTrackBar then
+    TTrackBar(aCtrl).Position := 0
+  else
+  if (aCtrl is TRadioGroup)
+    and (aCtrl <> rgDebugFont) then
+    TRadioGroup(aCtrl).ItemIndex := 0
+  else
+  if (aCtrl is TSpinEdit) then
+    TSpinEdit(aCtrl).Value := 0
+  else
+  if (aCtrl is TEdit) then
+    TEdit(aCtrl).Text := ''
+  else
+  if (aCtrl is TGroupBox) then
+    ResetSubPanel(TGroupBox(aCtrl));
+end;
+
+
+procedure TFormMain.ResetSubPanel(aPanel: TWinControl);
+var
+  I: Integer;
+begin
+  for I := 0 to aPanel.ControlCount - 1 do
+    ResetControl(aPanel.Controls[I]);
+end;
+
+
+//Revert all controls to defaults (e.g. before MP session)
+procedure TFormMain.ControlsReset;
+
   {$IFDEF WDC}
   procedure ResetCategoryPanel(aPanel: TCategoryPanel);
   var
-    I: Integer;
-    PanelSurface: TCategoryPanelSurface;
+    panelSurface: TCategoryPanelSurface;
   begin
-    if aPanel.Controls[0] is TCategoryPanelSurface then
+    if (aPanel.ControlCount > 0) and (aPanel.Controls[0] is TCategoryPanelSurface) then
     begin
-      PanelSurface := TCategoryPanelSurface(aPanel.Controls[0]);
-      for I := 0 to PanelSurface.ControlCount - 1 do
-      begin
-        if SkipReset(PanelSurface.Controls[I]) then Continue; //Skip reset for some controls
-
-        if PanelSurface.Controls[I] is TCheckBox then
-          TCheckBox(PanelSurface.Controls[I]).Checked :=    (PanelSurface.Controls[I] = chkBevel)
-                                                         or (PanelSurface.Controls[I] = chkLogNetConnection)
-                                                         or (PanelSurface.Controls[I] = chkLogSkipTempCmd)
-                                                         or ((PanelSurface.Controls[I] = chkSnowHouses) and gGameApp.GameSettings.AllowSnowHouses)
-        else
-        if PanelSurface.Controls[I] is TTrackBar then
-          TTrackBar(PanelSurface.Controls[I]).Position := 0
-        else
-        if PanelSurface.Controls[I] is TRadioGroup then
-          TRadioGroup(PanelSurface.Controls[I]).ItemIndex := 0;
-      end;
+      panelSurface := TCategoryPanelSurface(aPanel.Controls[0]);
+      ResetSubPanel(panelSurface);
     end;
   end;
 
@@ -847,8 +1120,7 @@ procedure TFormMain.ControlsReset;
   {$ENDIF}
 
 begin
-  if not RESET_DEBUG_CONTROLS then
-    Exit;
+  if not RESET_DEBUG_CONTROLS then Exit;
 
   fUpdating := True;
   
@@ -866,33 +1138,79 @@ begin
 end;
 
 
+procedure TFormMain.SetEntitySelected(aEntityUID: Integer; aEntity2UID: Integer = 0);
+begin
+  // Update values only if Debug panel is opened or if we are debugging
+  if not SHOW_DEBUG_CONTROLS and {$IFDEF DEBUG} False {$ELSE} True {$ENDIF} then Exit;
+  // Can't change anything if debug change is not allowed
+  if not gMain.IsDebugChangeAllowed then Exit;
+
+  seEntityUID.SetValueWithoutChange(aEntityUID);
+  seWarriorUID.SetValueWithoutChange(aEntity2UID);
+
+  if GetKeyState(VK_CONTROL) < 0 then
+    seFindObjByUID.Value := aEntityUID // will trigger OnChange
+  else
+  if GetKeyState(VK_SHIFT) < 0 then
+  begin
+    if aEntity2UID = 0 then
+      aEntity2UID := aEntityUID;
+    seFindObjByUID.Value := aEntity2UID; // will trigger OnChange
+  end
+end;
+
+
 procedure TFormMain.ControlsRefill;
 begin
-  {$IFDEF WDC}
-  chkSnowHouses.SetCheckedWithoutClick(gGameApp.GameSettings.AllowSnowHouses); // Snow houses checkbox could be updated before game
-  chkLoadUnsupSaves.SetCheckedWithoutClick(ALLOW_LOAD_UNSUP_VERSION_SAVE);
-  chkDebugScripting.SetCheckedWithoutClick(DEBUG_SCRIPTING_EXEC);
-  {$ENDIF}
+  fUpdating := True;
 
-  if (gGame = nil) or not gGame.IsMapEditor then Exit;
+  try
+    {$IFDEF WDC}
+    chkSnowHouses.        SetCheckedWithoutClick(gGameSettings.AllowSnowHouses); // Snow houses checkbox could be updated before game
+    chkInterpolatedRender.SetCheckedWithoutClick(gGameSettings.InterpolatedRender); // Snow houses checkbox could be updated before game
+    chkLoadUnsupSaves.    SetCheckedWithoutClick(ALLOW_LOAD_UNSUP_VERSION_SAVE);
+    chkDebugScripting.    SetCheckedWithoutClick(DEBUG_SCRIPTING_EXEC);
+    chkPaintSounds.       SetCheckedWithoutClick(DISPLAY_SOUNDS);
+    chkSkipRender.        SetCheckedWithoutClick(SKIP_RENDER);
+    chkSkipSound.         SetCheckedWithoutClick(SKIP_SOUND);
+    chkShowGameTick.      SetCheckedWithoutClick(SHOW_GAME_TICK);
+    chkBevel.             SetCheckedWithoutClick(SHOW_DEBUG_OVERLAY_BEVEL);
+    chkMonospacedFont.    SetCheckedWithoutClick(DEBUG_TEXT_MONOSPACED);
+    rgDebugFont.ItemIndex := DEBUG_TEXT_FONT_ID;
+    {$ENDIF}
 
-  tbPassability.Max := Byte(High(TKMTerrainPassability));
-  tbPassability.Position := SHOW_TERRAIN_PASS;
-  Label2.Caption := IfThen(SHOW_TERRAIN_PASS <> 0, PassabilityGuiText[TKMTerrainPassability(SHOW_TERRAIN_PASS)], '');
+    if (gGame = nil) or not gMain.IsDebugChangeAllowed then Exit;
 
-  chkShowWires.SetCheckedWithoutClick       (SHOW_TERRAIN_WIRES);
-  chkShowTerrainIds.SetCheckedWithoutClick  (SHOW_TERRAIN_IDS);
-  chkShowTerrainKinds.SetCheckedWithoutClick(SHOW_TERRAIN_KINDS);
-  chkTilesGrid.SetCheckedWithoutClick       (SHOW_TERRAIN_TILES_GRID);
-  chkTileOwner.SetCheckedWithoutClick       (SHOW_TILES_OWNER);
-  chkTileObject.SetCheckedWithoutClick      (SHOW_TILE_OBJECT_ID);
-  chkTreeAge.SetCheckedWithoutClick         (SHOW_TREE_AGE);
-  chkFieldAge.SetCheckedWithoutClick        (SHOW_FIELD_AGE);
-  chkTileLock.SetCheckedWithoutClick        (SHOW_TILE_LOCK);
-  chkTileUnit.SetCheckedWithoutClick        (SHOW_TILE_UNIT);
-  chkVertexUnit.SetCheckedWithoutClick      (SHOW_VERTEX_UNIT);
-  chkShowRoutes.SetCheckedWithoutClick      (SHOW_UNIT_ROUTES);
-  chkSelectionBuffer.SetCheckedWithoutClick (SHOW_SEL_BUFFER);
+    tbPassability.Max := Byte(High(TKMTerrainPassability));
+    tbPassability.Position := SHOW_TERRAIN_PASS;
+    Label2.Caption := IfThen(SHOW_TERRAIN_PASS <> 0, PASSABILITY_GUI_TEXT[TKMTerrainPassability(SHOW_TERRAIN_PASS)], '');
+
+    chkShowWires.       SetCheckedWithoutClick(SHOW_TERRAIN_WIRES);
+    chkShowTerrainIds.  SetCheckedWithoutClick(SHOW_TERRAIN_IDS);
+    chkShowTerrainKinds.SetCheckedWithoutClick(SHOW_TERRAIN_KINDS);
+    chkTilesGrid.       SetCheckedWithoutClick(SHOW_TERRAIN_TILES_GRID);
+    chkTileOwner.       SetCheckedWithoutClick(SHOW_TILES_OWNER);
+    chkTileObject.      SetCheckedWithoutClick(SHOW_TILE_OBJECT_ID);
+    chkTreeAge.         SetCheckedWithoutClick(SHOW_TREE_AGE);
+    chkFieldAge.        SetCheckedWithoutClick(SHOW_FIELD_AGE);
+    chkTileLock.        SetCheckedWithoutClick(SHOW_TILE_LOCK);
+    chkTileUnit.        SetCheckedWithoutClick(SHOW_TILE_UNIT);
+    chkVertexUnit.      SetCheckedWithoutClick(SHOW_VERTEX_UNIT);
+    chkShowRoutes.      SetCheckedWithoutClick(SHOW_UNIT_ROUTES);
+    chkSelectionBuffer. SetCheckedWithoutClick(SHOW_SEL_BUFFER);
+
+    chkShowObjects.     SetCheckedWithoutClick(mlObjects            in gGameParams.VisibleLayers);
+    chkShowHouses.      SetCheckedWithoutClick(mlHouses             in gGameParams.VisibleLayers);
+    chkShowUnits.       SetCheckedWithoutClick(mlUnits              in gGameParams.VisibleLayers);
+    chkShowOverlays.    SetCheckedWithoutClick(mlOverlays           in gGameParams.VisibleLayers);
+    chkShowMiningRadius.SetCheckedWithoutClick(mlMiningRadius       in gGameParams.VisibleLayers);
+    chkShowTowerRadius. SetCheckedWithoutClick(mlTowersAttackRadius in gGameParams.VisibleLayers);
+    chkShowUnitRadius.  SetCheckedWithoutClick(mlUnitsAttackRadius  in gGameParams.VisibleLayers);
+    chkShowDefencePos.  SetCheckedWithoutClick(mlDefencesAll        in gGameParams.VisibleLayers);
+    chkShowFlatTerrain. SetCheckedWithoutClick(mlFlatTerrain        in gGameParams.VisibleLayers);
+  finally
+    fUpdating := False;
+  end;
 end;
 
 
@@ -937,22 +1255,32 @@ end;
 
 
 procedure TFormMain.ControlsUpdate(Sender: TObject);
+
+  procedure UpdateVisibleLayers(aCheckBox: TCheckBox; aLayer: TKMGameVisibleLayer);
+  begin
+    if Sender = aCheckBox then
+      if aCheckBox.Checked then
+        gGameParams.VisibleLayers := gGameParams.VisibleLayers + [aLayer]
+      else
+        gGameParams.VisibleLayers := gGameParams.VisibleLayers - [aLayer];
+  end;
+
 var
   I: Integer;
-  AllowDebugChange: Boolean;
+  allowDebugChange: Boolean;
 begin
   if fUpdating then Exit;
 
   //You could possibly cheat in multiplayer by seeing debug render info
-  AllowDebugChange := gMain.IsDebugChangeAllowed
+  allowDebugChange := gMain.IsDebugChangeAllowed
                       or (Sender = nil); //Happens in ControlsReset only (using this anywhere else could allow MP cheating)
 
   //Debug render
-  if AllowDebugChange then
+  if allowDebugChange then
   begin
     I := tbPassability.Position;
     tbPassability.Max := Byte(High(TKMTerrainPassability));
-    Label2.Caption := IfThen(I <> 0, PassabilityGuiText[TKMTerrainPassability(I)], '');
+    Label2.Caption := IfThen(I <> 0, PASSABILITY_GUI_TEXT[TKMTerrainPassability(I)], '');
     SHOW_TERRAIN_PASS := I;
     SHOW_TERRAIN_WIRES := chkShowWires.Checked;
     SHOW_TERRAIN_IDS := chkShowTerrainIds.Checked;
@@ -979,25 +1307,51 @@ begin
     SHOW_TERRAIN_OVERLAYS := chkShowTerrainOverlays.Checked;
     DEBUG_SCRIPTING_EXEC := chkDebugScripting.Checked;
     SKIP_LOG_TEMP_COMMANDS := chkLogSkipTempCmd.Checked;
+
+    SHOW_GIP := chkGIP.Checked;
+    SHOW_GIP_AS_BYTES := chkGipAsBytes.Checked;
+    PAUSE_GAME_BEFORE_TICK := sePauseBeforeTick.Value;
+    MAKE_SAVEPT_BEFORE_TICK := seMakeSaveptBeforeTick.Value;
+    CUSTOM_SEED_VALUE := seCustomSeed.Value;
+
+    DEBUG_TEXT := edDebugText.Text;
+    DEBUG_VALUE := seDebugValue.Value;
+
+    if gGame <> nil then
+    begin
+      UpdateVisibleLayers(chkShowObjects,       mlObjects);
+      UpdateVisibleLayers(chkShowHouses,        mlHouses);
+      UpdateVisibleLayers(chkShowUnits,         mlUnits);
+      UpdateVisibleLayers(chkShowOverlays,      mlOverlays);
+      UpdateVisibleLayers(chkShowMiningRadius,  mlMiningRadius);
+      UpdateVisibleLayers(chkShowTowerRadius,   mlTowersAttackRadius);
+      UpdateVisibleLayers(chkShowUnitRadius,    mlUnitsAttackRadius);
+      UpdateVisibleLayers(chkShowDefencePos,    mlDefencesAll);
+      UpdateVisibleLayers(chkShowFlatTerrain,   mlFlatTerrain);
+    chkShowTowerRadius.Tag := 5;
+    end;
     {$ENDIF}
 
     SKIP_RENDER := chkSkipRender.Checked;
     SKIP_SOUND := chkSkipSound.Checked;
+    DISPLAY_SOUNDS := chkPaintSounds.Checked;
+
+    btFindObjByUIDClick(nil);
   end;
 
   //AI
-  if AllowDebugChange then
+  if allowDebugChange then
   begin
     SHOW_AI_WARE_BALANCE := chkShowBalance.Checked;
-    SHOW_DEBUG_OVERLAY_BEVEL := chkBevel.Checked;
     OVERLAY_DEFENCES := chkShowDefences.Checked;
     OVERLAY_DEFENCES_A := chkShowDefencesAnimate.Checked;
     OVERLAY_AI_BUILD := chkBuild.Checked;
     OVERLAY_AI_COMBAT := chkCombat.Checked;
+    OVERLAY_AI_PATHFINDING := chkPathfinding.Checked;
     OVERLAY_AI_SUPERVISOR := chkSupervisor.Checked;
-    OVERLAY_AI_SUPERVISOR_A := chkShowSupervisorAnimate.Checked;
-    OVERLAY_AI_SUPERVISOR_D := chkShowSupervisorDistances.Checked;
-    OVERLAY_AI_SUPERVISOR_M := chkShowSupervisorMarks.Checked;
+    OVERLAY_AI_VECTOR_FIELD := chkShowArmyVectorField.Checked;
+    OVERLAY_AI_CLUSTERS := chkShowClusters.Checked;
+    OVERLAY_AI_ALLIEDGROUPS := chkShowAlliedGroups.Checked;
     OVERLAY_AI_EYE := chkAIEye.Checked;
     OVERLAY_AI_SOIL := chkShowSoil.Checked;
     OVERLAY_AI_FLATAREA := chkShowFlatArea.Checked;
@@ -1015,17 +1369,20 @@ begin
   SHOW_CONTROLS_OVERLAY := chkUIControlsBounds.Checked;
   SHOW_TEXT_OUTLINES := chkUITextBounds.Checked;
   SHOW_CONTROLS_ID := chkUIControlsID.Checked;
+  SHOW_FOCUSED_CONTROL := chkUIFocusedControl.Checked;
+  SHOW_CONTROL_OVER := chkUIControlOver.Checked;
 
   {$IFDEF WDC} //one day update .lfm for lazarus...
 //  ALLOW_SNOW_HOUSES := chkSnowHouses.Checked;
-  gGameApp.GameSettings.AllowSnowHouses := chkSnowHouses.Checked;
+  gGameSettings.AllowSnowHouses := chkSnowHouses.Checked;
+  gGameSettings.InterpolatedRender := chkInterpolatedRender.Checked;
 
   ALLOW_LOAD_UNSUP_VERSION_SAVE := chkLoadUnsupSaves.Checked;
   {$ENDIF}
 
 
   //Graphics
-  if AllowDebugChange then
+  if allowDebugChange then
   begin
     //Otherwise it could crash on the main menu
     if gRenderPool <> nil then
@@ -1044,7 +1401,7 @@ begin
   SHOW_LOGS_IN_CHAT := chkLogsShowInChat.Checked;
   LOG_GAME_TICK := chkLogGameTick.Checked;
 
-  if AllowDebugChange then
+  if allowDebugChange then
   begin
     if chkLogDelivery.Checked then
       Include(gLog.MessageTypes, lmtDelivery)
@@ -1091,10 +1448,25 @@ begin
     end;
   end;
 
-  ActiveControl := nil; //Do not allow to focus on anything on debug panel
+  //Misc
+  if allowDebugChange then
+  begin
+    SHOW_DEBUG_OVERLAY_BEVEL := chkBevel.Checked;
+    DEBUG_TEXT_MONOSPACED := chkMonospacedFont.Checked;
+    DEBUG_TEXT_FONT_ID := rgDebugFont.ItemIndex;
+  end;
 
-  if Assigned (fOnControlsUpdated) then
-    fOnControlsUpdated;
+  if gGameApp.Game <> nil then
+    gGameApp.Game.ActiveInterface.UpdateState(gGameApp.GlobalTickCount);
+
+  if    not (Sender is TSpinEdit)
+    and not (Sender is TEdit) then // TSpinEdit need focus to enter value
+    ActiveControl := nil; //Do not allow to focus on anything on debug panel
+
+  if Assigned(fOnControlsUpdated) and (Sender is TControl) then
+    fOnControlsUpdated(Sender, TControl(Sender).Tag);
+
+  SaveDevSettings;
 end;
 
 
@@ -1135,32 +1507,25 @@ begin
 end;
 
 
-procedure TFormMain.UnitAnim_AllClick(Sender: TObject);
-begin
-  if ConfirmExport then
-    gRes.ExportUnitAnim(UNIT_MIN, UNIT_MAX, True);
-end;
-
-
-function TFormMain.ConfirmExport: Boolean;
-begin
-  case MessageDlg(Format(gResTexts[TX_FORM_EXPORT_CONFIRM_MSG], [ExeDir + 'Export']), mtWarning, [mbYes, mbNo], 0) of
-    mrYes:  Result := True;
-    else    Result := False;
-  end;
-end;
+//function TFormMain.ConfirmExport: Boolean;
+//begin
+//  case MessageDlg(Format(gResTexts[TX_FORM_EXPORT_CONFIRM_MSG], [ExeDir + 'Export']), mtWarning, [mbYes, mbNo], 0) of
+//    mrYes:  Result := True;
+//    else    Result := False;
+//  end;
+//end;
 
 
 procedure TFormMain.ValidateGameStatsClick(Sender: TObject);
 var
-  MS: TKMemoryStreamBinary;
+  MS: TKMemoryStream;
   SL: TStringList;
   CRC: Int64;
-  IsValid: Boolean;
+  isValid: Boolean;
 begin
   if RunOpenDialog(OpenDialog1, '', ExeDir, 'KaM Remake statistics (*.csv)|*.csv') then
   begin
-    IsValid := False;
+    isValid := False;
     SL := TStringList.Create;
     try
       try
@@ -1172,17 +1537,16 @@ begin
           try
             MS.WriteHugeString(AnsiString(SL.Text));
             if CRC = Adler32CRC(MS) then
-              IsValid := True;
+              isValid := True;
           finally
             FreeAndNil(MS);
           end;
         end;
 
-        if IsValid then
+        if isValid then
           MessageDlg('Game statistics from file [ ' + OpenDialog1.FileName + ' ] is valid', mtInformation , [mbOK ], 0)
         else
           MessageDlg('Game statistics from file [ ' + OpenDialog1.FileName + ' ] is NOT valid !', mtError, [mbClose], 0);
-
       except
         on E: Exception do
           MessageDlg('Error while validating game statistics from file [ ' + OpenDialog1.FileName + ' ] :' + EolW
@@ -1224,9 +1588,9 @@ function TFormMain.GetWindowParams: TKMWindowParamsRecord;
     {$ENDIF}
   end;
 var
-  Wp: TWindowPlacement;
-  BordersWidth, BordersHeight: SmallInt;
-  Rect: TRect;
+  wp: TWindowPlacement;
+  bordersWidth, bordersHeight: SmallInt;
+  rect: TRect;
 begin
   Result.State := WindowState;
   case WindowState of
@@ -1238,31 +1602,31 @@ begin
                     Result.Top := Top;
                   end;
     wsMaximized:  begin
-                    Wp.length := SizeOf(TWindowPlacement);
-                    GetWindowPlacement(Handle, @Wp);
+                    wp.length := SizeOf(TWindowPlacement);
+                    GetWindowPlacement(Handle, @wp);
 
                     // Get current borders width/height
-                    BordersWidth := Width - ClientWidth;
-                    BordersHeight := Height - ClientHeight;
+                    bordersWidth := Width - ClientWidth;
+                    bordersHeight := Height - ClientHeight;
 
                     // rcNormalPosition do not have ClientWidth/ClientHeight
                     // so we have to calc it manually via substracting borders width/height
-                    Result.Width := Wp.rcNormalPosition.Right - Wp.rcNormalPosition.Left - BordersWidth;
-                    Result.Height := Wp.rcNormalPosition.Bottom - Wp.rcNormalPosition.Top - BordersHeight;
+                    Result.Width := wp.rcNormalPosition.Right - wp.rcNormalPosition.Left - bordersWidth;
+                    Result.Height := wp.rcNormalPosition.Bottom - wp.rcNormalPosition.Top - bordersHeight;
 
                     // Adjustment of window position due to TaskBar position/size
-                    case FindTaskBar(Rect) of
+                    case FindTaskBar(rect) of
                       ABE_LEFT: begin
-                                  Result.Left := Wp.rcNormalPosition.Left + Rect.Right;
-                                  Result.Top := Wp.rcNormalPosition.Top;
+                                  Result.Left := wp.rcNormalPosition.Left + rect.Right;
+                                  Result.Top := wp.rcNormalPosition.Top;
                                 end;
                       ABE_TOP:  begin
-                                  Result.Left := Wp.rcNormalPosition.Left;
-                                  Result.Top := Wp.rcNormalPosition.Top + Rect.Bottom;
+                                  Result.Left := wp.rcNormalPosition.Left;
+                                  Result.Top := wp.rcNormalPosition.Top + rect.Bottom;
                                 end
                       else      begin
-                                  Result.Left := Wp.rcNormalPosition.Left;
-                                  Result.Top := Wp.rcNormalPosition.Top;
+                                  Result.Left := wp.rcNormalPosition.Left;
+                                  Result.Top := wp.rcNormalPosition.Top;
                                 end;
                     end;
                   end;
@@ -1299,24 +1663,27 @@ procedure TFormMain.WMAppCommand(var Msg: TMessage);
       Include(Result, ssShift);
   end;
 
-var dwKeys,uDevice,cmd: Word;
-  ShiftState: TShiftState;
+var
+  dwKeys, uDevice, cmd: Word;
+  shiftState: TShiftState;
 begin
-  ShiftState := [];
+  shiftState := [];
   {$IFDEF WDC}
   uDevice := GET_DEVICE_LPARAM(Msg.lParam);
   if uDevice = FAPPCOMMAND_MOUSE then
   begin
     dwKeys := GET_KEYSTATE_LPARAM(Msg.lParam);
-    ShiftState := GetShiftState(dwKeys);
+    shiftState := GetShiftState(dwKeys);
     cmd := GET_APPCOMMAND_LPARAM(Msg.lParam);
     case cmd of
-       APPCOMMAND_BROWSER_FORWARD:  FormKeyUpProc(VK_XBUTTON1, ShiftState);
-       APPCOMMAND_BROWSER_BACKWARD: FormKeyUpProc(VK_XBUTTON2, ShiftState);
+       APPCOMMAND_BROWSER_FORWARD:  FormKeyUpProc(VK_XBUTTON1, shiftState);
+       APPCOMMAND_BROWSER_BACKWARD: FormKeyUpProc(VK_XBUTTON2, shiftState);
        else
          inherited;
-     end;
-  end;
+    end;
+  end
+  else
+    inherited;
   {$ENDIF}
 end;
 
@@ -1328,13 +1695,14 @@ begin
     and (Message.WParam = SC_KEYMENU)
     and SuppressAltForMenu then Exit;
 
-  inherited WndProc(Message);
+  inherited;
 end;
 
 
 procedure TFormMain.WMExitSizeMove(var Msg: TMessage) ;
 begin
   gMain.Move(GetWindowParams);
+  inherited;
 end;
 
 
@@ -1342,29 +1710,37 @@ end;
 //F.e. on Win10 it was reported, that we got event 3 times on single turn of mouse wheel, if use default form event handler
 procedure TFormMain.WMMouseWheel(var Msg: TMessage);
 var
-  MousePos : TPoint;
-  KeyState : TKeyboardState;
-  WheelDelta: Integer;
+  mousePos : TPoint;
+  keyState : TKeyboardState;
+  wheelDelta: Integer;
+  handled: Boolean;
 begin
-  MousePos.X := SmallInt(Msg.LParamLo);
-  MousePos.Y := SmallInt(Msg.LParamHi);
-  WheelDelta := SmallInt(Msg.WParamHi);
-  GetKeyboardState(KeyState);
+  mousePos.X := SmallInt(Msg.LParamLo);
+  mousePos.Y := SmallInt(Msg.LParamHi);
+  wheelDelta := SmallInt(Msg.WParamHi);
+  GetKeyboardState(keyState);
 
-  if gGameApp <> nil then
-    gGameApp.MouseWheel(KeyboardStateToShiftState(KeyState), GetMouseWheelStepsCnt(WheelDelta),
-                        RenderArea.ScreenToClient(MousePos).X, RenderArea.ScreenToClient(MousePos).Y);
+  handled := False;
+  gGameApp.MouseWheel(KeyboardStateToShiftState(keyState), GetMouseWheelStepsCnt(wheelDelta),
+                      RenderArea.ScreenToClient(mousePos).X, RenderArea.ScreenToClient(mousePos).Y, handled);
+
+  if not handled then
+    inherited;
 end;
 {$ENDIF}
 
 
 procedure TFormMain.FormMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
-begin
-//We use WM_MOUSEWHEEL message handler on Windows, since it prevents some bugs from happaning
-//F.e. on Win10 it was reported, that we got event 3 times on single turn of mouse wheel, if use default form event handler
 {$IFNDEF MSWINDOWS}
-  if gGameApp <> nil then
-    gGameApp.MouseWheel(Shift, GetMouseWheelStepsCnt(WheelDelta), RenderArea.ScreenToClient(MousePos).X, RenderArea.ScreenToClient(MousePos).Y);
+var
+  handled: Boolean;
+{$ENDIF}
+begin
+  // We use WM_MOUSEWHEEL message handler on Windows, since it prevents some bugs from happaning
+  // F.e. on Win10 it was reported, that we got event 3 times on single turn of mouse wheel, if use default form event handler
+{$IFNDEF MSWINDOWS}
+  handled := False;
+  gGameApp.MouseWheel(Shift, GetMouseWheelStepsCnt(WheelDelta), RenderArea.ScreenToClient(MousePos).X, RenderArea.ScreenToClient(MousePos).Y, handled);
 {$ENDIF}
 end;
 
@@ -1394,14 +1770,24 @@ end;
 
 //Tell fMain if we want to shut down the program
 procedure TFormMain.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
-var MenuHidden: Boolean;
+var
+  menuHidden: Boolean;
 begin
+  if not QUERY_ON_FORM_CLOSE then
+  begin
+    CanClose := True;
+    Exit;
+  end;
+
   //Hacky solution to MessageBox getting stuck under main form: In full screen we must show
   //the menu while displaying a MessageBox otherwise it goes under the main form on some systems
-  MenuHidden := (BorderStyle = bsNone) and (Menu = nil);
-  if MenuHidden then Menu := MainMenu1;
+  menuHidden := (BorderStyle = bsNone) and (Menu = nil);
+
+  if menuHidden then Menu := MainMenu1;
+
   gMain.CloseQuery(CanClose);
-  if MenuHidden then Menu := nil;
+
+  if menuHidden then Menu := nil;
 end;
 
 

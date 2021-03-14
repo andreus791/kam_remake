@@ -61,13 +61,15 @@ type
   TBooleanFuncSimple = function: Boolean of object;
   TBoolIntFuncSimple = function (aValue: Integer): Boolean of object;
   TBoolCardFuncSimple = function (aValue: Cardinal): Boolean of object;
+  TCardinalEvent = procedure (aValue: Cardinal) of object;
   TObjectIntBoolEvent = procedure (Sender: TObject; aIntValue: Integer; aBoolValue: Boolean) of object;
+  TCoordDistanceFn = function (X, Y: Integer): Single;
 
   TKMAnimLoop = packed record
-                  Step: array [1 .. 30] of SmallInt;
-                  Count: SmallInt;
-                  MoveX, MoveY: Integer;
-                end;
+    Step: array [1 .. 30] of SmallInt;
+    Count: SmallInt;
+    MoveX, MoveY: Integer;
+  end;
 
   //Message kind determines icon and available actions for Message
   TKMMessageKind = (
@@ -75,7 +77,7 @@ type
     mkHouse,
     mkUnit,
     mkQuill //Utility message (warnings in script loading)
-    );
+  );
 
   TKMAudioFormat = (afWav, afOgg);
 
@@ -91,9 +93,6 @@ type
     Data: UnicodeString;
   end;
 
-
-  TKMAIType = (aitNone, aitClassic, aitAdvanced);
-  TKMAITypeSet = set of TKMAIType;
 
   TKMUserActionType = (uatNone, uatKeyDown, uatKeyUp, uatKeyPress, uatMouseDown, uatMouseUp, uatMouseMove, uatMouseWheel);
   TKMUserActionEvent = procedure (aActionType: TKMUserActionType) of object;

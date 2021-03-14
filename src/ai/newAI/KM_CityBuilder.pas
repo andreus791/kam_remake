@@ -9,8 +9,9 @@ interface
 uses
   KromUtils, Math, SysUtils,
   KM_Defaults, KM_CommonClasses, KM_Points, KM_Sort,
-  KM_ResHouses, KM_ResWares, KM_BuildList, KM_Houses,
-  KM_AIInfluences, KM_CityPlanner, KM_CityPredictor, KM_Eye, KM_AIParameters;
+  KM_ResHouses, KM_HandConstructions, KM_Houses,
+  KM_AIInfluences, KM_CityPlanner, KM_CityPredictor, KM_Eye, KM_AIParameters,
+  KM_ResTypes;
 
 const
   NODE_PRIO_RoadsUnlockHouse = 1;
@@ -94,7 +95,10 @@ implementation
 uses
   Classes, KM_Game, KM_Hand, KM_HandsCollection, KM_Terrain, KM_Resource,
   KM_AIFields, KM_Units, KM_UnitsCollection, KM_UnitTaskBuild,
-  KM_RenderAux, KM_ResMapElements, KM_CommonUtils;
+  {$IFDEF DEBUG_NewAI}
+    KM_CommonUtils,
+  {$ENDIF}
+  KM_RenderAux, KM_ResMapElements;
 
 { Procedural functions }
 function CompareBuildNode(const aElem1, aElem2): Integer;
@@ -466,7 +470,7 @@ begin
            ) then
         //if (gHands[fOwner].Units[I].IsIdle) then
         begin
-          WorkersPos[fFreeWorkersCnt] := CurrPosition;
+          WorkersPos[fFreeWorkersCnt] := Position;
           fFreeWorkersCnt := fFreeWorkersCnt + 1;
         end;
       end;
@@ -554,7 +558,7 @@ end;
 procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
   function IsPlan(aPoint: TKMPoint; aField: TKMFieldType): Boolean; overload;
   begin
-    Result := gHands[fOwner].BuildList.FieldworksList.HasField(aPoint) = aField;
+    Result := gHands[fOwner].Constructions.FieldworksList.HasField(aPoint) = aField;
   end;
   function IsPlan(aPoint: TKMPoint; aLock: TKMTileLock): Boolean; overload;
   begin
@@ -596,7 +600,7 @@ procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
     Output := False;
     if gHands[fOwner].CanAddFieldPlan(aNode.FieldList.Items[aIdx], aFieldType) then
     begin
-      gHands[fOwner].BuildList.FieldworksList.AddField(aNode.FieldList.Items[aIdx], aFieldType);
+      gHands[fOwner].Constructions.FieldworksList.AddField(aNode.FieldList.Items[aIdx], aFieldType);
       aNode.FreeWorkers := aNode.FreeWorkers - 1;
       aNode.RequiredWorkers := aNode.RequiredWorkers - 1;
       Output := True;
@@ -632,7 +636,7 @@ procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
       begin
         // Is there field / wine plan in progress?
         if IsPlan(FieldList.Items[K], ftWine) OR IsPlan(FieldList.Items[K], ftCorn) then
-          gHands[fOwner].BuildList.FieldworksList.RemFieldPlan( FieldList.Items[K] );
+          gHands[fOwner].Constructions.FieldworksList.RemFieldPlan( FieldList.Items[K] );
         // Is there road plan / work in progress?
         if IsPlan(FieldList.Items[K], tlRoadWork, ftRoad) then
         begin
@@ -779,9 +783,9 @@ procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
           end;
         end
         // Tree was destroyed while worker is going to do it -> remove wine or corn plan and remove point from build node
-        else if (gHands[fOwner].BuildList.FieldworksList.HasField(FieldList.Items[K]) <> ftNone) then // ftNone is fine, road was checked before
+        else if (gHands[fOwner].Constructions.FieldworksList.HasField(FieldList.Items[K]) <> ftNone) then // ftNone is fine, road was checked before
         begin
-          gHands[fOwner].BuildList.FieldworksList.RemFieldPlan(FieldList.Items[K]);
+          gHands[fOwner].Constructions.FieldworksList.RemFieldPlan(FieldList.Items[K]);
           FieldList.Delete(K);
         end
         // There is digged wine / field
@@ -843,8 +847,8 @@ begin
   fTrunkShortage := (aTrunkBalance < AI_Par[BUILDER_Shortage_Trunk]);
 
   // Compute building materials
-  RequiredStones := gHands[fOwner].BuildList.HousePlanList.GetPlansStoneDemands();
-  RequiredWood := gHands[fOwner].BuildList.HousePlanList.GetPlansWoodDemands();
+  RequiredStones := gHands[fOwner].Constructions.HousePlanList.GetPlansStoneDemands();
+  RequiredWood := gHands[fOwner].Constructions.HousePlanList.GetPlansWoodDemands();
   for K := 0 to gHands[fOwner].Houses.Count - 1 do
   begin
     H := gHands[fOwner].Houses[K];
@@ -1235,7 +1239,7 @@ var
         break;
       HT := PRODUCTION_WARE2HOUSE[ WareOrder[K] ];
       if (RequiredHouses[HT] <= 0) then // wtLeather and wtPig require the same building so avoid to place 2 houses at once
-        continue;
+        Continue;
       // Farms and wineyards should be placed ASAP because fields may change evaluation of terrain and change tpBuild status of surrouding tiles!
       case AddToConstruction(HT, HT in [htFarm, htWineyard], False) of
         csNoNodeAvailable: break;
@@ -1246,7 +1250,7 @@ var
           MaxPlans := MaxPlans - 1;
           MaxPlace := MaxPlace - 1;
           if (MaxPlans <= 0) then
-            break;
+            Break;
         end;
         csNoPlaceCanBeFound:
         begin
@@ -1453,7 +1457,7 @@ begin
   // Watchtowers
   HT := htWatchTower;
   if (not Planner.DefenceTowersPlanned OR (gHands[fOwner].Stats.GetHouseTotal(HT) < Planner.PlannedHouses[HT].Count))
-    AND (aTick + BUILD_TOWER_DELAY > gGame.GameOptions.Peacetime * 600)
+    AND (aTick + BUILD_TOWER_DELAY > gGame.Options.Peacetime * 600)
     AND (aTick > MINIMAL_TOWER_DELAY)
     AND (AddToConstruction(HT, True, True) = csHousePlaced) then
     begin
@@ -1465,8 +1469,6 @@ begin
   // All other houses (food and weapon production) + houses which will be required in final city size
   SelectHouse(ALL_WARE);
 end;
-
-
 
 
 procedure TKMCityBuilder.CreateShortcuts();
@@ -1515,7 +1517,7 @@ const
     for HT := Low(fPlanner.PlannedHouses) to High(fPlanner.PlannedHouses) do
     begin
       if (HT = htWoodcutters) then
-        continue;
+        Continue;
       with fPlanner.PlannedHouses[HT] do
         for K := 0 to Count - 1 do
           if Plans[K].Placed AND not Plans[K].ShortcutsCompleted then
@@ -1607,7 +1609,7 @@ begin
       begin
         gAIFields.Influences.AvoidBuilding[BaseLoc.Y+1, K] := 255;
         if gHands[fOwner].CanAddFieldPlan(KMPoint(K, BaseLoc.Y+1) , ftRoad) then
-          gHands[fOwner].BuildList.FieldworksList.AddField(KMPoint(K, BaseLoc.Y+1) , ftRoad);
+          gHands[fOwner].Constructions.FieldworksList.AddField(KMPoint(K, BaseLoc.Y+1) , ftRoad);
       end;
 
   // Find houses which should be connected
@@ -1619,7 +1621,7 @@ begin
     for HT in HOUSE_CONNECTION[BaseHT] do
     begin
       if (HT = htNone) then
-        break;
+        Break;
 
       Locs.Clear();
       for L := 0 to PlannedHouses[HT].Count - 1 do
@@ -1635,7 +1637,7 @@ begin
       for HT := Low(PlannedHouses) to High(PlannedHouses) do
       begin
         if (HT = htWoodcutters) then
-          continue;
+          Continue;
         for K := 0 to PlannedHouses[HT].Count - 1 do
           with PlannedHouses[HT].Plans[K] do
             if Placed then
@@ -1719,15 +1721,6 @@ end;
 
 
 procedure TKMCityBuilder.Paint();
-const
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $0000FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
-  COLOR_NEW = $FFFF00;
-  COLOR_NEW2 = $FF00FF;
 var
   K,L: Integer;
   Color: Cardinal;
@@ -1739,9 +1732,9 @@ begin
       if not IsDeadOrDying then
       begin
         if (gHands[fOwner].Units[K] is TKMUnitSerf) AND IsIdle then
-          gRenderAux.Quad(CurrPosition.X, CurrPosition.Y, $44000000 OR COLOR_BLUE)
+          gRenderAux.Quad(Position.X, Position.Y, $44000000 OR tcBlue)
         else if (gHands[fOwner].Units[K] is TKMUnitWorker) AND IsIdle then
-          gRenderAux.Quad(CurrPosition.X, CurrPosition.Y, $44000000 OR COLOR_NEW2);
+          gRenderAux.Quad(Position.X, Position.Y, $44000000 OR tcFuchsia);
       end;
 
   Color := 0; // For compiler
@@ -1750,14 +1743,14 @@ begin
       if Active then
       begin
         case FieldType of
-          ftCorn: Color := $40000000 OR COLOR_GREEN;
-          ftWine: Color := $88000000 OR COLOR_GREEN;
-          ftRoad: Color := $80000000 OR COLOR_NEW;//COLOR_YELLOW;
+          ftCorn: Color := $40000000 OR tcGreen;
+          ftWine: Color := $88000000 OR tcGreen;
+          ftRoad: Color := $80000000 OR tcCyan;
         end;
         if RemoveTreesMode then
-          Color := $60000000 OR COLOR_BLUE;
+          Color := $60000000 OR tcBlue;
         if ShortcutMode then
-          Color := $20000000 OR COLOR_BLACK;
+          Color := $20000000 OR tcBlack;
         for L := 0 to FieldList.Count - 1 do
         begin
           Point := FieldList.Items[L];
@@ -1769,9 +1762,6 @@ end;
 
 
 {
-
-
-
 // Remove units when is game in GA mode (avoid to place houses at unit)
 if GA_PLANNER then
   for I := 0 to gHands[fOwner].Units.Count - 1 do
@@ -1830,9 +1820,9 @@ begin
         AddField();
       if fPlanner.GetFieldToHouse(aHT, HouseIdx, FieldList, FieldType) then // Place fields
         AddField();
-      if gHands[fOwner].BuildList.HousePlanList.TryGetPlan(Loc, HPlan) then // Remove house plan (it must be done because of road planning)
+      if gHands[fOwner].Constructions.HousePlanList.TryGetPlan(Loc, HPlan) then // Remove house plan (it must be done because of road planning)
       begin
-        gHands[fOwner].BuildList.HousePlanList.RemPlan(Loc);
+        gHands[fOwner].Constructions.HousePlanList.RemPlan(Loc);
         gHands[fOwner].Stats.HousePlanRemoved(aHT);
       end;
       gHands[fOwner].AddHouse(aHT, Loc.X, Loc.Y, True); // Place house
@@ -2189,7 +2179,7 @@ end;
 procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
   function IsPlan(aPoint: TKMPoint; aLock: TKMTileLock; aField: TKMFieldType): Boolean;
   begin
-    Result := (gHands[fOwner].BuildList.FieldworksList.HasField(aPoint) = aField)
+    Result := (gHands[fOwner].Constructions.FieldworksList.HasField(aPoint) = aField)
               OR (gTerrain.Land[aPoint.Y, aPoint.X].TileLock = aLock);
   end;
   function IsCompletedRoad(aPoint: TKMPoint): Boolean;
@@ -2224,7 +2214,7 @@ procedure TKMCityBuilder.UpdateBuildNode(var aNode: TBuildNode);
     Output := False;
     if gHands[fOwner].CanAddFieldPlan(aNode.FieldList.Items[aIdx], aFieldType) then
     begin
-      gHands[fOwner].BuildList.FieldworksList.AddField(aNode.FieldList.Items[aIdx], aFieldType);
+      gHands[fOwner].Constructions.FieldworksList.AddField(aNode.FieldList.Items[aIdx], aFieldType);
       aNode.FreeWorkers := aNode.FreeWorkers - 1;
       Output := True;
     end;

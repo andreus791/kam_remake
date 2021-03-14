@@ -57,7 +57,7 @@ type
 implementation
 uses
   SysUtils, KromUtils, Math,
-  KM_Game, KM_Render,
+  KM_Game, KM_GameParams, KM_Render, KM_RenderTypes,
   KM_Units, KM_UnitGroup, KM_Hand, KM_HandsCollection,
   KM_Resource, KM_ResUnits, KM_CommonUtils,
   KM_DevPerfLog, KM_DevPerfLogTypes;
@@ -262,11 +262,11 @@ begin
           begin
             ID := LandPtr.BaseLayer.Terrain;
             // Do not use fMyTerrain.Land[].Light for borders of the map, because it is set to -1 for fading effect
-            // So assume fMyTerrain.Land[].Light as 0 in this case
+            // So assume fMyTerrain.Land[].Light as medium value in this case
             if (I = 0) or (I = fMapY - 1) or (K = 0) or (K = fMapX - 1) then
               Light := 255-FOW
             else
-              Light := Round(LandPtr.Light*64)-(255-FOW); //it's -255..255 range now
+              Light := Round(LandPtr.RenderLight*64)-(255-FOW); //it's -255..255 range now
             RGB := gRes.Tileset.TileColor[ID];
             fBase[I*fMapX + K] := Byte(EnsureRange(RGB.R+Light,0,255)) or
                                   Byte(EnsureRange(RGB.G+Light,0,255)) shl 8 or
@@ -292,8 +292,8 @@ begin
       end;
 
   //Draw 'Resize map' feature on minimap
-  if (gGame <> nil) and gGame.IsMapEditor
-    and (mlMapResize in gGame.MapEditor.VisibleLayers)
+  if (gGame <> nil) and gGameParams.IsMapEditor
+    and (melMapResize in gGame.MapEditor.VisibleLayers)
     and not KMSameRect(gGame.MapEditor.ResizeMapRect, KMRECT_ZERO) then
     for I := 0 to fMapY - 1 do
       for K := 0 to fMapX - 1 do

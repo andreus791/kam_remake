@@ -3,7 +3,7 @@ unit KM_GUIMenuCampaign;
 interface
 uses
   Classes, Controls, SysUtils, Math,
-  KM_Controls, KM_Pics, KM_MapTypes,
+  KM_Controls, KM_Pics, KM_MapTypes, KM_CampaignTypes, KM_GameTypes,
   KM_Campaigns, KM_InterfaceDefaults;
 
 
@@ -11,6 +11,8 @@ type
   TKMMenuCampaign = class (TKMMenuPageCommon)
   private
     fOnPageChange: TKMMenuChangeEventText; //will be in ancestor class
+
+    fCampaigns: TKMCampaignsCollection;
 
     fCampaignId: TKMCampaignId;
     fCampaign: TKMCampaign;
@@ -22,12 +24,13 @@ type
     procedure BackClick(Sender: TObject);
     procedure Scroll_Toggle(Sender: TObject);
 
+    procedure SelectMap(aMapIndex: Byte);
     procedure Campaign_SelectMap(Sender: TObject);
     procedure UpdateDifficultyLevel;
     procedure StartClick(Sender: TObject);
     procedure Difficulty_Change(Sender: TObject);
     procedure AnimNodes(aTickCount: Cardinal);
-    procedure PlayBrifingAudioTrack;
+    procedure PlayBriefingAudioTrack;
   protected
     Panel_Campaign: TKMPanel;
       Image_CampaignBG: TKMImage;
@@ -43,7 +46,9 @@ type
       DropBox_Difficulty: TKMDropList;
       Button_CampaignStart, Button_CampaignBack: TKMButton;
   public
-    constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
+    OnNewCampaignMap: TKMNewCampaignMapEvent;
+
+    constructor Create(aParent: TKMPanel; aCampaigns: TKMCampaignsCollection; aOnPageChange: TKMMenuChangeEventText);
 
     procedure MouseMove(Shift: TShiftState; X,Y: Integer);
     procedure Resize(X, Y: Word);
@@ -57,7 +62,7 @@ type
 
 implementation
 uses
-  KM_GameApp, KM_ResTexts, KM_RenderUI, KM_ResFonts, KM_Sound, KM_ResSound, KM_Defaults, KM_Video;
+  KM_Audio, KM_GameSettings, KM_ResTexts, KM_RenderUI, KM_ResFonts, KM_Music, KM_Sound, KM_ResSound, KM_Defaults, KM_Video;
 
 const
   FLAG_LABEL_OFFSET_X = 10;
@@ -65,11 +70,13 @@ const
   CAMP_NODE_ANIMATION_PERIOD = 5;
 
 { TKMGUIMainCampaign }
-constructor TKMMenuCampaign.Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
+constructor TKMMenuCampaign.Create(aParent: TKMPanel; aCampaigns: TKMCampaignsCollection; aOnPageChange: TKMMenuChangeEventText);
 var
   I: Integer;
 begin
   inherited Create(gpCampaign);
+
+  fCampaigns := aCampaigns;
 
   fDifficulty := mdNone;
   fMapIndex := 1;
@@ -146,7 +153,7 @@ const
 var
   I: Integer;
 begin
-  fCampaign := gGameApp.Campaigns.CampaignById(fCampaignId);
+  fCampaign := fCampaigns.CampaignById(fCampaignId);
 
   //Choose background
   Image_CampaignBG.RX := fCampaign.BackGroundPic.RX;
@@ -174,8 +181,8 @@ begin
     Label_CampaignFlags[I].AbsTop := Image_CampaignFlags[I].AbsTop + FLAG_LABEL_OFFSET_Y;
   end;
 
-  //Select last map to play by 'clicking' last node
-  Campaign_SelectMap(Image_CampaignFlags[fCampaign.UnlockedMap]);
+  //Select last map, no brifing will be played, since its set as
+  SelectMap(fCampaign.UnlockedMap);
 end;
 
 
@@ -191,8 +198,8 @@ begin
   begin
     DiffLevels := fCampaign.MapsInfo[fMapIndex].TxtInfo.DifficultyLevels;
 
-    if gGameApp.GameSettings.CampaignLastDifficulty in DiffLevels then
-      OldMD := gGameApp.GameSettings.CampaignLastDifficulty;
+    if gGameSettings.CampaignLastDifficulty in DiffLevels then
+      OldMD := gGameSettings.CampaignLastDifficulty;
 
     DropBox_Difficulty.Clear;
     I := 0;
@@ -232,25 +239,23 @@ begin
 end;
 
 
-procedure TKMMenuCampaign.Campaign_SelectMap(Sender: TObject);
+procedure TKMMenuCampaign.SelectMap(aMapIndex: Byte);
 var
   I: Integer;
-  Color: Cardinal;
+  color: Cardinal;
 begin
-  if TKMControl(Sender).Tag > fCampaign.UnlockedMap then exit; //Skip closed maps
-
-  fMapIndex := TKMControl(Sender).Tag;
+  fMapIndex := aMapIndex;
 
   UpdateDifficultyLevel;
-  
+
   // Place highlight
   for I := 0 to High(Image_CampaignFlags) do
   begin
     Image_CampaignFlags[I].Highlight := (fMapIndex = I);
-    Color := icLightGray2;
+    color := icLightGray2;
     if I < fCampaign.MapCount then
-      Color := DIFFICULTY_LEVELS_COLOR[fCampaign.MapsProgressData[I].BestCompleteDifficulty];
-    Label_CampaignFlags[I].FontColor := Color;
+      color := DIFFICULTY_LEVELS_COLOR[fCampaign.MapsProgressData[I].BestCompleteDifficulty];
+    Label_CampaignFlags[I].FontColor := color;
   end;
 
   //Connect by sub-nodes
@@ -276,22 +281,35 @@ begin
 
   Image_ScrollRestore.Hide;
   Panel_CampScroll.Show;
-
-  gGameApp.MusicLib.StopPlayingOtherFile; //Stop playing the previous breifing even if this one doesn't exist
-  PlayBrifingAudioTrack;
 end;
 
-procedure TKMMenuCampaign.PlayBrifingAudioTrack;
+
+// Flag was clicked on the Map
+procedure TKMMenuCampaign.Campaign_SelectMap(Sender: TObject);
 begin
-  gGameApp.PauseMusicToPlayFile(fCampaign.GetBreifingAudioFile(fMapIndex));
+  if TKMControl(Sender).Tag > fCampaign.UnlockedMap then Exit; //Skip closed maps
+
+  SelectMap(TKMControl(Sender).Tag);
+
+  // Play briefing
+  PlayBriefingAudioTrack;
+end;
+
+procedure TKMMenuCampaign.PlayBriefingAudioTrack;
+begin
+  gMusic.StopPlayingOtherFile; //Stop playing the previous briefing even if this one doesn't exist
+  TKMAudio.PauseMusicToPlayFile(fCampaign.GetBreifingAudioFile(fMapIndex));
 end;
 
 procedure TKMMenuCampaign.StartClick(Sender: TObject);
 begin
-  gGameApp.MusicLib.StopPlayingOtherFile;
-  gGameApp.NewCampaignMap(fCampaign, fMapIndex, fDifficulty);
+  gMusic.StopPlayingOtherFile;
+
+  if Assigned(OnNewCampaignMap) then
+    OnNewCampaignMap(fCampaignId, fMapIndex, fDifficulty);
+
   if fCampaign.MapsInfo[fMapIndex].TxtInfo.HasDifficultyLevels then
-    gGameApp.GameSettings.CampaignLastDifficulty := TKMMissionDifficulty(DropBox_Difficulty.GetSelectedTag);
+    gGameSettings.CampaignLastDifficulty := TKMMissionDifficulty(DropBox_Difficulty.GetSelectedTag);
 end;
 
 
@@ -365,18 +383,22 @@ begin
   if not fCampaign.Viewed then
   begin
     fCampaign.Viewed := True;
-    gGameApp.Campaigns.SaveProgress;
+    fCampaigns.SaveProgress;
 
     gVideoPlayer.AddCampaignVideo(fCampaign.Path, 'Logo');
     gVideoPlayer.AddCampaignVideo(fCampaign.Path, 'Intro');
-    gVideoPlayer.SetCallback(PlayBrifingAudioTrack);
+    gVideoPlayer.SetCallback(PlayBriefingAudioTrack); // Start briefing audio after logo and intro videos
     gVideoPlayer.Play;
   end;
+
+  // Start briefing audio immidiately, if video was not started (disabled / no video file etc)
+  if not gVideoPlayer.IsActive then
+    PlayBriefingAudioTrack;
 end;
 
 procedure TKMMenuCampaign.BackClick(Sender: TObject);
 begin
-  gGameApp.MusicLib.StopPlayingOtherFile; //Cancel briefing if it was playing
+  gMusic.StopPlayingOtherFile; //Cancel briefing if it was playing
 
   fOnPageChange(gpCampSelect);
 end;

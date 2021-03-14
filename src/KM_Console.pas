@@ -1,54 +1,53 @@
 unit KM_Console;
+{$I KaM_Remake.inc}
 interface
 uses
   Generics.Collections,
   KM_CommonTypes, KM_NetworkTypes;
 
 
-
 type
   TKMChatMode = (cmAll, cmTeam, cmSpectators, cmWhisper);
 
   TKMConsole = class
-    private
-      fLastConsoleTime: Cardinal;
-      fHistory: TList<String>;
-      fCurrConsoleHistoryId: Integer;
-      fOnChange: TEvent;
-      fOnPost: TUnicodeStringEvent;
-      fOnPostLocal: TUnicodeStringEvent;
-      fOnError: TUnicodeStringEvent;
-      fMessages: UnicodeString;
+  private
+    fLastConsoleTime: Cardinal;
+    fHistory: TList<String>;
+    fCurrConsoleHistoryId: Integer;
+    fOnChange: TEvent;
+    fOnPost: TUnicodeStringEvent;
+    fOnPostLocal: TUnicodeStringEvent;
+    fOnError: TUnicodeStringEvent;
+    fMessages: UnicodeString;
 
-      procedure SetMessages(const aMessages: UnicodeString);
+    procedure SetMessages(const aMessages: UnicodeString);
 
-      function TryDoCallConsoleCommand: Boolean;
-    public
+    function TryDoCallConsoleCommand: Boolean;
+  public
+    Text: UnicodeString;
 
-      Text: UnicodeString;
+    constructor Create;
+    destructor Destroy; override;
 
-      constructor Create;
-      destructor Destroy; override;
+    property Messages: UnicodeString read fMessages write SetMessages;
 
-      property Messages: UnicodeString read fMessages write SetMessages;
+    property OnPost: TUnicodeStringEvent read fOnPost write fOnPost;
+    property OnPostLocal: TUnicodeStringEvent read fOnPostLocal write fOnPostLocal;
+    property OnError: TUnicodeStringEvent read fOnError write fOnError;
+    property OnChange: TEvent read fOnChange write fOnChange;
 
-      property OnPost: TUnicodeStringEvent read fOnPost write fOnPost;
-      property OnPostLocal: TUnicodeStringEvent read fOnPostLocal write fOnPostLocal;
-      property OnError: TUnicodeStringEvent read fOnError write fOnError;
-      property OnChange: TEvent read fOnChange write fOnChange;
+    procedure Post(aPropagate: Boolean = True);
+    function IsPostAllowed: Boolean;
+    function TryCallConsoleCommand: Boolean;
 
-      procedure Post(aPropagate: Boolean = True);
-      function IsPostAllowed: Boolean;
-      function TryCallConsoleCommand: Boolean;
+    function GetNextHistoryMsg: UnicodeString;
+    function GetPrevHistoryMsg: UnicodeString;
 
-      function GetNextHistoryMsg: UnicodeString;
-      function GetPrevHistoryMsg: UnicodeString;
+    procedure Add(const aMessage: UnicodeString);
+    procedure AddLine(const aMessage: UnicodeString);
 
-      procedure Add(const aMessage: UnicodeString);
-      procedure AddLine(const aMessage: UnicodeString);
-
-      procedure Clear; virtual;
-    end;
+    procedure Clear; virtual;
+  end;
 
 
   TKMChat = class(TKMConsole)
@@ -59,11 +58,16 @@ type
     WhisperRecipient: TKMNetHandleIndex;
 
     constructor Create;
+    destructor Destroy; override;
 
     property Mode: TKMChatMode read fMode write SetMode;
 
     procedure Clear; override;
   end;
+
+
+var
+  gChat: TKMChat;
 
 const
   CHAT_COOLDOWN = 500;  //Minimum time in milliseconds between chat messages
@@ -136,11 +140,7 @@ end;
 
 function TKMConsole.GetPrevHistoryMsg: UnicodeString;
 begin
-  if fHistory.Count = 0 then
-  begin
-    Result := '';
-    Exit;
-  end;
+  if fHistory.Count = 0 then Exit('');
 
   fCurrConsoleHistoryId := Max(0, fCurrConsoleHistoryId - 1);
   Result := fHistory[fCurrConsoleHistoryId];
@@ -170,10 +170,9 @@ begin
 end;
 
 
-
 function TKMConsole.IsPostAllowed : Boolean;
 begin
-  Result := (Trim(Text) <> '') and (GetTimeSince(fLastConsoleTime) >= CHAT_COOLDOWN)
+  Result := (Trim(Text) <> '') and (TimeSince(fLastConsoleTime) >= CHAT_COOLDOWN)
 end;
 
 
@@ -183,15 +182,19 @@ begin
   if gGame = nil then //Can't manage console commands while not in the game
     Exit;
 
-  if (Length(Text) > 0) and (Text[1] = '/') and (Text[2] <> '/') then
+  // Text starts with / and its long enought to have some script command in there
+  if (Length(Text) > 1) and (Text[1] = '/') then
   begin
-    TryDoCallConsoleCommand;
-    //Add command to history, but do not propagate post to others
-    Post(False);
-    Result := True;
-  end else
-  if (Length(Text) > 1) and (Text[1] = '/') and (Text[2] = '/') then
-    Delete(Text, 1, 1); //Remove one of the /'s
+    if (Text[2] = '/') then
+      Delete(Text, 1, 1) //Remove one of the /'s
+    else
+    begin
+      TryDoCallConsoleCommand;
+      //Add command to history, but do not propagate post to others
+      Post(False);
+      Result := True;
+    end;
+  end;
 end;
 
 
@@ -317,6 +320,16 @@ begin
   inherited;
 
   Clear;
+
+  gChat := Self;
+end;
+
+
+destructor TKMChat.Destroy;
+begin
+  gChat := nil;
+
+  inherited;
 end;
 
 

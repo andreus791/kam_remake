@@ -51,6 +51,8 @@ type
       Button_DeleteYes, Button_DeleteNo: TKMButton;
 
   public
+    OnNewSingleSave: TUnicodeStringEvent;
+
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     destructor Destroy; override;
 
@@ -61,7 +63,7 @@ type
 
 implementation
 uses
-  KM_Log, KM_ResTexts, KM_GameApp, KM_RenderUI, KM_ResFonts, KM_Pics;
+  KM_Log, KM_ResTexts, KM_RenderUI, KM_ResFonts, KM_Pics, KM_GameSettings;
 
 
 { TKMGUIMenuLoad }
@@ -232,7 +234,8 @@ procedure TKMMenuLoad.LoadClick(Sender: TObject);
 
   procedure DoLoad;
   begin
-    gGameApp.NewSingleSave(fSaves[ColumnBox_Load.ItemIndex].FileName);
+    if Assigned(OnNewSingleSave) then
+      OnNewSingleSave(fSaves[ColumnBox_Load.ItemIndex].FileName);
   end;
 
 var
@@ -271,7 +274,7 @@ end;
 procedure TKMMenuLoad.SetLastSaveFileName(const aFileName: String = '');
 begin
   fLastSaveFileName := aFileName;
-  gGameApp.GameSettings.MenuSPSaveFileName := aFileName;
+  gGameSettings.MenuSPSaveFileName := aFileName;
 end;
 
 
@@ -430,12 +433,10 @@ begin
   if aVisible then
   begin
     PopUp_Delete.Show;
-    ColumnBox_Load.Focusable := False;
-    gGameApp.MainMenuInterface.MyControls.UpdateFocus(ColumnBox_Load);
+    ColumnBox_Load.Focusable := False; // Will update focus automatically
   end else begin
     PopUp_Delete.Hide;
-    ColumnBox_Load.Focusable := True;
-    gGameApp.MainMenuInterface.MyControls.UpdateFocus(ColumnBox_Load);
+    ColumnBox_Load.Focusable := True; // Will update focus automatically
   end;
 end;
 
@@ -476,7 +477,7 @@ begin
   ColumnBox_Load.Clear; //clear the list
   Load_DeleteConfirmation(False);
   UpdateUI;
-  fLastSaveFileName := gGameApp.GameSettings.MenuSPSaveFileName;
+  fLastSaveFileName := gGameSettings.MenuSPSaveFileName;
 
   //Initiate refresh and process each new save added
   fSaves.Refresh(Load_ScanUpdate, False, Load_ScanComplete);

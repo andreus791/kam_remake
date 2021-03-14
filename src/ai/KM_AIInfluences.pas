@@ -24,11 +24,12 @@ const
 
 
 type
-
-  //Collection of influence maps
+  // Collection of influence maps
   TKMInfluences = class
   private
-    fMapX, fMapY, fPolygons: Word; // Limits of arrays
+    fMapX, fMapY, fPolyCnt: Word; // Limits of arrays
+
+    fAlli2PL: TKMHandID2Array;
 
     fAvoidBuilding: TKMByteArray; //Common map of areas where building is undesired (around Store, Mines, Woodcutters)
     fUpdateCityIdx, fUpdateArmyIdx: TKMHandID; // Update index
@@ -39,19 +40,21 @@ type
     fInfluenceSearch: TNavMeshInfluenceSearch;
     fNavMesh: TKMNavMesh;
 
+    {$IFDEF DEBUG_AIInfluences}
+    fTimeAvrgOwnership, fTimeAvrgPresence: Int64;
+    fTimePeakOwnership, fTimePeakPresence: Int64;
+    {$ENDIF}
+
     // Avoid building
     procedure InitAvoidBuilding();
     function GetAvoidBuilding(const aY,aX: Word): Byte;
     procedure SetAvoidBuilding(const aY,aX: Word; const aValue: Byte);
     // Army presence
-    function GetPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType): Word; inline;
-    procedure SetPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType; const aPresence: Word); inline;
-    procedure SetIncPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType; const aPresence: Word); inline;
-    function GetAllPresences(const aPL: TKMHandID; const aIdx: Word): Word; inline;
-    function GetArmyTraffic(const aOwner: TKMHandID; const aIdx: Word): Word;
-    function GetEnemyGroupPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType): Word;
-    //function GetAlliancePresence(const aPL: TKMHandIndex; aIdx: Word; const aAllianceType: TKMAllianceType): Word;
-    procedure UpdateMilitaryPresence(const aPL: TKMHandID);
+    function GetPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType): Word;
+    procedure SetPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType; const aPresence: Word); inline;
+    procedure SetIncPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType; const aPresence: Word); inline;
+    procedure UpdateMilitaryPresence(aAllianceIdx: Integer);
+    procedure SetLengthOfPresence();
     // City influence
     function GetOwnership(const aPL: TKMHandID; const aIdx: Word): Byte; inline;
     procedure SetOwnership(const aPL: TKMHandID; const aIdx: Word; const aOwnership: Byte); inline;
@@ -60,8 +63,6 @@ type
     function GetOwnershipFromPoint(const aPL: TKMHandID; const aPoint: TKMPoint): Byte; inline;
     procedure SetOwnershipFromPoint(const aPL: TKMHandID; const aPoint: TKMPoint; const aOwnership: Byte); inline;
     procedure UpdateOwnership(const aPL: TKMHandID);
-    // Common
-    procedure InitArrays();
   public
     constructor Create(aNavMesh: TKMNavMesh);
     destructor Destroy(); override;
@@ -71,12 +72,8 @@ type
     // Avoid building
     property AvoidBuilding[const aY,aX: Word]: Byte read GetAvoidBuilding write SetAvoidBuilding;
     // Army presence
-    property Presence[const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType]: Word read GetPresence write SetPresence;
-    property IncPresence[const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType]: Word write SetIncPresence;
-    property PresenceAllGroups[const aPL: TKMHandID; const aIdx: Word]: Word read GetAllPresences;
-    property ArmyTraffic[const aOwner: TKMHandID; const aIdx: Word]: Word read GetArmyTraffic;
-    property EnemyGroupPresence[const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType]: Word read GetEnemyGroupPresence;
-    //property AlliancePresence[const aPL: TKMHandIndex; aIdx: Word; const aAllianceType: TKMAllianceType]: Word read GetAlliancePresence;
+    property Presence[const aAlliance, aIdx: Word; const aGT: TKMGroupType]: Word read GetPresence write SetPresence;
+    property IncPresence[const aAlliance, aIdx: Word; const aGT: TKMGroupType]: Word write SetIncPresence;
     // City influence
     property Ownership[const aPL: TKMHandID; const aY,aX: Word]: Byte read GetOwnershipFromCoords write SetOwnershipFromCoords; // To secure compatibility with old AI
     property OwnPoint[const aPL: TKMHandID; const aPoint: TKMPoint]: Byte read GetOwnershipFromPoint write SetOwnershipFromPoint;
@@ -89,8 +86,8 @@ type
     procedure RemAvoidBuilding(aArea: TKMRect);
     procedure MarkForest(aPoint: TKMPoint; aRad, aDecreaseCoef: Single);
     // Army presence
-    function GetAlliancePresence(const aPL: TKMHandID; const aX,aY: Word; const aAllianceType: TKMAllianceType): Byte; overload;
-    function GetAlliancePresence(const aPL: TKMHandID; const aIdx: Word; const aAllianceType: TKMAllianceType): Byte; overload;
+    function GetAllianceIdx(const aPL: TKMHandID; var aIdx: Integer): Boolean;
+    function GetArmyTraffic(const aAlliance, aIdx: Word): Word;
     // City influence
     function GetBestOwner(const aX,aY: Word): TKMHandID; overload;
     function GetBestOwner(const aIdx: Word): TKMHandID; overload;
@@ -102,19 +99,28 @@ type
     function GetOtherOwnerships(const aPL: TKMHandID; const aIdx: Word): Word; overload;
     function CanPlaceHouseByInfluence(const aPL: TKMHandID; const aX,aY: Word; const aIgnoreAllies: Boolean = False): Boolean; overload;
     function CanPlaceHouseByInfluence(const aPL: TKMHandID; const aIdx: Word; const aIgnoreAllies: Boolean = False): Boolean; overload;
+    // Common
+    procedure InitInfluences();
 
     procedure AfterMissionInit();
     procedure UpdateState(aTick: Cardinal);
+    procedure UpdateAlliances(const aAlli2PL: TKMHandID2Array);
     procedure Paint(const aRect: TKMRect);
   end;
 
+const
+  AVOID_TRAFFIC_IDX = 4; // Index of avoid traffic in the fOwnership array (0-3 are group types)
 
 implementation
 uses
   Classes, Graphics, SysUtils,
   KM_RenderAux,
+  {$IFDEF DEBUG_AIInfluences}
+    KM_CommonUtils,
+  {$ENDIF}
   KM_Terrain, KM_Houses, KM_HouseCollection,
-  KM_Hand, KM_HandsCollection, KM_ResHouses;
+  KM_Hand, KM_HandsCollection,
+  KM_ResTypes;
 
 
 { TKMInfluenceMaps }
@@ -123,10 +129,17 @@ begin
   inherited Create();
 
   fNavMesh := aNavMesh;
+  fPolyCnt := 0;
   fUpdateCityIdx := 0;
   fUpdateArmyIdx := 0;
   fInfluenceFloodFill := TKMInfluenceFloodFill.Create(False); // Check if True is better
   fInfluenceSearch := TNavMeshInfluenceSearch.Create(False);
+  {$IFDEF DEBUG_AIInfluences}
+    fTimeAvrgOwnership := 0;
+    fTimeAvrgPresence := 0;
+    fTimePeakOwnership := 0;
+    fTimePeakPresence := 0;
+  {$ENDIF}
 end;
 
 
@@ -140,15 +153,23 @@ end;
 
 procedure TKMInfluences.Save(SaveStream: TKMemoryStream);
 var
-  Len: Integer;
+  K, Len: Integer;
 begin
 
   SaveStream.PlaceMarker('Influences');
   SaveStream.Write(fMapX);
   SaveStream.Write(fMapY);
-  SaveStream.Write(fPolygons);
+  SaveStream.Write(fPolyCnt);
   SaveStream.Write(fUpdateCityIdx,SizeOf(fUpdateCityIdx));
   SaveStream.Write(fUpdateArmyIdx,SizeOf(fUpdateArmyIdx));
+
+  SaveStream.PlaceMarker('Alliances');
+  SaveStream.Write( Integer(Length(fAlli2PL)) );
+  for K := Low(fAlli2PL) to High(fAlli2PL) do
+  begin
+    SaveStream.Write( Integer(Length(fAlli2PL[K])) );
+    SaveStream.Write(fAlli2PL[K,0], SizeOf(fAlli2PL[K,0])*Length(fAlli2PL[K]));
+  end;
 
   SaveStream.PlaceMarker('AvoidBuilding');
   SaveStream.Write(fAvoidBuilding[0], SizeOf(fAvoidBuilding[0]) * Length(fAvoidBuilding));
@@ -167,14 +188,24 @@ end;
 
 procedure TKMInfluences.Load(LoadStream: TKMemoryStream);
 var
-  Len: Integer;
+  K, Len: Integer;
 begin
   LoadStream.CheckMarker('Influences');
   LoadStream.Read(fMapX);
   LoadStream.Read(fMapY);
-  LoadStream.Read(fPolygons);
+  LoadStream.Read(fPolyCnt);
   LoadStream.Read(fUpdateCityIdx,SizeOf(fUpdateCityIdx));
   LoadStream.Read(fUpdateArmyIdx,SizeOf(fUpdateArmyIdx));
+
+  LoadStream.CheckMarker('Alliances');
+  LoadStream.Read(Len);
+  SetLength(fAlli2PL, Len);
+  for K := Low(fAlli2PL) to High(fAlli2PL) do
+  begin
+    LoadStream.Read(Len);
+    SetLength(fAlli2PL[K],Len);
+    LoadStream.Read(fAlli2PL[K,0], SizeOf(fAlli2PL[K,0])*Length(fAlli2PL[K]));
+  end;
 
   LoadStream.CheckMarker('AvoidBuilding');
   SetLength(fAvoidBuilding, fMapY * fMapX);
@@ -192,8 +223,6 @@ begin
 end;
 
 
-
-
 //Make the area around to be avoided by common houses
 procedure TKMInfluences.AddAvoidBuilding(aX,aY: Word; aRad: Single);
 var
@@ -208,6 +237,7 @@ begin
       AND (Sqr(aX-X) + Sqr(aY-Y) <= Sqr(aRad)) then
       AvoidBuilding[Y,X] := 255;
 end;
+
 
 procedure TKMInfluences.RemAvoidBuilding(aArea: TKMRect);
 var
@@ -305,143 +335,121 @@ begin
 end;
 
 
-
-
-function TKMInfluences.GetAllPresences(const aPL: TKMHandID; const aIdx: Word): Word;
-var
-  Idx: Integer;
-  GT: TKMGroupType;
-begin
-  Result := 0;
-  Idx := (aPL*fPolygons + aIdx) shl 2;
-  for GT := Low(TKMGroupType) to High(TKMGroupType) do
-    Result := Min(High(Word), Result + fPresence[Idx + Byte(GT)]);
-end;
-
-
-function TKMInfluences.GetArmyTraffic(const aOwner: TKMHandID; const aIdx: Word): Word;
+function TKMInfluences.GetArmyTraffic(const aAlliance, aIdx: Word): Word;
 const
   MAX_SOLDIERS_IN_POLYGON = 20; // Maximal count of soldiers in 1 triangle of NavMesh - it depends on NavMesh size!!!
-var
-  PL: TKMHandID;
 begin
-  Result := 0;
-  for PL := 0 to gHands.Count - 1 do
-    //if (PL <> aOwner) then
-    begin
-      Result := Result + GetAllPresences(PL, aIdx);
-      if (Result > MAX_SOLDIERS_IN_POLYGON) then // Influences may overlap but in 1 polygon can be max [MAX_SOLDIERS_IN_POLYGON] soldiers
-      begin
-        Result := MAX_SOLDIERS_IN_POLYGON;
-        break;
-      end;
-    end;
+  Result := Min(MAX_SOLDIERS_IN_POLYGON, fPresence[ aAlliance*5*fPolyCnt + 5*aIdx + AVOID_TRAFFIC_IDX ]);
 end;
 
 
-function TKMInfluences.GetPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType): Word;
+function TKMInfluences.GetPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType): Word;
 begin
-  Result := fPresence[((aPL*fPolygons + aIdx)*4) + Byte(aGT)];
+  Result := fPresence[ aAlliance*5*fPolyCnt + 5*aIdx + Byte(aGT) ];
 end;
 
 
-procedure TKMInfluences.SetPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType; const aPresence: Word);
+procedure TKMInfluences.SetPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType; const aPresence: Word);
 begin
-  fPresence[((aPL*fPolygons + aIdx)*4) + Byte(aGT)] := aPresence;
+  fPresence[ aAlliance*5*fPolyCnt + 5*aIdx + Byte(aGT) ] := aPresence;
 end;
 
 
-procedure TKMInfluences.SetIncPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType; const aPresence: Word);
+procedure TKMInfluences.SetIncPresence(const aAlliance, aIdx: Word; const aGT: TKMGroupType; const aPresence: Word);
 begin
-  Inc(  fPresence[ ((aPL*fPolygons + aIdx)*4) + Byte(aGT) ], aPresence  );
+  Inc(  fPresence[ aAlliance*5*fPolyCnt + 5*aIdx + Byte(aGT) ], aPresence  );
 end;
 
 
-function TKMInfluences.GetEnemyGroupPresence(const aPL: TKMHandID; const aIdx: Word; const aGT: TKMGroupType): Word;
-var
-  PL: TKMHandID;
-begin
-  Result := 0;
-  for PL := 0 to gHands.Count - 1 do
-    if gHands[PL].Enabled AND (gHands[aPL].Alliances[PL] = atEnemy) then
-      Result := Result + Presence[PL, aIdx, aGT];
-end;
-
-
-function TKMInfluences.GetAlliancePresence(const aPL: TKMHandID; const aX,aY: Word; const aAllianceType: TKMAllianceType): Byte;
-begin
-  Result := GetAlliancePresence(aPL, fNavMesh.Point2Polygon[aY,aX], aAllianceType);
-end;
-
-
-function TKMInfluences.GetAlliancePresence(const aPL: TKMHandID; const aIdx: Word; const aAllianceType: TKMAllianceType): Byte;
-var
-  PL: TKMHandID;
-begin
-  Result := 0;
-  for PL := 0 to gHands.Count - 1 do
-    if gHands[PL].Enabled AND (gHands[aPL].Alliances[PL] = aAllianceType) then
-    begin
-      Result := Min(High(Result),Result + PresenceAllGroups[PL, aIdx]);
-      if Result = High(Result) then
-        Exit;
-    end;
-end;
-
-
-procedure TKMInfluences.UpdateMilitaryPresence(const aPL: TKMHandID);
+procedure TKMInfluences.UpdateMilitaryPresence(aAllianceIdx: Integer);
 const
-  EACH_X_MEMBER_COEF = 10;
-  MAX_DISTANCE = 20;
-var
-  I, K, Cnt: Integer;
-  G: TKMUnitGroup;
-  U: TKMUnit;
-  PointArr: TKMWordArray;
-begin
-  FillChar(fPresence[aPL*fPolygons*4], SizeOf(fPresence[0]) * fPolygons * 4, #0);
-
-  SetLength(PointArr,16);
-  for I := 0 to gHands[aPL].UnitGroups.Count-1 do
+  EACH_X_MEMBER_COEF = 5;
+  PENALIZATION_ARR: array [TKMGroupType,TKMGroupType] of Single = (
+  // gtMelee, gtAntiHorse, gtRanged, gtMounted
+    (    1.0,      0.3,       0.0,      0.5), // gtMelee
+    (    1.0,      1.0,       0.0,      0.0), // gtAntiHorse
+    (    1.0,      1.0,       1.0,      2.0), // gtRanged
+    (    1.0,      2.0,       0.0,      1.0)  // gtMounted
+  );
+  procedure EvaluatePolygon(aIdx: Cardinal; aEval: Word; aGT: TKMGroupType);
   begin
-    G := gHands[aPL].UnitGroups.Groups[I];
-    if (G = nil) OR G.IsDead then
-      continue;
-    K := 0;
-    Cnt := 0;
-    while (K < G.Count) do
-    begin
-      U := G.Members[K];
-      if (U <> nil) AND not U.IsDeadOrDying then
-      begin
-        if (Length(PointArr) <= Cnt) then
-          SetLength(PointArr, Cnt + 16);
-        PointArr[Cnt] := fNavMesh.KMPoint2Polygon[ U.CurrPosition ];
-        Cnt := Cnt + 1;
-      end;
-      K := K + EACH_X_MEMBER_COEF; // Pick each X member (Huge groups cover large areas so be sure that influence will be accurate)
-    end;
-
-    if (Cnt > 0) then
-      //fFloodFill.MilitaryPresence(aPL, gAIFields.Eye.ArmyEvaluation.GroupStrength(G), MAX_DISTANCE, Cnt-1, G.GroupType, PointArr);
-      fInfluenceFloodFill.MilitaryPresence(aPL, Min(G.Count,30), MAX_DISTANCE, Cnt-1, G.GroupType, PointArr);
+    Inc(fPresence[aIdx+0], Round(aEval*PENALIZATION_ARR[aGT,gtMelee]));
+    Inc(fPresence[aIdx+1], Round(aEval*PENALIZATION_ARR[aGT,gtAntiHorse]));
+    Inc(fPresence[aIdx+2], Round(aEval*PENALIZATION_ARR[aGT,gtRanged]));
+    Inc(fPresence[aIdx+3], Round(aEval*PENALIZATION_ARR[aGT,gtMounted]));
   end;
+var
+  Increment: Word;
+  K, L, M, PolyIdx, Cnt, GTIdx: Integer;
+  G: TKMUnitGroup;
+  GT: TKMGroupType;
+  U: TKMUnit;
+  PL: TKMHandID;
+begin
+  if (Length(fPresence) <= 0) then
+    Exit;
+  // Length of fPresence = alliances * polygons * 5 (= 4 types of groups + traffic)
+  FillChar(fPresence[aAllianceIdx*fPolyCnt*5], SizeOf(fPresence[0]) * fPolyCnt * 5, #0);
+
+  // Mark avoid traffic
+  for PL in fAlli2PL[aAllianceIdx] do
+    if gHands[PL].Enabled then
+      for K := 0 to gHands[PL].UnitGroups.Count - 1 do
+      begin
+        G := gHands[PL].UnitGroups.Groups[K];
+        if (G = nil) OR G.IsDead then
+          Continue;
+        Increment := Min(G.Count, EACH_X_MEMBER_COEF);
+        L := 0;
+        while (L < G.Count) do
+        begin
+          U := G.Members[L];
+          if (U <> nil) AND not U.IsDeadOrDying then
+          begin
+            PolyIdx := fNavMesh.KMPoint2Polygon[ U.Position ];
+            Inc(fPresence[aAllianceIdx*5*fPolyCnt + 5*PolyIdx + AVOID_TRAFFIC_IDX],Increment);
+          end;
+          L := L + EACH_X_MEMBER_COEF;
+        end;
+      end;
+
+  // Mark enemy groups
+  for PL := 0 to gHands.Count - 1 do
+    if gHands[PL].Enabled AND (gHands[ fAlli2PL[aAllianceIdx,0] ].Alliances[PL] = atEnemy) then
+      for K := 0 to gHands[PL].UnitGroups.Count - 1 do
+      begin
+        G := gHands[PL].UnitGroups.Groups[K];
+        if (G = nil) OR G.IsDead then
+          Continue;
+        Increment := Min(G.Count, EACH_X_MEMBER_COEF);
+        GT := G.GroupType;
+        L := 0;
+        while (L < G.Count) do
+        begin
+          U := G.Members[L];
+          if (U <> nil) AND not U.IsDeadOrDying then
+          begin
+            PolyIdx := fNavMesh.KMPoint2Polygon[ U.Position ];
+            EvaluatePolygon(aAllianceIdx*5*fPolyCnt + 5*PolyIdx, Increment, GT);
+            with fNavMesh.Polygons[PolyIdx] do
+              for M := 0 to NearbyCount - 1 do
+                EvaluatePolygon(aAllianceIdx*5*fPolyCnt + 5*Nearby[M], Increment, GT);
+          end;
+          L := L + EACH_X_MEMBER_COEF;
+        end;
+      end;
 end;
-
-
-
-
 
 
 function TKMInfluences.GetOwnership(const aPL: TKMHandID; const aIdx: Word): Byte;
 begin
-  Result := fOwnership[aPL * fPolygons + aIdx];
+  Result := fOwnership[aPL * fPolyCnt + aIdx];
 end;
 
 
 procedure TKMInfluences.SetOwnership(const aPL: TKMHandID; const aIdx: Word; const aOwnership: Byte);
 begin
-  fOwnership[aPL * fPolygons + aIdx] := aOwnership;
+  fOwnership[aPL * fPolyCnt + aIdx] := aOwnership;
 end;
 
 
@@ -590,7 +598,7 @@ begin
     if (PL <> aPL) then
     begin
       Ownership := OwnPoly[PL,aIdx];
-      Inc(Result, ifthen(gHands[aPL].Alliances[PL] = atAlly, Ownership, Ownership*ENEMY_COEF));
+      Inc(Result, IfThen(gHands[aPL].Alliances[PL] = atAlly, Ownership, Ownership*ENEMY_COEF));
     end;
 end;
 
@@ -603,10 +611,10 @@ end;
 
 function TKMInfluences.CanPlaceHouseByInfluence(const aPL: TKMHandID; const aIdx: Word; const aIgnoreAllies: Boolean = False): Boolean;
 var
-  BestOwner: TKMHandID;
+  bestOwner: TKMHandID;
 begin
-  BestOwner := GetBestOwner(aIdx);
-  Result := (BestOwner >= 0) AND (OwnPoly[aPL, aIdx] > 0) AND ((BestOwner = aPL) OR (not aIgnoreAllies AND (gHands[aPL].Alliances[BestOwner] = atAlly)));
+  bestOwner := GetBestOwner(aIdx);
+  Result := (bestOwner >= 0) AND (OwnPoly[aPL, aIdx] > 0) AND ((bestOwner = aPL) OR (not aIgnoreAllies AND (gHands[aPL].Alliances[bestOwner] = atAlly)));
 end;
 
 
@@ -616,54 +624,65 @@ const
   INIT_HOUSE_INFLUENCE = 255;
   MAX_INFLUENCE_DISTANCE = 150;
 var
-  AI: Boolean;
-  I, Cnt: Integer;
+  isAI: Boolean;
+  I, cnt: Integer;
   H: TKMHouse;
-  IdxArray: TKMWordArray;
+  idxArray: TKMWordArray;
 begin
-  //Clear array (is better to clear ~3000 polygons instead of 255*255 tiles)
-  FillChar(fOwnership[aPL*fPolygons], SizeOf(fOwnership[0]) * fPolygons, #0);
+  //Clear array (it is better to clear ~3000 polygons instead of 255*255 tiles)
+  FillChar(fOwnership[aPL*fPolyCnt], SizeOf(fOwnership[0]) * fPolyCnt, #0);
 
   // Create array of polygon indexes
-  SetLength(IdxArray, gHands[aPL].Houses.Count);
-  Cnt := 0;
-  AI := gHands[aPL].HandType = hndComputer;
+  SetLength(idxArray, gHands[aPL].Houses.Count);
+  cnt := 0;
+  isAI := gHands[aPL].IsComputer;
   for I := 0 to gHands[aPL].Houses.Count - 1 do
   begin
     H := gHands[aPL].Houses[I];
     if not H.IsDestroyed
-      AND not (H.HouseType in [htWatchTower, htWoodcutters])
-      AND (AI OR H.IsComplete) then // Player must finish the house to update influence so he cannot troll the AI
+    and not (H.HouseType in [htWatchTower, htWoodcutters])
+    and (isAI or H.IsComplete) then // Player must finish the house to update influence so he cannot troll the AI
     begin
-        IdxArray[Cnt] := fNavMesh.KMPoint2Polygon[ H.PointBelowEntrance ]; // Use point below entrance to match NavMeshDefence algorithm and city center detection in Eye
-        Cnt := Cnt + 1;
+      // Use point below entrance to match NavMeshDefence algorithm and city center detection in Eye
+      idxArray[cnt] := fNavMesh.KMPoint2Polygon[H.PointBelowEntrance];
+      Inc(cnt);
     end;
   end;
 
-  if (Cnt > 0) then
-    fInfluenceFloodFill.HouseInfluence(aPL, INIT_HOUSE_INFLUENCE, MAX_INFLUENCE_DISTANCE, Cnt - 1, IdxArray);
+  if cnt > 0 then
+    fInfluenceFloodFill.HouseInfluence(aPL, INIT_HOUSE_INFLUENCE, MAX_INFLUENCE_DISTANCE, cnt - 1, idxArray);
 end;
 
 
-
-procedure TKMInfluences.InitArrays();
+function TKMInfluences.GetAllianceIdx(const aPL: TKMHandID; var aIdx: Integer): Boolean;
 var
+  K, PL: TKMHandID;
+begin
+  Result := False;
+  for K := Low(fAlli2PL) to High(fAlli2PL) do
+    for PL in fAlli2PL[K] do
+      if (PL = aPL) then
+      begin
+        aIdx := K;
+        Exit(True);
+      end
+end;
+
+
+procedure TKMInfluences.InitInfluences();
+var
+  Idx: Integer;
   PL: TKMHandID;
 begin
-  if (fPolygons < Length(fNavMesh.Polygons)) then
-  begin
-    fPolygons := Length(fNavMesh.Polygons);
-    SetLength(fPresence, gHands.Count * fPolygons * 4);
-    SetLength(fOwnership, gHands.Count * fPolygons);
-  end;
-  FillChar(fPresence[0], SizeOf(fPresence[0]) * Length(fPresence), #0);
+  fPolyCnt := fNavMesh.PolygonsCnt;
+  if (Length(fOwnership) < gHands.Count * fPolyCnt) then
+    SetLength(fOwnership, gHands.Count * fPolyCnt);
   FillChar(fOwnership[0], SizeOf(fOwnership[0]) * Length(fOwnership), #0);
-  if AI_GEN_INFLUENCE_MAPS then
-    for PL := 0 to gHands.Count - 1 do
-    begin
-      UpdateMilitaryPresence(PL);
-      UpdateOwnership(PL);
-    end;
+  for PL := 0 to gHands.Count - 1 do
+    UpdateOwnership(PL);
+  SetLengthOfPresence();
+  for Idx := 0 to Length(fAlli2PL) - 1 do
+    UpdateMilitaryPresence(Idx);
 end;
 
 
@@ -672,44 +691,77 @@ begin
   fMapX := gTerrain.MapX;
   fMapY := gTerrain.MapY;
   SetLength(fAvoidBuilding, fMapY * fMapX);
-
   InitAvoidBuilding();
-  InitArrays();
 end;
 
 
 procedure TKMInfluences.UpdateState(aTick: Cardinal);
+  {$IFDEF DEBUG_AIInfluences}
+  var
+    tStart,tStop: Int64;
+  procedure UpdateTimer(var aTimeAvrg, aTimePeak: Int64);
+  begin
+    tStop := TimeGetUsec() - tStart;
+    aTimePeak := Max(aTimePeak, tStop);
+    aTimeAvrg := Round((aTimeAvrg * 5 + tStop)/6);
+    tStart := TimeGetUsec();
+  end;
+  {$ENDIF}
 begin
+  {$IFDEF DEBUG_AIInfluences}
+    tStart := TimeGetUsec();
+  {$ENDIF}
   // City:
-  if aTick mod 150 = 15 then // Update every 15 sec 1 player
+  if (aTick mod 150 = 15) then // Update every 15 sec 1 player
   begin
     fUpdateCityIdx := (fUpdateCityIdx + 1) mod gHands.Count;
     UpdateOwnership(fUpdateCityIdx);
+    {$IFDEF DEBUG_AIInfluences}
+      UpdateTimer(fTimeAvrgOwnership, fTimePeakOwnership);
+    {$ENDIF}
   end;
   // Army:
-  if (aTick mod 5 = 0) then // Update every 0.5 sec 1 player
+  if (aTick mod 5 = 0) AND (Length(fAlli2PL) > 0) then // Update every 0.5 sec 1 player
   begin
-    fUpdateArmyIdx := (fUpdateArmyIdx + 1) mod gHands.Count;
+    fUpdateArmyIdx := (fUpdateArmyIdx + 1) mod Length(fAlli2PL);
     UpdateMilitaryPresence(fUpdateArmyIdx);
+    {$IFDEF DEBUG_AIInfluences}
+      UpdateTimer(fTimeAvrgPresence, fTimePeakPresence);
+    {$ENDIF}
+  end;
+end;
+
+
+procedure TKMInfluences.UpdateAlliances(const aAlli2PL: TKMHandID2Array);
+var
+  K: Integer;
+begin
+  SetLength(fAlli2PL, Length(aAlli2PL));
+  for K := Low(aAlli2PL) to High(aAlli2PL) do
+  begin
+    SetLength(fAlli2PL[K], Length(aAlli2PL[K]));
+    Move(aAlli2PL[K,0], fAlli2PL[K,0], SizeOf(aAlli2PL[K,0]) * Length(aAlli2PL[K]));
+  end;
+  SetLengthOfPresence();
+end;
+
+
+procedure TKMInfluences.SetLengthOfPresence();
+begin
+  if (Length(fAlli2PL) * fPolyCnt * 5 <> Length(fPresence)) then
+  begin
+    SetLength(fPresence, Length(fAlli2PL) * fPolyCnt * 5);
+    FillChar(fPresence[0], SizeOf(fPresence[0]) * Length(fPresence), #0);
   end;
 end;
 
 
 //Render debug symbols
 procedure TKMInfluences.Paint(const aRect: TKMRect);
-const
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $0000FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
 var
   PL, WatchedPL: TKMHandID;
-  I, Cnt: Word;
-  X,Y: Integer;
-  PolyArr: TPolygonArray;
-  NodeArr: TKMPointArray;
+  K, X,Y, TeamIdx, Cnt: Integer;
+  GT: TKMGroupType;
   Col: Cardinal;
 begin
 
@@ -726,24 +778,23 @@ begin
 
   if (OVERLAY_INFLUENCE OR OVERLAY_OWNERSHIP) AND not OVERLAY_AI_COMBAT then
   begin
-    PolyArr := fNavMesh.Polygons;
-    NodeArr := fNavMesh.Nodes;
-    for I := 0 to fPolygons - 1 do
+    for K := 0 to fPolyCnt - 1 do
     begin
-      PL := GetBestOwner(I);
+      PL := GetBestOwner(K);
       if (PL = PLAYER_NONE) then
-        continue
+        Continue
       else
-        Col := (gHands[PL].FlagColor AND COLOR_WHITE) OR (OwnPoly[PL,I] shl 24);
+        Col := (gHands[PL].FlagColor AND tcWhite) OR (OwnPoly[PL,K] shl 24);
 
       //NavMesh polys coverage
-      gRenderAux.TriangleOnTerrain(
-        NodeArr[PolyArr[I].Indices[0]].X,
-        NodeArr[PolyArr[I].Indices[0]].Y,
-        NodeArr[PolyArr[I].Indices[1]].X,
-        NodeArr[PolyArr[I].Indices[1]].Y,
-        NodeArr[PolyArr[I].Indices[2]].X,
-        NodeArr[PolyArr[I].Indices[2]].Y, Col);
+      with fNavMesh do
+        gRenderAux.TriangleOnTerrain(
+          Nodes[Polygons[K].Indices[0]].X,
+          Nodes[Polygons[K].Indices[0]].Y,
+          Nodes[Polygons[K].Indices[1]].X,
+          Nodes[Polygons[K].Indices[1]].Y,
+          Nodes[Polygons[K].Indices[2]].X,
+          Nodes[Polygons[K].Indices[2]].Y, Col);
     end;
   end;
 
@@ -753,37 +804,42 @@ begin
     if (WatchedPL = PLAYER_NONE) then
       Exit;
 
-    PolyArr := fNavMesh.Polygons;
-    NodeArr := fNavMesh.Nodes;
+    if not GetAllianceIdx(WatchedPL,TeamIdx) then
+      Exit;
 
-    for PL := 0 to gHands.Count - 1 do
+    for K := 0 to fPolyCnt - 1 do
     begin
-      if (WatchedPL = PL) then
-        Col := COLOR_GREEN
-      else if (gHands[WatchedPL].Alliances[PL] = atAlly) then
-        Col := COLOR_BLUE
-      else
-        Col := COLOR_RED;
-
-      for I := 0 to fPolygons - 1 do
+      Cnt := 0;
+      for GT := Low(TKMGroupType) to High(TKMGroupType) do
+        Cnt := Cnt + Presence[TeamIdx, K, GT];
+      if (Cnt > 0) then
       begin
-        Cnt := PresenceAllGroups[PL,I];
-        if (Cnt > 0) then
-        begin
-          Cnt := Min(Max(Cnt,$3F),$FF);
-          //NavMesh polys coverage
+        //NavMesh polys coverage
+        with fNavMesh do
           gRenderAux.TriangleOnTerrain(
-            NodeArr[PolyArr[I].Indices[0]].X,
-            NodeArr[PolyArr[I].Indices[0]].Y,
-            NodeArr[PolyArr[I].Indices[1]].X,
-            NodeArr[PolyArr[I].Indices[1]].Y,
-            NodeArr[PolyArr[I].Indices[2]].X,
-            NodeArr[PolyArr[I].Indices[2]].Y, (Col OR (Cnt shl 24)) ); // (Col OR $50000000)
-        end;
+            Nodes[Polygons[K].Indices[0]].X,
+            Nodes[Polygons[K].Indices[0]].Y,
+            Nodes[Polygons[K].Indices[1]].X,
+            Nodes[Polygons[K].Indices[1]].Y,
+            Nodes[Polygons[K].Indices[2]].X,
+            Nodes[Polygons[K].Indices[2]].Y, tcRed OR (Byte(Min(Max(Cnt,$1F),$F0)) shl 24) );
+      end;
+      Cnt := GetArmyTraffic(TeamIdx, K);
+      if (Cnt > 0) then
+      begin
+        //NavMesh polys coverage
+        with fNavMesh do
+          gRenderAux.TriangleOnTerrain(
+            Nodes[Polygons[K].Indices[0]].X,
+            Nodes[Polygons[K].Indices[0]].Y,
+            Nodes[Polygons[K].Indices[1]].X,
+            Nodes[Polygons[K].Indices[1]].Y,
+            Nodes[Polygons[K].Indices[2]].X,
+            Nodes[Polygons[K].Indices[2]].Y, tcYellow OR (Byte(Min(Max(Cnt,$3F),$F0)) shl 24) );
       end;
     end;
     {
-    for I := 0 to fPolygons - 1 do
+    for I := 0 to fPolyCnt - 1 do
     begin
       BestCnt := 0;
       for PL := 0 to gHands.Count - 1 do
@@ -793,11 +849,11 @@ begin
         begin
           BestCnt := Cnt;
           if (WatchedPL = PL) then
-            Col := COLOR_GREEN
+            Col := tcGreen
           else if (gHands[WatchedPL].Alliances[PL] = atAlly) then
-            Col := COLOR_BLUE
+            Col := tcBlue
           else
-            Col := COLOR_RED;
+            Col := tcRed;
         end;
       end;
       if (BestCnt > 0) then

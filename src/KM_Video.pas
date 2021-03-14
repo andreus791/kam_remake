@@ -1,27 +1,33 @@
 unit KM_Video;
-
 {$I KaM_Remake.inc}
-
 interface
-
 uses
-  SysUtils, SyncObjs, Types, Messages, Classes, Dialogs, KromOGLUtils, KM_VLC
+  SysUtils, SyncObjs, Types, Messages, Classes, Dialogs, KromOGLUtils, Generics.Collections
   {$IFDEF WDC} , UITypes {$ENDIF}
   {$IFDEF FPC} , Controls {$ENDIF}
+  {$IFDEF VIDEOS} , KM_VLC {$ENDIF}
   ;
-
-{$IFDEF VIDEOS}
-const
-  VIDEOFILE_PATH = 'data\gfx\video\';
-
-{$ENDIF}
 
 type
   TKMVideoPlayerCallback = reference to procedure;
 
+  TKMVideoFileKind = (
+    vfkNone,
+    vfkStarting //Game starting video
+  );
+
+  TKMVideoFile = record
+    Path: string;
+    Kind: TKMVideoFileKind;
+  end;
+
   TKMVideoPlayer = class
-  private
+  {$IFDEF VIDEOS}
+  private const
+    VIDEOFILE_PATH = 'data' + PathDelim + 'gfx' + PathDelim + 'video' + PathDelim;
+  {$ENDIF}
 {$IFDEF VIDEOS}
+  private
     FCriticalSection: TCriticalSection;
 
     FBuffer: array of Byte;
@@ -38,28 +44,29 @@ type
     FLenght: Int64;
     FTime: Int64;
 
-    FLastMusicOff: Boolean;
-
     FCallback: TKMVideoPlayerCallback;
 
     FInstance: PVLCInstance;
     FMediaPlayer: PVLCMediaPlayer;
 
     FTrackList: TStringList;
-    FVideoList: TStringList;
+    FVideoList: TList<TKMVideoFile>;
 
     function TryGetPathFile(const aPath: string; var aFileName: string): Boolean;
     procedure SetTrackByLocale;
     function GetState: TVLCPlayerState;
 
     procedure StopVideo;
+
+    procedure AddVideoToList(aPath: string; aKind: TKMVideoFileKind = vfkNone);
 {$ENDIF}
   public
     constructor Create;
     destructor Destroy; override;
     procedure AddCampaignVideo(const aCampaignPath, aVideoName: string);
     procedure AddMissionVideo(const aMissionFile, aVideoName: string);
-    procedure AddVideo(const AVideoName: String);
+    procedure AddVideo(const AVideoName: String; aKind: TKMVideoFileKind = vfkNone);
+
     procedure Play;
     procedure Stop;
     procedure Pause;
@@ -71,12 +78,7 @@ type
     procedure Paint;
 
     procedure KeyDown(Key: Word; Shift: TShiftState);
-    procedure KeyPress(Key: Char);
-    procedure KeyUp(Key: Word; Shift: TShiftState);
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
-    procedure MouseMove(Shift: TShiftState; X,Y: Integer);
-    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
-    procedure MouseWheel(Shift: TShiftState; WheelSteps: Integer; X,Y: Integer);
 
     function IsActive: Boolean;
     function IsPlay: Boolean;
@@ -86,9 +88,12 @@ var
   gVideoPlayer: TKMVideoPlayer;
 
 implementation
-
 uses
-  KM_Render, KM_RenderUI, dglOpenGL, KM_ResLocales, KM_GameApp, KM_Sound;
+  KM_Render, KM_RenderTypes, KM_RenderUI, dglOpenGL, KM_ResLocales, KM_GameApp, KM_GameSettings, KM_Music, KM_Sound;
+
+const
+  FADE_MUSIC_TIME   = 500; // Music fade time, in ms
+  UNFADE_MUSIC_TIME = 2000; // Music unfade time, in ms
 
 {$IFDEF VIDEOS}
 
@@ -109,16 +114,16 @@ end;
 {$ENDIF}
 
 { TKMVideoPlayer }
-
 constructor TKMVideoPlayer.Create;
 begin
+  inherited;
 {$IFDEF VIDEOS}
   FIndex := 0;
   FTexture.U := 1;
   FTexture.V := 1;
   FCallback := nil;
   FCriticalSection := TCriticalSection.Create;
-  FVideoList := TStringList.Create;
+  FVideoList := TList<TKMVideoFile>.Create;
   FTrackList :=  TStringList.Create;
 
   VLCLoadLibrary;
@@ -141,6 +146,18 @@ begin
 end;
 
 
+{$IFDEF VIDEOS}
+procedure TKMVideoPlayer.AddVideoToList(aPath: string; aKind: TKMVideoFileKind = vfkNone);
+var
+  videoFileData: TKMVideoFile;
+begin
+  videoFileData.Path := aPath;
+  videoFileData.Kind := aKind;
+  FVideoList.Add(videoFileData);
+end;
+{$ENDIF}
+
+
 procedure TKMVideoPlayer.AddCampaignVideo(const aCampaignPath, aVideoName: string);
 {$IFDEF VIDEOS}
 var
@@ -150,12 +167,12 @@ begin
   if Self = nil then
     Exit;
 {$IFDEF VIDEOS}
-  if not gGameApp.GameSettings.VideoOn then
+  if not gGameSettings.VideoOn then
     Exit;
 
   if TryGetPathFile(aCampaignPath + aVideoName, Path) or
     TryGetPathFile(VIDEOFILE_PATH + aVideoName, Path) then
-    FVideoList.Add(Path);
+    AddVideoToList(Path);
 {$ENDIF}
 end;
 
@@ -169,7 +186,7 @@ begin
   if Self = nil then
     Exit;
 {$IFDEF VIDEOS}
-  if not gGameApp.GameSettings.VideoOn then
+  if not gGameSettings.VideoOn then
     Exit;
   MissionPath := ExtractFilePath(aMissionFile);
   FileName := ExtractFileName(ChangeFileExt(aMissionFile, '')) + '.' + aVideoName;
@@ -177,11 +194,11 @@ begin
   if TryGetPathFile(MissionPath + FileName, Path) or
     TryGetPathFile(MissionPath + aVideoName, Path) or
     TryGetPathFile(VIDEOFILE_PATH + aVideoName, Path) then
-    FVideoList.Add(Path);
+    AddVideoToList(Path);
 {$ENDIF}
 end;
 
-procedure TKMVideoPlayer.AddVideo(const aVideoName: String);
+procedure TKMVideoPlayer.AddVideo(const aVideoName: String; aKind: TKMVideoFileKind = vfkNone);
 {$IFDEF VIDEOS}
 var
   Path: string;
@@ -190,11 +207,11 @@ begin
   if Self = nil then
     Exit;
 {$IFDEF VIDEOS}
-  if not gGameApp.GameSettings.VideoOn then
+  if not gGameSettings.VideoOn then
     Exit;
   if TryGetPathFile(aVideoName, Path) or
     TryGetPathFile(VIDEOFILE_PATH + aVideoName, Path) then
-    FVideoList.Add(Path);
+    AddVideoToList(Path, aKind);
 {$ENDIF}
 end;
 
@@ -275,7 +292,7 @@ begin
     FCriticalSection.Leave;
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    if gGameApp.GameSettings.VideoStretch then
+    if gGameSettings.VideoStretch then
     begin
       AspectRatio := FWidth / FHeight;
       if AspectRatio > FScreenWidth / FScreenHeight then
@@ -387,7 +404,7 @@ end;
 procedure TKMVideoPlayer.Play;
 {$IFDEF VIDEOS}
 var
-  i: Integer;
+  I: Integer;
   path: string;
   Media: PVLCMedia;
   Tracks: TVLCMediaTrackList;
@@ -395,26 +412,32 @@ var
   Track: PVLCMediaTrack;
 {$ENDIF}
 begin
-  if Self = nil then
-    Exit;
+  if Self = nil then Exit;
 {$IFDEF VIDEOS}
-  if FIndex >= FVideoList.Count then
-    Exit;
+  if FIndex >= FVideoList.Count then Exit;
 
   if Assigned(gGameApp) then
   begin
     gSoundPlayer.AbortAllFadeSounds;
-    gGameApp.MusicLib.StopPlayingOtherFile;
-    FLastMusicOff := gGameApp.GameSettings.MusicOff;
-    gGameApp.GameSettings.MusicOff := True;
-    gGameApp.MusicLib.ToggleMusic(false);
+    gSoundPlayer.AbortAllScriptSounds;
+    gSoundPlayer.AbortAllLongSounds;
+    gMusic.StopPlayingOtherFile;
+
+    // Fade music immediately for starting video
+    if ( FVideoList[FIndex].Kind = vfkStarting ) then
+      gMusic.Fade(0)
+    else
+      gMusic.Fade(FADE_MUSIC_TIME);
+    // For unknown reason libzPlay lib will use higher volume when unfade (resume) music after video is stopped
+    // We either can use BASS or set player volume to 0 here. Let's try the latter option for now
+    gMusic.SetPlayerVolume(0);
   end;
 
   FTrackList.Clear;
   FWidth := 0;
   FHeight := 0;
 
-  path := FVideoList[FIndex];
+  path := FVideoList[FIndex].Path;
 
   FInstance := libvlc_new(0, nil);
   Media := libvlc_media_new_path(FInstance, PAnsiChar(UTF8Encode((path))));
@@ -424,9 +447,9 @@ begin
 
     if TrackCount > 0 then
     begin
-      for i := 0 to TrackCount - 1 do
+      for I := 0 to TrackCount - 1 do
       begin
-        Track := tracks[i];
+        Track := tracks[I];
         case Track.TrackType of
           vlcttVideo:
             begin
@@ -445,7 +468,7 @@ begin
     if(FWidth > 0) and (FHeight > 0) then
     begin
       SetLength(FBuffer, FWidth * FHeight * 3);
-      FTexture.Tex := TRender.GenerateTextureCommon(ftNearest, ftNearest);
+      FTexture.Tex := TRender.GenerateTextureCommon(ftLinear, ftLinear);
 
       FMediaPlayer := libvlc_media_player_new_from_media(Media);
       libvlc_video_set_format(FMediaPlayer, 'RV24', FWidth, FHeight, FWidth * 3);
@@ -453,7 +476,7 @@ begin
       //libvlc_media_player_set_hwnd(FMediaPlayer, Pointer(FPanel.Handle));
       libvlc_media_player_play(FMediaPlayer);
       SetTrackByLocale;
-      libvlc_audio_set_volume(FMediaPlayer, Round(gGameApp.GameSettings.VideoVolume * 100));
+      libvlc_audio_set_volume(FMediaPlayer, Round(gGameSettings.VideoVolume * 100));
     end
     else
       Stop;
@@ -496,10 +519,15 @@ end;
 {$ENDIF}
 
 procedure TKMVideoPlayer.Stop;
+{$IFDEF VIDEOS}
+var
+  startingVideo: Boolean;
+{$ENDIF}
 begin
 {$IFDEF VIDEOS}
   StopVideo;
 
+  startingVideo := ( FVideoList[FIndex].Kind = vfkStarting );
   Inc(FIndex);
   if FIndex >= FVideoList.Count then
   begin
@@ -507,10 +535,10 @@ begin
     FVideoList.Clear;
     if Assigned(gGameApp) then
     begin
-      gGameApp.GameSettings.MusicOff := FLastMusicOff;
-      gGameApp.MusicLib.ToggleMusic(not FLastMusicOff);
-      if not FLastMusicOff then
-        gGameApp.MusicLib.ToggleShuffle(FLastMusicOff);
+      if startingVideo then
+        gMusic.UnfadeStarting
+      else
+        gMusic.Unfade(UNFADE_MUSIC_TIME);
     end;
 
     if Assigned(FCallback) then
@@ -521,24 +549,6 @@ begin
   end
   else
     Play;
-{$ENDIF}
-end;
-
-procedure TKMVideoPlayer.KeyPress(Key: Char);
-begin
-  if Self = nil then
-    Exit;
-{$IFDEF VIDEOS}
-
-{$ENDIF}
-end;
-
-procedure TKMVideoPlayer.KeyUp(Key: Word; Shift: TShiftState);
-begin
-  if Self = nil then
-    Exit;
-{$IFDEF VIDEOS}
-
 {$ENDIF}
 end;
 
@@ -554,35 +564,7 @@ begin
 {$ENDIF}
 end;
 
-procedure TKMVideoPlayer.MouseMove(Shift: TShiftState; X,Y: Integer);
-begin
-  if Self = nil then
-    Exit;
 {$IFDEF VIDEOS}
-
-{$ENDIF}
-end;
-
-procedure TKMVideoPlayer.MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
-begin
-  if Self = nil then
-    Exit;
-{$IFDEF VIDEOS}
-
-{$ENDIF}
-end;
-
-procedure TKMVideoPlayer.MouseWheel(Shift: TShiftState; WheelSteps: Integer; X,Y: Integer);
-begin
-  if Self = nil then
-    Exit;
-{$IFDEF VIDEOS}
-
-{$ENDIF}
-end;
-
-{$IFDEF VIDEOS}
-
 function TKMVideoPlayer.TryGetPathFile(const aPath: string; var aFileName: string): Boolean;
 var
   i: Integer;

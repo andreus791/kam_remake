@@ -5,7 +5,8 @@ uses
   {$IFDEF FPC}zstream, {$ENDIF}
   {$IFDEF WDC}ZLib, {$ENDIF}
   Generics.Collections,
-  KM_CommonClasses, KM_WorkerThread;
+  KM_CommonClasses
+  {$IFDEF WDC OR FPC_FULLVERSION >= 30200}, KM_WorkerThread{$ENDIF};
 
 type
   TKMLogRngType = (lrtNone, lrtInt, lrtSingle, lrtExt);
@@ -28,11 +29,11 @@ type
     fGameTick: Cardinal;
     fSavedTicksCnt: Cardinal;
     fRngChecksInTick: TKMRLRecordList;
-//    fSaveStream: TKMemoryStreamBinary;
+//    fSaveStream: TKMemoryStream;
 //    fRngLogStream: TKMemoryStream;
     fCallers: TDictionary<Byte, AnsiString>;
     fRngLog: TDictionary<Cardinal, TKMRLRecordList>;
-    fTickStreamQueue: TObjectQueue<TKMemoryStreamBinary>;
+    fTickStreamQueue: TObjectQueue<TKMemoryStream>;
 
     function GetCallerID(const aCaller: AnsiString; aValue: Extended; aValueType: TKMLogRngType): Byte;
     procedure AddRecordToList(aTick: Cardinal; const aRec: TKMRngLogRecord);
@@ -58,7 +59,9 @@ type
 
     property Enabled: Boolean read GetEnabled write fEnabled;
 
+    {$IFDEF WDC OR FPC_FULLVERSION >= 30200}
     procedure SaveToPathAsync(const aPath: String; aWorkerThread: TKMWorkerThread);
+    {$ENDIF}
 //    procedure ParseSaveStreamAndSaveAsText(aPath: String);
     procedure SaveAsText(const aPath: String);
     procedure LoadFromPath(const aPath: String);
@@ -73,11 +76,11 @@ var
   gRandomCheckLogger: TKMRandomCheckLogger;
 
 
-
 implementation
 uses
   Math,
-  KM_Log, Classes, SysUtils, KM_Defaults;
+  KM_Log, Classes, SysUtils,
+  KromUtils;
 
 var
   MAX_TICKS_CNT: Integer = 10*60*10; // 10 minutes
@@ -89,7 +92,7 @@ begin
 //  fRngLogStream := TKMemoryStream.Create;
   fCallers := TDictionary<Byte, AnsiString>.Create;
   fRngLog := TDictionary<Cardinal, TKMRLRecordList>.Create;
-  fTickStreamQueue := TObjectQueue<TKMemoryStreamBinary>.Create;
+  fTickStreamQueue := TObjectQueue<TKMemoryStream>.Create;
   fTickStreamQueue.OwnsObjects := True; // Set the OwnsObjects to true - the Queue will free them automatically
   fRngChecksInTick := TKMRLRecordList.Create;
   fSavedTicksCnt := 0;
@@ -151,6 +154,7 @@ begin
   AddRecordToList(fGameTick, rec);
 end;
 
+
 procedure TKMRandomCheckLogger.AddToLog(const aCaller: AnsiString; aValue: Single; aSeed: Integer);
 var
   rec: TKMRngLogRecord;
@@ -164,6 +168,7 @@ begin
 
   AddRecordToList(fGameTick, rec);
 end;
+
 
 procedure TKMRandomCheckLogger.AddToLog(const aCaller: AnsiString; aValue: Extended; aSeed: Integer);
 var
@@ -194,7 +199,6 @@ begin
 
   list.Add(aRec);
 end;
-
 
 
 procedure TKMRandomCheckLogger.AddRecordToList(aTick: Cardinal; const aRec: TKMRngLogRecord);
@@ -232,7 +236,7 @@ end;
 
 procedure TKMRandomCheckLogger.UpdateState(aGameTick: Cardinal);
 var
-  tickStream: TKMemoryStreamBinary;
+  tickStream: TKMemoryStream;
 begin
   if (Self = nil) or not fEnabled then Exit;
 
@@ -280,7 +284,7 @@ procedure TKMRandomCheckLogger.LoadFromPath(const aPath: String);
 var
   I: Integer;
   tickStreamSize: Cardinal;
-  LoadStream, tickStream: TKMemoryStreamBinary;
+  LoadStream, tickStream: TKMemoryStream;
 begin
   if Self = nil then Exit;
 
@@ -326,7 +330,7 @@ end;
 
 procedure TKMRandomCheckLogger.LoadFromPathAndParseToDict(const aPath: String);
 var
-  LoadStream: TKMemoryStreamBinary;
+  LoadStream: TKMemoryStream;
 begin
   if Self = nil then Exit;
 
@@ -367,6 +371,7 @@ var
 
   procedure ClearLogRec;
   begin
+    //@Rey: Consider using LogRec := default(TKMRngLogRecord);
     LogRec.ValueI := 0;
     LogRec.ValueS := 0;
     LogRec.ValueE := 0;
@@ -410,16 +415,20 @@ end;
 //end;
 
 
+{$IFDEF WDC OR FPC_FULLVERSION >= 30200}
 procedure TKMRandomCheckLogger.SaveToPathAsync(const aPath: String; aWorkerThread: TKMWorkerThread);
 var
-  SaveStream, TickStream: TKMemoryStreamBinary;
+  SaveStream, TickStream: TKMemoryStream;
 //  CompressionStream: TCompressionStream;
   CallerPair: TPair<Byte, AnsiString>;
-  enumerator: TEnumerator<TKMemoryStreamBinary>;
+  enumerator: TEnumerator<TKMemoryStream>;
 begin
   if (Self = nil) then Exit;
 
   SaveStream := TKMemoryStreamBinary.Create;
+
+  // Allocate memory for save stream, could save up to 25% of save time
+  SaveStream.SetSize(MakePOT(fTickStreamQueue.Count * 2 * 1024));
 
   SaveStream.PlaceMarker('CallersTable');
   SaveStream.Write(Integer(fCallers.Count));
@@ -445,8 +454,8 @@ begin
 
   enumerator.Free;
 
+  SaveStream.TrimToPosition;
 //  SaveStream.CopyFrom(fSaveStream, 0);
-
 
 //  for LogPair in fRngLog do
 //  begin
@@ -464,6 +473,7 @@ begin
 
   TKMemoryStream.AsyncSaveToFileCompressedAndFree(SaveStream, aPath, 'RNGCompressed', aWorkerThread);
 end;
+{$ENDIF}
 
 
 procedure TKMRandomCheckLogger.SaveAsText(const aPath: String);
@@ -528,7 +538,7 @@ end;
 procedure TKMRandomCheckLogger.Clear;
 var
   list: TList<TKMRngLogRecord>;
-//  TickStream: TKMemoryStreamBinary;
+//  TickStream: TKMemoryStream;
 //  enumerator: TEnumerator<TKMemoryStreamBinary>;
 begin
   if Self = nil then Exit;

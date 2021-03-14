@@ -75,7 +75,7 @@ type
     procedure MakeNewQueue(); override;
     function IsVisited(const aIdx: Word): Boolean; override;
     function CanBeExpanded(const aIdx: Word): Boolean; override;
-    procedure MarkAsVisited(const aIdx, aDistance: Word; const aPoint: TKMPoint); override;
+    procedure MarkAsVisited(const aIdx: Word; const aDistance: Cardinal; const aPoint: TKMPoint); override;
     function ForwardFF(): Boolean;
     procedure DrawPolygon(aIdx: Integer; aOffset: Single; aOpacity: Byte; aFillColor: Cardinal; aText: String = '');
   public
@@ -94,7 +94,6 @@ type
 
 
   TBackwardFF = class(TNavMeshFloodFill)
-  private
   protected
     fDefLinesRequired: Boolean;
     fOwner: TKMHandID;
@@ -135,11 +134,10 @@ type
   private
     fPolyCnt: Word;
     fBestDefLines, fAllDefLines: TKMDefenceLines;
-
   protected
     procedure InitQueue(aMaxIdx: Integer; aInitIdxArray: TKMWordArray); reintroduce;
     function IsVisited(const aIdx: Word): Boolean; override;
-    procedure MarkAsVisited(const aIdx, aDistance: Word; const aPoint: TKMPoint); override;
+    procedure MarkAsVisited(const aIdx: Word; const aDistance: Cardinal; const aPoint: TKMPoint); override;
     function CheckStartPolygons(var aStartPolygons: TKMWordArray): boolean;
   public
     property BestDefLines: TKMDefenceLines read fBestDefLines;
@@ -166,12 +164,6 @@ const
   MAXIMAL_DEFENCE_DISTANCE = 75; // Maximal defence distance (maximal distance is also affected by MAX_ENEMY_INFLUENCE)
   MIN_DEFENCE_CNT = 1; // Minimal count of defence polygons before penalization
 
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $7700FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
 implementation
 uses
   SysUtils, KM_Hand, KM_HandsCollection,
@@ -179,8 +171,6 @@ uses
   DateUtils,
   {$ENDIF}
   KM_AIFields, KM_AIInfluences, KM_NavMesh, KM_RenderAux;
-
-
 
 
 { TForwardFF }
@@ -245,11 +235,11 @@ begin
     Inc(fDebugCounter);
     if OVERLAY_DEFENCES_A AND (fDebugCounter = Round(DateUtils.MilliSecondsBetween(Now, 0) * 0.01) mod fDebugDefPolyCnt) then
     begin
-      DrawPolygon(aIdx, -1, Min(250,75), COLOR_BLUE, IntToStr(aIdx));
+      DrawPolygon(aIdx, -1, Min(250,75), tcBlue, IntToStr(aIdx));
       Idx := fStartQueue;
       for K := 0 to fQueueCnt - 1 do
       begin
-        DrawPolygon(Idx, -1, Min(250,K + 75), COLOR_BLUE, IntToStr(K));
+        DrawPolygon(Idx, -1, Min(250,K + 75), tcBlue, IntToStr(K));
         Idx := fQueueArray[Idx].Next;
       end;
     end;
@@ -257,9 +247,9 @@ begin
 end;
 
 
-procedure TForwardFF.MarkAsVisited(const aIdx, aDistance: Word; const aPoint: TKMPoint);
+procedure TForwardFF.MarkAsVisited(const aIdx: Word; const aDistance: Cardinal; const aPoint: TKMPoint);
 var
-  Distance: Word;
+  Distance: Cardinal;
 begin
   Inc(fPolygonCnt);
   // Get owner influence and distance from influence
@@ -404,9 +394,9 @@ begin
     for K := Low(fDefInfo) to High(fDefInfo) do
       with fDefInfo[K] do
       begin
-        if (fDefInfo[K].Influence      > 0) then DrawPolygon(K, 0, fDefInfo[K].Influence     , COLOR_GREEN );
-        if (fDefInfo[K].AllyInfluence  > 0) then DrawPolygon(K, 0, fDefInfo[K].AllyInfluence , COLOR_BLUE  );
-        if (fDefInfo[K].EnemyInfluence > 0) then DrawPolygon(K, 0, fDefInfo[K].EnemyInfluence, COLOR_RED   );
+        if (fDefInfo[K].Influence      > 0) then DrawPolygon(K, 0, fDefInfo[K].Influence     , tcGreen );
+        if (fDefInfo[K].AllyInfluence  > 0) then DrawPolygon(K, 0, fDefInfo[K].AllyInfluence , tcBlue  );
+        if (fDefInfo[K].EnemyInfluence > 0) then DrawPolygon(K, 0, fDefInfo[K].EnemyInfluence, tcRed   );
       end;
   //}
   fBackwardFF.Paint(Owners, fPolygonCnt, DefPosReq, TeamDefPos);
@@ -415,8 +405,6 @@ begin
     fDebugDefPolyCnt := fDebugCounter;
   {$ENDIF}
 end;
-
-
 
 
 { TBackwardFF }
@@ -588,11 +576,11 @@ begin
     Inc(fDebugCounter);
     if OVERLAY_DEFENCES_A AND (fDebugCounter = Round(DateUtils.MilliSecondsBetween(Now, 0) * 0.01) mod fDebugDefPolyCnt) then
     begin
-      DrawPolygon(aIdx, 1, Min(250,75), COLOR_RED, IntToStr(aIdx));
+      DrawPolygon(aIdx, 1, Min(250,75), tcRed, IntToStr(aIdx));
       Idx := fStartQueue;
       for K := 0 to fQueueCnt-1 do
       begin
-        DrawPolygon(Idx, 1, Min(250,K + 75), COLOR_RED, IntToStr(K));
+        DrawPolygon(Idx, 1, Min(250,K + 75), tcRed, IntToStr(K));
         Idx := fQueueArray[Idx].Next;
       end;
     end;
@@ -934,15 +922,13 @@ begin
           Opacity := Round(255 - (Price - MinPrc) / MaxPrc * 254);
           P1 := gAIFields.NavMesh.Nodes[ DefArr.Lines[L].Nodes[0] ];
           P2 := gAIFields.NavMesh.Nodes[ DefArr.Lines[L].Nodes[1] ];
-          gRenderAux.LineOnTerrain(P1, P2, (Opacity shl 24) OR COLOR_RED);
+          gRenderAux.LineOnTerrain(P1, P2, (Opacity shl 24) OR tcRed);
         end;
     fDebugDefPolyCnt := fDebugCounter;
   {$ENDIF}
 
   fFilterFF.Paint();
 end;
-
-
 
 
 { TFilterFF }
@@ -970,7 +956,7 @@ begin
   Result := (fQueueArray[aIdx].Visited > 0); // Visited Array is always filled with zeros
 end;
 
-procedure TFilterFF.MarkAsVisited(const aIdx, aDistance: Word; const aPoint: TKMPoint);
+procedure TFilterFF.MarkAsVisited(const aIdx: Word; const aDistance: Cardinal; const aPoint: TKMPoint);
 begin
   Inc(fPolyCnt);
   inherited MarkAsVisited(aIdx, aDistance, aPoint);
@@ -1073,9 +1059,9 @@ begin
       begin
         for K := Low(aPLDefAreas) to High(aPLDefAreas) do
           if (aPLDefAreas[K] = VisitMark-1) then // fVisitedIdx starts with number 1, first player in array have 0 => decrease it
-            continue;
+            Continue;
         AddPLDefArea(VisitMark);
-        continue;
+        Continue;
       end;
       inherited InitQueue(0, StartPolygon); // Fill new defence area
     end;
@@ -1111,12 +1097,12 @@ begin
     for K := Low(fQueueArray) to High(fQueueArray) do
       with gAIFields.NavMesh.Polygons[K].CenterPoint do
         case fQueueArray[K].Visited of
-         1: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_RED, ($09000000) OR COLOR_RED);
-         2: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_BLACK, ($09000000) OR COLOR_BLACK);
-         3: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_WHITE, ($09000000) OR COLOR_WHITE);
-         4: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_GREEN, ($09000000) OR COLOR_GREEN);
-         5: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_BLUE, ($09000000) OR COLOR_BLUE);
-         6: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR COLOR_BLUE, ($09000000) OR COLOR_YELLOW);
+         1: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcRed,  ($09000000) OR tcRed);
+         2: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcBlack,($09000000) OR tcBlack);
+         3: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcWhite,($09000000) OR tcWhite);
+         4: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcGreen,($09000000) OR tcGreen);
+         5: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcBlue, ($09000000) OR tcBlue);
+         6: gRenderAux.CircleOnTerrain(X, Y-1, RAD, ($FF000000) OR tcBlue, ($09000000) OR tcBlue);
         end;
   {$ENDIF}
 end;

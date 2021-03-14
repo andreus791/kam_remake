@@ -6,7 +6,7 @@ uses
   {$IFDEF Unix} LCLType, {$ENDIF}
   Classes, Controls, Math, SysUtils,
   KM_Defaults, KM_NetworkTypes, KM_Console, KM_ResTexts,
-  KM_Controls, KM_Maps, KM_Saves, KM_Pics, KM_InterfaceDefaults, KM_Minimap, KM_Networking,
+  KM_Controls, KM_Maps, KM_Saves, KM_Pics, KM_InterfaceDefaults, KM_Minimap,
   KM_GUIMapEdRMG;
 
 
@@ -24,7 +24,6 @@ type
     fMapsMP: TKMapsCollection;
     fSavesMP: TKMSavesCollection;
     fMinimap: TKMMinimap;
-    fNetworking: TKMNetworking;
 
     fLobbyTab: TKMLobbyTab;
 
@@ -70,7 +69,7 @@ type
     procedure MapTypeChanged(Sender: TObject);
     procedure InitDropColMapsList;
     procedure MapList_OnShow(Sender: TObject);
-    procedure UpdateMapList;
+    procedure UpdateMapList(aIsHost: Boolean);
 
     procedure MapList_SortUpdate(Sender: TObject);
     procedure MapList_ScanUpdate(Sender: TObject);
@@ -105,15 +104,15 @@ type
     procedure UpdateDifficultyLevels(aMap: TKMapInfo); overload;
 
     procedure Lobby_OnDisconnect(const aData: UnicodeString);
-    procedure Lobby_OnGameOptions(Sender: TObject);
+    procedure Lobby_OnGameOptions;
     procedure Lobby_OnMapName(const aData: UnicodeString);
     procedure Lobby_OnMapMissing(const aData: UnicodeString; aStartTransfer: Boolean);
     procedure Lobby_OnMessage(const aText: UnicodeString);
-    procedure Lobby_OnPingInfo(Sender: TObject);
-    procedure Lobby_OnPlayersSetup(Sender: TObject);
-    procedure Lobby_OnUpdateMinimap(Sender: TObject);
-    procedure Lobby_OnReassignedToHost(Sender: TObject);
-    procedure Lobby_OnReassignedToJoiner(Sender: TObject);
+    procedure Lobby_OnPingInfo;
+    procedure Lobby_OnPlayersSetup;
+    procedure Lobby_OnUpdateMinimap;
+    procedure Lobby_OnReassignedToHost;
+    procedure Lobby_OnReassignedToJoiner;
     procedure Lobby_OnFileTransferProgress(aTotal, aProgress: Cardinal);
     procedure Lobby_OnPlayerFileTransferProgress(aNetPlayerIndex: Integer; aTotal, aProgress: Cardinal);
     procedure Lobby_OnSetPassword(const aPassword: AnsiString);
@@ -204,7 +203,7 @@ type
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     destructor Destroy; override;
 
-    procedure Show(aKind: TKMNetPlayerKind; aNetworking: TKMNetworking; aMainHeight: Word);
+    procedure Show(aKind: TKMNetPlayerKind; aMainHeight: Word);
     procedure Lobby_Resize(aMainHeight: Word);
     procedure ReturnToLobby(const aSaveName: UnicodeString);
     procedure UpdateState;
@@ -217,8 +216,10 @@ var
 
 implementation
 uses
-  KM_Log, KM_CommonTypes, KM_ResLocales, KM_CommonUtils, KM_Sound, KM_ResSound, KM_RenderUI,
-  KM_Resource, KM_ResFonts, KM_NetPlayersList, KM_Main, KM_GameApp, KM_Points, KM_MapTypes; //RMG
+  KM_Log, KM_CommonTypes, KM_GameSettings, KM_ResLocales, KM_CommonUtils, KM_Sound, KM_ResSound, KM_RenderUI,
+  KM_Resource, KM_ResFonts, KM_NetPlayersList, KM_Points, KM_MapTypes,
+  KM_Networking,
+  KM_ServerSettings;
 
 const
   PANEL_SETUP_OPTIONS_TOP = 548;
@@ -287,16 +288,16 @@ begin
   K := 1;
 
   //Host (unless host is spectator)
-  if (fNetworking.HostIndex <> -1) and not fNetworking.NetPlayers[fNetworking.HostIndex].IsSpectator then
+  if (gNetworking.HostIndex <> -1) and not gNetworking.NetPlayers[gNetworking.HostIndex].IsSpectator then
   begin
-    fLocalToNetPlayers[K] := fNetworking.HostIndex;
-    fNetPlayersToLocal[fNetworking.HostIndex] := K;
+    fLocalToNetPlayers[K] := gNetworking.HostIndex;
+    fNetPlayersToLocal[gNetworking.HostIndex] := K;
     Inc(K);
   end;
 
   //Normal players
-  for I:=1 to fNetworking.NetPlayers.Count do
-    if (I <> fNetworking.HostIndex) and not fNetworking.NetPlayers[I].IsSpectator then
+  for I:=1 to gNetworking.NetPlayers.Count do
+    if (I <> gNetworking.HostIndex) and not gNetworking.NetPlayers[I].IsSpectator then
     begin
       fLocalToNetPlayers[K] := I;
       fNetPlayersToLocal[I] := K;
@@ -304,16 +305,16 @@ begin
     end;
 
   //Host if spectator, always goes at the end
-  if (fNetworking.HostIndex <> -1) and fNetworking.NetPlayers[fNetworking.HostIndex].IsSpectator then
+  if (gNetworking.HostIndex <> -1) and gNetworking.NetPlayers[gNetworking.HostIndex].IsSpectator then
   begin
-    fLocalToNetPlayers[MAX_LOBBY_SLOTS] := fNetworking.HostIndex;
-    fNetPlayersToLocal[fNetworking.HostIndex] := MAX_LOBBY_SLOTS;
+    fLocalToNetPlayers[MAX_LOBBY_SLOTS] := gNetworking.HostIndex;
+    fNetPlayersToLocal[gNetworking.HostIndex] := MAX_LOBBY_SLOTS;
   end;
 
   //Spectators, place them at the end
-  K := MAX_LOBBY_SLOTS - fNetworking.NetPlayers.GetSpectatorCount + 1;
-  for I:=1 to fNetworking.NetPlayers.Count do
-    if (I <> fNetworking.HostIndex) and fNetworking.NetPlayers[I].IsSpectator then
+  K := MAX_LOBBY_SLOTS - gNetworking.NetPlayers.GetSpectatorCount + 1;
+  for I:=1 to gNetworking.NetPlayers.Count do
+    if (I <> gNetworking.HostIndex) and gNetworking.NetPlayers[I].IsSpectator then
     begin
       Assert((K <= MAX_LOBBY_SLOTS) and (fLocalToNetPlayers[K] = -1), 'Too many spectators');
       fLocalToNetPlayers[K] := I;
@@ -342,8 +343,8 @@ var
   I, DivideRow, OffY: Integer;
 begin
   Image_HostStar.Hide; //In case host is unknown
-  if (fNetworking <> nil) and (fNetworking.NetPlayers <> nil) then
-    DivideRow := MAX_LOBBY_SLOTS - Max(MAX_LOBBY_SPECTATORS, fNetworking.NetPlayers.GetSpectatorCount)
+  if (gNetworking <> nil) and (gNetworking.NetPlayers <> nil) then
+    DivideRow := MAX_LOBBY_SLOTS - Max(MAX_LOBBY_SPECTATORS, gNetworking.NetPlayers.GetSpectatorCount)
   else
     DivideRow := MAX_LOBBY_PLAYERS;
   for I := 1 to MAX_LOBBY_SLOTS do
@@ -366,15 +367,15 @@ begin
     Image_Ready[I].Top           := OffY;
     Label_Ping[I].Top            := OffY;
 
-    if (fNetworking <> nil) and (fLocalToNetPlayers[I] = fNetworking.HostIndex) then
+    if (gNetworking <> nil) and (fLocalToNetPlayers[I] = gNetworking.HostIndex) then
     begin
       Image_HostStar.Top := OffY+2;
       Image_HostStar.Show;
       PercentBar_PlayerDl_ChVisibility(I, False);
     end;
   end;
-  if (fNetworking <> nil) and (fNetworking.NetPlayers <> nil)
-  and fNetworking.NetPlayers.SpectatorsAllowed then
+  if (gNetworking <> nil) and (gNetworking.NetPlayers <> nil)
+  and gNetworking.NetPlayers.SpectatorsAllowed then
   begin
     Panel_Players.Height := TOP_OFF + LINE_Y*MAX_LOBBY_SLOTS + DIVIDE_Y + 2;
     Bevel_SpecsDivide.Show;
@@ -757,32 +758,32 @@ var NetI: Integer;
 begin
   case aItemTag of
     CHAT_MENU_ALL:        begin //All
-                            gGameApp.Chat.Mode := cmAll;
+                            gChat.Mode := cmAll;
                             UpdateButtonCaption(gResTexts[TX_CHAT_ALL]);
                             Edit_Post.DrawOutline := False; //No outline for All
                           end;
     CHAT_MENU_TEAM:       begin //Team
-                            gGameApp.Chat.Mode := cmTeam;
+                            gChat.Mode := cmTeam;
                             UpdateButtonCaption(gResTexts[TX_CHAT_TEAM], $FF66FF66);
                             Edit_Post.DrawOutline := True;
                             Edit_Post.OutlineColor := $FF66FF66;
                           end;
     CHAT_MENU_SPECTATORS: begin //Spectators
-                            gGameApp.Chat.Mode := cmSpectators;
+                            gChat.Mode := cmSpectators;
                             UpdateButtonCaption(gResTexts[TX_CHAT_SPECTATORS], $FF66FF66);
                             Edit_Post.DrawOutline := True;
                             Edit_Post.OutlineColor := $FF66FF66;
                           end;
     else  begin //Whisper to player
-            NetI := fNetworking.NetPlayers.ServerToLocal(aItemTag);
+            NetI := gNetworking.NetPlayers.ServerToLocal(aItemTag);
             if NetI <> -1 then
             begin
-              gGameApp.Chat.Mode := cmWhisper;
+              gChat.Mode := cmWhisper;
               Edit_Post.DrawOutline := True;
               Edit_Post.OutlineColor := $FF00B9FF;
-              with fNetworking.NetPlayers[NetI] do
+              with gNetworking.NetPlayers[NetI] do
               begin
-                gGameApp.Chat.WhisperRecipient := IndexOnServer;
+                gChat.WhisperRecipient := IndexOnServer;
                 UpdateButtonCaption(NiknameU, IfThen(IsColorSet, FlagColorToTextColor(FlagColor), 0));
               end;
             end;
@@ -810,17 +811,17 @@ begin
   Menu_Chat.AddItem(gResTexts[TX_CHAT_ALL], CHAT_MENU_ALL);
 
   //Only show "Team" if the player is on a team
-  if fNetworking.MyNetPlayer.Team <> 0 then
+  if gNetworking.MyNetPlayer.Team <> 0 then
     Menu_Chat.AddItem('[$66FF66]' + gResTexts[TX_CHAT_TEAM], CHAT_MENU_TEAM);
 
   //Only show "Spectators" if the player is a spectator
-  if fNetworking.MyNetPlayer.IsSpectator then
+  if gNetworking.MyNetPlayer.IsSpectator then
     Menu_Chat.AddItem('[$66FF66]' + gResTexts[TX_CHAT_SPECTATORS], CHAT_MENU_SPECTATORS);
 
-  for I := 1 to fNetworking.NetPlayers.Count do
-  if I <> fNetworking.MyIndex then //Can't whisper to yourself
+  for I := 1 to gNetworking.NetPlayers.Count do
+  if I <> gNetworking.MyIndex then //Can't whisper to yourself
   begin
-    n := fNetworking.NetPlayers[I];
+    n := gNetworking.NetPlayers[I];
 
     if n.IsHuman and n.Connected and not n.Dropped then
       Menu_Chat.AddItem(n.NiknameColoredU, n.IndexOnServer);
@@ -838,17 +839,17 @@ begin
   //Default
   Result := 0;
 
-  case fNetworking.SelectGameKind of
-    ngkMap:  if fNetworking.MapInfo.TxtInfo.IsCoop then
+  case gNetworking.SelectGameKind of
+    ngkMap:  if gNetworking.MapInfo.TxtInfo.IsCoop then
                 Result := 2
               else
-              if fNetworking.MapInfo.TxtInfo.IsSpecial then
+              if gNetworking.MapInfo.TxtInfo.IsSpecial then
                 Result := 3
               else
-              if fNetworking.MapInfo.TxtInfo.IsRMG then
+              if gNetworking.MapInfo.TxtInfo.IsRMG then
                 Result := MAP_TYPE_INDEX_RMG
               else
-              if fNetworking.MapInfo.MissionMode = mmTactic then
+              if gNetworking.MapInfo.IsTacticMission then
                 Result := 1;
     ngkSave: Result := MAP_TYPE_INDEX_SAVE;
   end;
@@ -857,61 +858,59 @@ end;
 
 procedure TKMMenuLobby.ChatTextChanged(Sender: TObject);
 begin
-  gGameApp.Chat.Text := Edit_Post.Text;
+  gChat.Text := Edit_Post.Text;
 end;
 
 
 procedure TKMMenuLobby.UpdateChatControls;
 begin
-  if gGameApp.Chat.Mode = cmWhisper then
-    ChatMenuSelect(gGameApp.Chat.WhisperRecipient)
+  if gChat.Mode = cmWhisper then
+    ChatMenuSelect(gChat.WhisperRecipient)
   else
-    ChatMenuSelect(CHAT_TAG[gGameApp.Chat.Mode]);
+    ChatMenuSelect(CHAT_TAG[gChat.Mode]);
 
-  Memo_Posts.Text := gGameApp.Chat.Messages;
+  Memo_Posts.Text := gChat.Messages;
 end;
 
 
 procedure TKMMenuLobby.SetChatHandlers;
 begin
-  gGameApp.Chat.OnError := HandleError;
-  gGameApp.Chat.OnPost := PostMsg;
-  gGameApp.Chat.OnPostLocal := PostLocalMsg;
-  gGameApp.Chat.OnChange := UpdateChatControls;
+  gChat.OnError := HandleError;
+  gChat.OnPost := PostMsg;
+  gChat.OnPostLocal := PostLocalMsg;
+  gChat.OnChange := UpdateChatControls;
 
   UpdateChatControls
 end;
 
 
-procedure TKMMenuLobby.Show(aKind: TKMNetPlayerKind; aNetworking: TKMNetworking; aMainHeight: Word);
+procedure TKMMenuLobby.Show(aKind: TKMNetPlayerKind; aMainHeight: Word);
 var
   I: Integer;
 begin
-  fNetworking := aNetworking;
-
-  Reset(aKind);
+  Reset(aKind, True);
 
   //Events binding is the same for Host and Joiner because of stand-alone Server
   //E.g. If Server fails, Host can be disconnected from it as well as a Joiner
-  fNetworking.OnTextMessage   := Lobby_OnMessage;
-  fNetworking.OnPlayersSetup  := Lobby_OnPlayersSetup;
-  fNetworking.OnUpdateMinimap := Lobby_OnUpdateMinimap;
-  fNetworking.OnGameOptions   := Lobby_OnGameOptions;
-  fNetworking.OnMapName       := Lobby_OnMapName;
-  fNetworking.OnMapMissing    := Lobby_OnMapMissing;
-  fNetworking.OnPingInfo      := Lobby_OnPingInfo;
-  //fNetworking.OnStartMap - already assigned in gGameApp when Net is created
-  //fNetworking.OnStartSave - already assigned in gGameApp when Net is created
-  fNetworking.OnDisconnect   := Lobby_OnDisconnect;
-  fNetworking.OnReassignedHost := Lobby_OnReassignedToHost;
-  fNetworking.OnReassignedJoiner := Lobby_OnReassignedToJoiner;
-  fNetworking.OnFileTransferProgress := Lobby_OnFileTransferProgress;
-  fNetworking.OnPlayerFileTransferProgress := Lobby_OnPlayerFileTransferProgress;
-  fNetworking.OnSetPassword := Lobby_OnSetPassword;
-  fNetworking.OnAbortAllTransfers := Lobby_AbortAllTransfers;
+  gNetworking.OnTextMessage   := Lobby_OnMessage;
+  gNetworking.OnPlayersSetup  := Lobby_OnPlayersSetup;
+  gNetworking.OnUpdateMinimap := Lobby_OnUpdateMinimap;
+  gNetworking.OnGameOptions   := Lobby_OnGameOptions;
+  gNetworking.OnMapName       := Lobby_OnMapName;
+  gNetworking.OnMapMissing    := Lobby_OnMapMissing;
+  gNetworking.OnPingInfo      := Lobby_OnPingInfo;
+  //gNetworking.OnStartMap - already assigned in gGameApp when Net is created
+  //gNetworking.OnStartSave - already assigned in gGameApp when Net is created
+  gNetworking.OnDisconnect   := Lobby_OnDisconnect;
+  gNetworking.OnReassignedHost := Lobby_OnReassignedToHost;
+  gNetworking.OnReassignedJoiner := Lobby_OnReassignedToJoiner;
+  gNetworking.OnFileTransferProgress := Lobby_OnFileTransferProgress;
+  gNetworking.OnPlayerFileTransferProgress := Lobby_OnPlayerFileTransferProgress;
+  gNetworking.OnSetPassword := Lobby_OnSetPassword;
+  gNetworking.OnAbortAllTransfers := Lobby_AbortAllTransfers;
 
-  Radio_MapType.ItemIndex := gGameApp.GameSettings.MenuLobbyMapType;
-  UpdateMapList;
+  Radio_MapType.ItemIndex := gGameSettings.MenuLobbyMapType;
+  UpdateMapList(aKind = lpkHost);
 
   //Hide RMG settings PopUp in case it was shown previosly
   if fGuiRMG <> nil then
@@ -919,7 +918,7 @@ begin
 
   //Update chat
   SetChatHandlers;
-  Edit_Post.Text := gGameApp.Chat.Text; //Update Edit text from Chat (game) only once
+  Edit_Post.Text := gChat.Text; //Update Edit text from Chat (game) only once
   Memo_Posts.ScrollToBottom;
 
   for I := 1 to MAX_LOBBY_SLOTS do
@@ -1033,8 +1032,8 @@ begin
   //Scan should be terminated, it is no longer needed
   fMapsMP.TerminateScan;
 
-  fNetworking.AnnounceDisconnect;
-  fNetworking.Disconnect;
+  gNetworking.AnnounceDisconnect;
+  gNetworking.Disconnect;
 
   fOnPageChange(gpMultiplayer, gResTexts[TX_GAME_ERROR_DISCONNECT]);
 end;
@@ -1093,7 +1092,10 @@ begin
   begin
     Radio_MapType.Enable;
     Radio_MapType.ItemIndex := 0;
-    if not aPreserveMaps then UpdateMapList;
+
+    if not aPreserveMaps then
+      UpdateMapList(True);
+
     DropCol_Maps.Show;
     Label_MapName.Hide;
     Button_Start.Caption := gResTexts[TX_LOBBY_START]; //Start
@@ -1140,13 +1142,13 @@ begin
     MD := mdNone;
 
   //Update the game options
-  fNetworking.UpdateGameOptions(EnsureRange(TrackBar_LobbyPeacetime.Position, 0, 300),
+  gNetworking.UpdateGameOptions(EnsureRange(TrackBar_LobbyPeacetime.Position, 0, 300),
                                 TrackBarPos2Speed(TrackBar_SpeedPT.Position),
                                 TrackBarPos2Speed(TrackBar_SpeedAfterPT.Position),
                                 MD);
 
   //Refresh the data to controls
-  Lobby_OnGameOptions(nil);
+  Lobby_OnGameOptions;
 end;
 
 
@@ -1154,7 +1156,7 @@ procedure TKMMenuLobby.FileDownloadClick(Sender: TObject);
 begin
   if Sender = Button_SetupDownload then
   begin
-    fNetworking.RequestFileTransfer;
+    gNetworking.RequestFileTransfer;
     Button_SetupDownload.Hide;
     Lobby_OnFileTransferProgress(1, 0);
     PercentBar_SetupProgress.Caption := gResTexts[TX_LOBBY_DOWNLOADING];
@@ -1164,8 +1166,8 @@ end;
 
 procedure TKMMenuLobby.ReadmeClick(Sender: TObject);
 begin
-  if not fNetworking.MapInfo.ViewReadme then
-    gGameApp.Chat.AddLine(gResTexts[TX_LOBBY_PDF_ERROR]);
+  if not gNetworking.MapInfo.ViewReadme then
+    gChat.AddLine(gResTexts[TX_LOBBY_PDF_ERROR]);
 end;
 
 
@@ -1176,18 +1178,18 @@ begin
 end;
 
 
-procedure TKMMenuLobby.Lobby_OnGameOptions(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnGameOptions;
 var
   MD: TKMMissionDifficulty;
 begin
-  TrackBar_LobbyPeacetime.Position := fNetworking.NetGameOptions.Peacetime;
+  TrackBar_LobbyPeacetime.Position := gNetworking.NetGameOptions.Peacetime;
 
   TrackBar_SpeedPT.Enabled   := (TrackBar_LobbyPeacetime.Position > 0) and TrackBar_SpeedAfterPT.Enabled;
-  TrackBar_SpeedPT.Position  := Speed2TrackBarPos(fNetworking.NetGameOptions.SpeedPT);
+  TrackBar_SpeedPT.Position  := Speed2TrackBarPos(gNetworking.NetGameOptions.SpeedPT);
 
-  TrackBar_SpeedAfterPT.Position  := Speed2TrackBarPos(fNetworking.NetGameOptions.SpeedAfterPT);
+  TrackBar_SpeedAfterPT.Position  := Speed2TrackBarPos(gNetworking.NetGameOptions.SpeedAfterPT);
 
-  MD := fNetworking.NetGameOptions.MissionDifficulty;
+  MD := gNetworking.NetGameOptions.MissionDifficulty;
 
   if MD <> mdNone then
     DropBox_Difficulty.SelectByTag(Byte(MD));
@@ -1207,20 +1209,20 @@ begin
   //In any way banlist should be editable from within the lobby, so we will need methods to get the list
   //from the server and allow to remove items from it.
 
-  id := fNetworking.NetPlayers.ServerToLocal(TKMControl(Sender).Tag);
+  id := gNetworking.NetPlayers.ServerToLocal(TKMControl(Sender).Tag);
   if id = -1 then Exit; //Player has quit the lobby
 
   //Kick
   if (Sender = Menu_Host) and (Menu_Host.ItemIndex = 0) then
-    fNetworking.KickPlayer(id);
+    gNetworking.KickPlayer(id);
 
   //Ban
   if (Sender = Menu_Host) and (Menu_Host.ItemIndex = 1) then
-    fNetworking.BanPlayer(id);
+    gNetworking.BanPlayer(id);
 
   //Set to host
   if (Sender = Menu_Host) and (Menu_Host.ItemIndex = 2) then
-    fNetworking.SetToHost(id);
+    gNetworking.SetToHost(id);
 
   // Mute/Unmute
   if (Sender = Menu_Host) and (Menu_Host.ItemIndex = 3) then
@@ -1231,7 +1233,7 @@ end;
 procedure TKMMenuLobby.JoinerMenuClick(Sender: TObject);
 var id: Integer;
 begin
-  id := fNetworking.NetPlayers.ServerToLocal(TKMControl(Sender).Tag);
+  id := gNetworking.NetPlayers.ServerToLocal(TKMControl(Sender).Tag);
   if id = -1 then Exit; //Player has quit the lobby
   // Mute/Unmute
   if (Sender = Menu_Joiner) and (Menu_Joiner.ItemIndex = 0) then
@@ -1252,9 +1254,9 @@ begin
   end;
 
   //Only human players (excluding ourselves) have the player menu
-  if not fNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IsHuman //No menu for AI players
-  or (fNetworking.MyIndex = fLocalToNetPlayers[ctrl.Tag]) //No menu for ourselves
-  or not fNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].Connected then //Don't show menu for empty slots
+  if not gNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IsHuman //No menu for AI players
+  or (gNetworking.MyIndex = fLocalToNetPlayers[ctrl.Tag]) //No menu for ourselves
+  or not gNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].Connected then //Don't show menu for empty slots
   begin
     Result := False;
     Exit;
@@ -1286,22 +1288,22 @@ begin
 
   if not CanShowPlayerMenu(Sender) then Exit;
 
-  if fNetworking.IsHost then
+  if gNetworking.IsHost then
   begin
     //Remember which player it is by his server index
     //since order of players can change. If someone above leaves we still have the proper Id
-    Menu_Host.Tag := fNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IndexOnServer;
+    Menu_Host.Tag := gNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IndexOnServer;
 
-    UpdateMuteMenuItem(Menu_Host, 3, gGameApp.Networking.IsMuted(fLocalToNetPlayers[ctrl.Tag]));
+    UpdateMuteMenuItem(Menu_Host, 3, gNetworking.IsMuted(fLocalToNetPlayers[ctrl.Tag]));
 
     //Position the menu next to the icon, but do not overlap players name
     Menu_Host.ShowAt(ctrl.AbsLeft, ctrl.AbsTop + ctrl.Height);
   end else begin
     //Remember which player it is by his server index
     //since order of players can change. If someone above leaves we still have the proper Id
-    Menu_Joiner.Tag := fNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IndexOnServer;
+    Menu_Joiner.Tag := gNetworking.NetPlayers[fLocalToNetPlayers[ctrl.Tag]].IndexOnServer;
 
-    UpdateMuteMenuItem(Menu_Joiner, 0, gGameApp.Networking.IsMuted(fLocalToNetPlayers[ctrl.Tag]));
+    UpdateMuteMenuItem(Menu_Joiner, 0, gNetworking.IsMuted(fLocalToNetPlayers[ctrl.Tag]));
     
     //Position the menu next to the icon, but do not overlap players name
     Menu_Joiner.ShowAt(ctrl.AbsLeft, ctrl.AbsTop + ctrl.Height);
@@ -1311,7 +1313,7 @@ end;
 
 procedure TKMMenuLobby.ToggleMutePlayer(aPlayerIndex: Integer);
 begin
-  gGameApp.Networking.ToggleMuted(aPlayerIndex);
+  gNetworking.ToggleMuted(aPlayerIndex);
   UpdateImageLobbyFlag(fNetPlayersToLocal[aPlayerIndex]);
 end;
 
@@ -1328,7 +1330,7 @@ end;
 procedure TKMMenuLobby.UpdateImageLobbyFlag(aIndex: Integer);
 begin
   // Darken player flag when muted
-  if (fLocalToNetPlayers[aIndex] <> -1) and fNetworking.IsMuted(fLocalToNetPlayers[aIndex]) then
+  if (fLocalToNetPlayers[aIndex] <> -1) and gNetworking.IsMuted(fLocalToNetPlayers[aIndex]) then
     Image_Flag[aIndex].Lightness := -0.66
   else
     Image_Flag[aIndex].Lightness := 0;
@@ -1343,17 +1345,17 @@ begin
 
   aAIPlayerTypes := aAIPlayerTypes * [AI_PLAYER_TYPE_MIN..AI_PLAYER_TYPE_MAX]; //Restrict with AI player types only
 
-  if (fNetworking.MapInfo <> nil) and fNetworking.MapInfo.IsValid then
+  if (gNetworking.MapInfo <> nil) and gNetworking.MapInfo.IsValid then
   begin
-    OpenedHumansAtAISlots := Max(0, fNetworking.MapInfo.CanBeHumanAndAICount - fNetworking.NetPlayers.GetConnectedPlayersCount);
+    OpenedHumansAtAISlots := Max(0, gNetworking.MapInfo.CanBeHumanAndAICount - gNetworking.NetPlayers.GetConnectedPlayersCount);
     Result := Max(0, OpenedHumansAtAISlots
-                   //+ fNetworking.MapInfo.CanBeOnlyAICount // Only AI is added at the start of the game...
-                   - fNetworking.NetPlayers.GetAICount(aAIPlayerTypes));
-  end else if (fNetworking.SaveInfo <> nil) and fNetworking.SaveInfo.IsValid then
+                   //+ gNetworking.MapInfo.CanBeOnlyAICount // Only AI is added at the start of the game...
+                   - gNetworking.NetPlayers.GetAICount(aAIPlayerTypes));
+  end else if (gNetworking.SaveInfo <> nil) and gNetworking.SaveInfo.IsValid then
   begin
-    Result := Max(0, fNetworking.SaveInfo.GameInfo.HumanCount
-                   - fNetworking.NetPlayers.GetConnectedPlayersCount
-                   - fNetworking.NetPlayers.GetAICount(aAIPlayerTypes));
+    Result := Max(0, gNetworking.SaveInfo.GameInfo.HumanCount
+                   - gNetworking.NetPlayers.GetConnectedPlayersCount
+                   - gNetworking.NetPlayers.GetAICount(aAIPlayerTypes));
   end;
 end;
 
@@ -1414,7 +1416,7 @@ begin
 
       RowChanged := False;
       NetI := fLocalToNetPlayers[J];
-      if (NetI = -1) or not fNetworking.NetPlayers[NetI].IsHuman then
+      if (NetI = -1) or not gNetworking.NetPlayers[NetI].IsHuman then
       begin
         if DropBox_PlayerSlot[J].ItemIndex <> Y then //Do not count this slot as changed, if it already has same AI value
         begin
@@ -1440,7 +1442,8 @@ var
   ID: Integer;
   Color: Cardinal;
 begin
-  if not fNetworking.MapInfo.TxtInfo.BlockColorSelection then Exit;
+  if (gNetworking.SelectGameKind = ngkMap) and not gNetworking.MapInfo.TxtInfo.BlockColorSelection then Exit;
+  if (gNetworking.SelectGameKind = ngkSave) and not gNetworking.SaveInfo.GameInfo.BlockColorSelection then Exit;
 
   if (DropBox_Loc[I].GetSelectedTag <> LOC_SPECTATE) then
   begin
@@ -1449,10 +1452,15 @@ begin
     else
     begin
       ID := fLocalToNetPlayers[I];
-      Color := fNetworking.MapInfo.FlagColors[DropBox_Loc[I].GetSelectedTag - 1];
+      case gNetworking.SelectGameKind of
+        ngkMap:   Color := gNetworking.MapInfo.FlagColors[DropBox_Loc[I].GetSelectedTag - 1];
+        ngkSave:  Color := gNetworking.SaveInfo.GameInfo.Color[DropBox_Loc[I].GetSelectedTag - 1];
+        else      Color := 0;
+      end;
+
       DropBox_Colors[I][0].Cells[0].Color := Color;
       DropBox_Colors[I][0].Cells[0].Pic.Id := 30;
-      fNetworking.NetPlayers[ID].FlagColor := Color;
+      gNetworking.NetPlayers[ID].FlagColor := Color;
     end;
     DropBox_Colors[I].ItemIndex := 0;
     DropBox_Colors[I].Disable;
@@ -1474,27 +1482,27 @@ begin
   //Host control toggle
   if Sender = CheckBox_HostControl then
   begin
-    fNetworking.NetPlayers.HostDoesSetup := CheckBox_HostControl.Checked;
-    fNetworking.SendPlayerListAndRefreshPlayersSetup;
+    gNetworking.NetPlayers.HostDoesSetup := CheckBox_HostControl.Checked;
+    gNetworking.SendPlayerListAndRefreshPlayersSetup;
   end;
 
   if Sender = CheckBox_RandomizeTeamLocations then
   begin
-    fNetworking.NetPlayers.RandomizeTeamLocations := CheckBox_RandomizeTeamLocations.Checked;
-    fNetworking.SendPlayerListAndRefreshPlayersSetup;
+    gNetworking.NetPlayers.RandomizeTeamLocations := CheckBox_RandomizeTeamLocations.Checked;
+    gNetworking.SendPlayerListAndRefreshPlayersSetup;
   end;
 
   if Sender = CheckBox_Spectators then
   begin
-    if not CheckBox_Spectators.Checked and (fNetworking.NetPlayers.GetSpectatorCount > 0) then
+    if not CheckBox_Spectators.Checked and (gNetworking.NetPlayers.GetSpectatorCount > 0) then
     begin
-      fNetworking.PostLocalMessage(gResTexts[TX_LOBBY_CANNOT_DISABLE_SPECTATORS], csSystem);
+      gNetworking.PostLocalMessage(gResTexts[TX_LOBBY_CANNOT_DISABLE_SPECTATORS], csSystem);
       CheckBox_Spectators.Checked := True;
     end
     else
     begin
-      fNetworking.NetPlayers.SpectatorsAllowed := CheckBox_Spectators.Checked;
-      fNetworking.SendPlayerListAndRefreshPlayersSetup;
+      gNetworking.NetPlayers.SpectatorsAllowed := CheckBox_Spectators.Checked;
+      gNetworking.SendPlayerListAndRefreshPlayersSetup;
     end;
   end;
 
@@ -1505,21 +1513,21 @@ begin
     if (Sender = DropBox_Loc[I]) and DropBox_Loc[I].Enabled then
     begin
       // We can still have cmSpectate chat mode if we were in specs. Reset to cmAll in this case
-      if (DropBox_Loc[I].GetSelectedTag <> LOC_SPECTATE) and (gGameApp.Chat.Mode = cmSpectators) then
+      if (DropBox_Loc[I].GetSelectedTag <> LOC_SPECTATE) and (gChat.Mode = cmSpectators) then
         ChatMenuSelect(CHAT_MENU_ALL);
 
-      fNetworking.SelectLoc(DropBox_Loc[I].GetSelectedTag, NetI);
+      gNetworking.SelectLoc(DropBox_Loc[I].GetSelectedTag, NetI);
       //Host with HostDoesSetup could have given us some location we don't know about
       //from a map/save we don't have, so make sure SelectGameKind is valid
-      if (fNetworking.SelectGameKind <> ngkNone)
-        and not fNetworking.IsHost then //Changes are applied instantly for host
+      if (gNetworking.SelectGameKind <> ngkNone)
+        and not gNetworking.IsHost then //Changes are applied instantly for host
         //Set loc back to NetPlayers value until host processes our request
-        DropBox_Loc[I].SelectByTag(fNetworking.NetPlayers[NetI].StartLocation);
+        DropBox_Loc[I].SelectByTag(gNetworking.NetPlayers[NetI].StartLocation);
     end;
 
     //Team
     if (Sender = DropBox_Team[I]) and DropBox_Team[I].Enabled then
-      fNetworking.SelectTeam(DropBox_Team[I].ItemIndex, NetI);
+      gNetworking.SelectTeam(DropBox_Team[I].ItemIndex, NetI);
 
     //Color
     if (Sender = DropBox_Colors[I])
@@ -1531,27 +1539,27 @@ begin
       else
         Col := DropBox_Colors[I][DropBox_Colors[I].ItemIndex].Cells[0].Color;
 
-      fNetworking.SelectColor(Col, NetI);
+      gNetworking.SelectColor(Col, NetI);
     end;
 
     if Sender = DropBox_PlayerSlot[I] then
     begin
       //Modify an existing player
-      if (NetI <> -1) and (NetI <= fNetworking.NetPlayers.Count) then
+      if (NetI <> -1) and (NetI <= gNetworking.NetPlayers.Count) then
       begin
         case DropBox_PlayerSlot[I].ItemIndex of
           0:  //Open
               begin
-                if fNetworking.NetPlayers[NetI].IsComputer
-                  or fNetworking.NetPlayers[NetI].IsClosed then
-                  fNetworking.NetPlayers.RemPlayer(NetI);
+                if gNetworking.NetPlayers[NetI].IsComputer
+                  or gNetworking.NetPlayers[NetI].IsClosed then
+                  gNetworking.NetPlayers.RemPlayer(NetI);
               end;
           1:  //Closed
-              fNetworking.NetPlayers.AddClosedPlayer(NetI); //Replace it
+              gNetworking.NetPlayers.AddClosedPlayer(NetI); //Replace it
           2:  //AI
-              fNetworking.NetPlayers.AddAIPlayer(False, NetI); //Replace it
+              gNetworking.NetPlayers.AddAIPlayer(False, NetI); //Replace it
           3:  //Advanced AI
-              fNetworking.NetPlayers.AddAIPlayer(True, NetI); //Replace it
+              gNetworking.NetPlayers.AddAIPlayer(True, NetI); //Replace it
         end;
       end
       else
@@ -1560,22 +1568,22 @@ begin
         begin
           //These are spectator only slots
           case DropBox_PlayerSlot[I].ItemIndex of
-            0: fNetworking.NetPlayers.SpectatorSlotsOpen := MAX_LOBBY_SLOTS - I + 1;
-            1: fNetworking.NetPlayers.SpectatorSlotsOpen := MAX_LOBBY_SLOTS - I;
+            0: gNetworking.NetPlayers.SpectatorSlotsOpen := MAX_LOBBY_SLOTS - I + 1;
+            1: gNetworking.NetPlayers.SpectatorSlotsOpen := MAX_LOBBY_SLOTS - I;
           end;
         end
         else
         begin
           //Add a new player
           case DropBox_PlayerSlot[I].ItemIndex of
-            1: fNetworking.NetPlayers.AddClosedPlayer;
-            2: fNetworking.NetPlayers.AddAIPlayer(False);
-            3: fNetworking.NetPlayers.AddAIPlayer(True);
+            1: gNetworking.NetPlayers.AddClosedPlayer;
+            2: gNetworking.NetPlayers.AddAIPlayer(False);
+            3: gNetworking.NetPlayers.AddAIPlayer(True);
           end;
         end;
       end;
       DropBox_PlayerSlot[I].CloseList; //We may have cause player list to rearrange
-      fNetworking.SendPlayerListAndRefreshPlayersSetup;
+      gNetworking.SendPlayerListAndRefreshPlayersSetup;
     end;
   end;
 end;
@@ -1596,7 +1604,7 @@ end;
 //Players list has been updated
 //We should reflect it to UI
 //Not very fast operation - ~4ms per player = ~60ms per all
-procedure TKMMenuLobby.Lobby_OnPlayersSetup(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnPlayersSetup;
 
   function ConvertSpeedRange(aSpeedRng: TKMRangeSingle): TKMRangeInt;
   begin
@@ -1606,7 +1614,7 @@ procedure TKMMenuLobby.Lobby_OnPlayersSetup(Sender: TObject);
 
   procedure AddLocation(LocationName: UnicodeString; aIndex, aLocation: Integer);
   begin
-    if not fNetworking.CanTakeLocation(fLocalToNetPlayers[aIndex], aLocation, False) then
+    if not gNetworking.CanTakeLocation(fLocalToNetPlayers[aIndex], aLocation, False) then
       LocationName := '[$707070]' + LocationName + '[]';
     DropBox_Loc[aIndex].Add(LocationName, aLocation);
   end;
@@ -1636,23 +1644,25 @@ var
   FirstUnused: Boolean;
   AIOnlyColors: TKMCardinalArray;
   colorDist: Single;
+  players: set of Byte;
+  playersCnt, startLoc, rngPlayersTeam: Integer;
 begin
   UpdateMappings;
 
-  IsSave := fNetworking.SelectGameKind = ngkSave;
+  IsSave := gNetworking.SelectGameKind = ngkSave;
 
   if Radio_MapType.ItemIndex < MAP_TYPE_INDEX_SAVE then //Limit PT for new game
-    TrackBar_LobbyPeacetime.Range := fNetworking.NetGameFilter.PeacetimeRng
+    TrackBar_LobbyPeacetime.Range := gNetworking.NetGameFilter.PeacetimeRng
   else
     TrackBar_LobbyPeacetime.ResetRange; //No limit for saved game
 
   //Apply speed range filter for all games, even for saves
-  TrackBar_SpeedPT.Range := ConvertSpeedRange(fNetworking.NetGameFilter.SpeedRng);
-  TrackBar_SpeedAfterPT.Range := ConvertSpeedRange(fNetworking.NetGameFilter.SpeedAfterPTRng);
+  TrackBar_SpeedPT.Range := ConvertSpeedRange(gNetworking.NetGameFilter.SpeedRng);
+  TrackBar_SpeedAfterPT.Range := ConvertSpeedRange(gNetworking.NetGameFilter.SpeedAfterPTRng);
 
   UpdateGameOptionsUI;
 
-  AIOnlyColors := fNetworking.MapInfo.AIOnlyLocsColors; // save it locally to avoid multiple calculations
+  AIOnlyColors := gNetworking.MapInfo.AIOnlyLocsColors; // save it locally to avoid multiple calculations
 
   FirstUnused := True;
   for I := 1 to MAX_LOBBY_SLOTS do
@@ -1667,32 +1677,32 @@ begin
       if I > MAX_LOBBY_PLAYERS then
       begin
         //Spectator slots. Is this one open?
-        if MAX_LOBBY_SLOTS - I < fNetworking.NetPlayers.SpectatorSlotsOpen then
+        if MAX_LOBBY_SLOTS - I < gNetworking.NetPlayers.SpectatorSlotsOpen then
         begin
           DropBox_PlayerSlot[I].ItemIndex := 0; //Spectator
-          DropBox_PlayerSlot[I].Enabled := fNetworking.IsHost and (MAX_LOBBY_SLOTS - I + 1 = fNetworking.NetPlayers.SpectatorSlotsOpen);
+          DropBox_PlayerSlot[I].Enabled := gNetworking.IsHost and (MAX_LOBBY_SLOTS - I + 1 = gNetworking.NetPlayers.SpectatorSlotsOpen);
         end
         else
         begin
           DropBox_PlayerSlot[I].ItemIndex := 1; //Closed
-          DropBox_PlayerSlot[I].Enabled := fNetworking.IsHost and (MAX_LOBBY_SLOTS - I = fNetworking.NetPlayers.SpectatorSlotsOpen);
+          DropBox_PlayerSlot[I].Enabled := gNetworking.IsHost and (MAX_LOBBY_SLOTS - I = gNetworking.NetPlayers.SpectatorSlotsOpen);
         end;
         DropBox_Loc[I].Clear;
         DropBox_Loc[I].Add(gResTexts[TX_LOBBY_SPECTATE], LOC_SPECTATE);
 
-        DropBox_PlayerSlot[I].Visible := fNetworking.NetPlayers.SpectatorsAllowed;
-        DropBox_Loc[I].Visible        := fNetworking.NetPlayers.SpectatorsAllowed;
-        DropBox_Colors[I].Visible     := fNetworking.NetPlayers.SpectatorsAllowed;
+        DropBox_PlayerSlot[I].Visible := gNetworking.NetPlayers.SpectatorsAllowed;
+        DropBox_Loc[I].Visible        := gNetworking.NetPlayers.SpectatorsAllowed;
+        DropBox_Colors[I].Visible     := gNetworking.NetPlayers.SpectatorsAllowed;
       end
       else
       begin
         DropBox_PlayerSlot[I].ItemIndex := 0; //Open
         //Only host may change player slots, and only the first unused slot may be changed (so there are no gaps in net players list)
-        DropBox_PlayerSlot[I].Enabled := fNetworking.IsHost and FirstUnused;
+        DropBox_PlayerSlot[I].Enabled := gNetworking.IsHost and FirstUnused;
         FirstUnused := False;
 
         DropBox_Loc[I].Clear;
-        if fNetworking.SelectGameKind = ngkSave then
+        if gNetworking.SelectGameKind = ngkSave then
           DropBox_Loc[I].Add(gResTexts[TX_LOBBY_SELECT], LOC_RANDOM)
         else
           DropBox_Loc[I].Add(gResTexts[TX_LOBBY_RANDOM], LOC_RANDOM);
@@ -1709,7 +1719,7 @@ begin
     else
     begin
       //This player is used
-      CurPlayer := fNetworking.NetPlayers[fLocalToNetPlayers[I]];
+      CurPlayer := gNetworking.NetPlayers[fLocalToNetPlayers[I]];
 
       DropBox_Team[I].Visible := not CurPlayer.IsSpectator; //Spectators don't get a team
       DropBox_Loc[I].Show;
@@ -1727,7 +1737,7 @@ begin
       end;
 
       //Players list
-      if fNetworking.IsHost and (not CurPlayer.IsHuman) then
+      if gNetworking.IsHost and (not CurPlayer.IsHuman) then
       begin
         Label_Player[I].Hide;
         PercentBar_PlayerDl_ChVisibility(I, False);
@@ -1760,35 +1770,35 @@ begin
       //If we can't load the map, don't attempt to show starting locations
       IsValid := False;
       DropBox_Loc[I].Clear;
-      case fNetworking.SelectGameKind of
+      case gNetworking.SelectGameKind of
         ngkNone: AddLocation(gResTexts[TX_LOBBY_RANDOM], I, LOC_RANDOM);
         ngkSave: begin
-                    IsValid := fNetworking.SaveInfo.IsValid;
+                    IsValid := gNetworking.SaveInfo.IsValid;
                     AddLocation(gResTexts[TX_LOBBY_SELECT], I, LOC_RANDOM);
 
-                    for K := 0 to fNetworking.SaveInfo.GameInfo.PlayerCount - 1 do
-                      if fNetworking.SaveInfo.GameInfo.Enabled[K]
-                      and (fNetworking.SaveInfo.GameInfo.CanBeHuman[K] or ALLOW_TAKE_AI_PLAYERS) then
-                        AddLocation(UnicodeString(fNetworking.SaveInfo.GameInfo.OwnerNikname[K]), I, K+1);
+                    for K := 0 to gNetworking.SaveInfo.GameInfo.PlayerCount - 1 do
+                      if gNetworking.SaveInfo.GameInfo.Enabled[K]
+                      and (gNetworking.SaveInfo.GameInfo.CanBeHuman[K] or ALLOW_TAKE_AI_PLAYERS) then
+                        AddLocation(UnicodeString(gNetworking.SaveInfo.GameInfo.OwnerNikname[K]), I, K+1);
                   end;
         ngkMap:  begin
-                    IsValid := fNetworking.MapInfo.IsValid;
+                    IsValid := gNetworking.MapInfo.IsValid;
                     AddLocation(gResTexts[TX_LOBBY_RANDOM], I, LOC_RANDOM);
 
-                    for K := 0 to fNetworking.MapInfo.LocCount - 1 do
+                    for K := 0 to gNetworking.MapInfo.LocCount - 1 do
                       //AI-only locations should not be listed for AIs in lobby, since those ones are
                       //automatically added when the game starts (so AI checks CanBeHuman too)
-                      if (CurPlayer.IsHuman and (fNetworking.MapInfo.CanBeHuman[K] or ALLOW_TAKE_AI_PLAYERS))
+                      if (CurPlayer.IsHuman and (gNetworking.MapInfo.CanBeHuman[K] or ALLOW_TAKE_AI_PLAYERS))
                         or (CurPlayer.IsClassicComputer
-                          and fNetworking.MapInfo.CanBeHuman[K]
-                          and fNetworking.MapInfo.CanBeAI[K])
+                          and gNetworking.MapInfo.CanBeHuman[K]
+                          and gNetworking.MapInfo.CanBeAI[K])
                         or (CurPlayer.IsAdvancedComputer
-                          and fNetworking.MapInfo.CanBeHuman[K]
-                          and fNetworking.MapInfo.CanBeAdvancedAI[K]) then
-                        AddLocation(fNetworking.MapInfo.LocationName(K), I, K+1);
+                          and gNetworking.MapInfo.CanBeHuman[K]
+                          and gNetworking.MapInfo.CanBeAdvancedAI[K]) then
+                        AddLocation(gNetworking.MapInfo.LocationName(K), I, K+1);
                   end;
       end;
-      if CurPlayer.IsHuman and fNetworking.NetPlayers.SpectatorsAllowed then
+      if CurPlayer.IsHuman and gNetworking.NetPlayers.SpectatorsAllowed then
         AddLocation(gResTexts[TX_LOBBY_SPECTATE], I, LOC_SPECTATE);
 
       if IsValid or CurPlayer.IsSpectator then
@@ -1797,7 +1807,7 @@ begin
         DropBox_Loc[I].ItemIndex := 0;
 
       //Always show the selected teams, except when the map denies it
-      if (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.TxtInfo.BlockTeamSelection then
+      if (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.TxtInfo.BlockTeamSelection then
         DropBox_Team[I].ItemIndex := 0 //Hide selected teams since they will be overridden
       else
         DropBox_Team[I].ItemIndex := CurPlayer.Team;
@@ -1807,8 +1817,8 @@ begin
       if (ColorID <> 0) and IsColorCloseToColors(MP_TEAM_COLORS[ColorID], AIOnlyColors, MIN_PLAYER_COLOR_DIST) then
         ColorID := 0;
       
-      if (fNetworking.SelectGameKind <> ngkMap)
-        or not fNetworking.MapInfo.TxtInfo.BlockColorSelection then
+      if (gNetworking.SelectGameKind <> ngkMap)
+        or not gNetworking.MapInfo.TxtInfo.BlockColorSelection then
         DropBox_Colors[I].ItemIndex := ColorID;
 
       UpdateDropColor_BlockColSel(I);
@@ -1819,8 +1829,8 @@ begin
         freeColorsCnt := 0;
         for K := 0 to DropBox_Colors[I].List.RowCount - 1 do
           if (K <> ColorID) and (K <> 0)
-          and (not fNetworking.NetPlayers.ColorAvailable(MP_TEAM_COLORS[K])
-               or ((fNetworking.SelectGameKind = ngkSave) and fNetworking.SaveInfo.GameInfo.ColorUsed(K))
+          and (not gNetworking.NetPlayers.ColorAvailable(MP_TEAM_COLORS[K])
+               or ((gNetworking.SelectGameKind = ngkSave) and gNetworking.SaveInfo.GameInfo.ColorUsed(K))
                or IsColorCloseToColors(MP_TEAM_COLORS[K], AIOnlyColors, MIN_PLAYER_COLOR_DIST)) then // Disable for AIOnly locs color (close to them)
             DropBox_Colors[I].List.Rows[K].Cells[0].Enabled := False
           else
@@ -1837,24 +1847,25 @@ begin
       else
         Image_Ready[I].TexID := ImgReadyToStart(CurPlayer);
 
-      MyNik := (fLocalToNetPlayers[I] = fNetworking.MyIndex); //Our index
+      MyNik := (fLocalToNetPlayers[I] = gNetworking.MyIndex); //Our index
       //We are allowed to edit if it is our nickname and we are set as NOT ready,
       //or we are the host and this player is an AI
-      CanEdit := (MyNik and (fNetworking.IsHost or not fNetworking.NetPlayers.HostDoesSetup) and
-                            (fNetworking.IsHost or not CurPlayer.ReadyToStart)) or
-                 (fNetworking.IsHost and CurPlayer.IsComputer);
-      HostCanEdit := (fNetworking.IsHost and fNetworking.NetPlayers.HostDoesSetup and
+      CanEdit := (MyNik and (gNetworking.IsHost or not gNetworking.NetPlayers.HostDoesSetup) and
+                            (gNetworking.IsHost or not CurPlayer.ReadyToStart)) or
+                 (gNetworking.IsHost and CurPlayer.IsComputer);
+      HostCanEdit := (gNetworking.IsHost and gNetworking.NetPlayers.HostDoesSetup and
                       not CurPlayer.IsClosed);
       DropBox_Loc[I].Enabled := (CanEdit or HostCanEdit);
       //Can't change color or teams in a loaded save (spectators can set color)
       //Can only edit teams for maps (not saves), but the map may deny this
       DropBox_Team[I].Enabled := (CanEdit or HostCanEdit) and not CurPlayer.IsSpectator
-                                      and (fNetworking.SelectGameKind = ngkMap)
-                                      and not fNetworking.MapInfo.TxtInfo.BlockTeamSelection;
+                                      and (gNetworking.SelectGameKind = ngkMap)
+                                      and not gNetworking.MapInfo.TxtInfo.BlockTeamSelection;
       DropBox_Colors[I].Enabled := (CanEdit or (MyNik and not CurPlayer.ReadyToStart))
                                         and (not IsSave or CurPlayer.IsSpectator)
-                                        and ((fNetworking.SelectGameKind <> ngkMap) or not fNetworking.MapInfo.TxtInfo.BlockColorSelection);
-      if MyNik and not fNetworking.IsHost then
+                                        and (    (gNetworking.SelectGameKind <> ngkMap)
+                                           or not gNetworking.MapInfo.TxtInfo.BlockColorSelection);
+      if MyNik and not gNetworking.IsHost then
       begin
         if CurPlayer.ReadyToStart then
           Button_Start.Caption := gResTexts[TX_LOBBY_NOT_READY]
@@ -1872,57 +1883,95 @@ begin
     UpdateImageLobbyFlag(I);
 
   //If PopUp menu was opened, check if player still connected, otherwise - close PopUp menu
-  if Menu_Host.Visible and (fNetworking.NetPlayers.ServerToLocal(Menu_Host.Tag) = -1) then
+  if Menu_Host.Visible and (gNetworking.NetPlayers.ServerToLocal(Menu_Host.Tag) = -1) then
     Menu_Host.Hide;
 
-  if Menu_Joiner.Visible and (fNetworking.NetPlayers.ServerToLocal(Menu_Joiner.Tag) = -1) then
+  if Menu_Joiner.Visible and (gNetworking.NetPlayers.ServerToLocal(Menu_Joiner.Tag) = -1) then
     Menu_Joiner.Hide;
 
   //Update the minimap preview with player colors
   for I := 0 to MAX_HANDS - 1 do
   begin
-    ID := fNetworking.NetPlayers.StartingLocToLocal(I+1);
+    ID := gNetworking.NetPlayers.StartingLocToLocal(I+1);
     if (ID <> -1) then
-      fMinimap.HandColors[I] := fNetworking.NetPlayers[ID].FlagColorDef(icBlack)
+      fMinimap.HandColors[I] := gNetworking.NetPlayers[ID].FlagColorDef(icBlack)
     else
       fMinimap.HandColors[I] := $7F000000; //Semi-transparent when not selected
   end;
 
   //If we have a map selected update the preview
-  if (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid then
+  if (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid then
   begin
-    fMinimap.Update(not fNetworking.MapInfo.TxtInfo.BlockFullMapPreview);
+    fMinimap.Update(not gNetworking.MapInfo.TxtInfo.BlockFullMapPreview);
     MinimapView.SetMinimap(fMinimap);
+
+    // We want to show teams even if player did not chose his location
+    // It possible if number of players with random loc = number of free locs and they all have same team chosen
+    players := [];
+    playersCnt := 0;
+    rngPlayersTeam := 0;
+
+    // We assume locs are in a row for now. From 1 to LocCount
+    for I := 1 to gNetworking.MapInfo.LocCount do
+      begin
+        Include(players, I);
+        Inc(playersCnt);
+      end;
+
+    // Find rngPlayersTeam
+    for I := 1 to gNetworking.NetPlayers.Count do
+    begin
+      startLoc := gNetworking.NetPlayers[I].StartLocation;
+      if startLoc > 0 then //Not LOC_RANDOM and not LOC_SPECTATE
+      begin
+        Exclude(players, I);
+        Dec(playersCnt);
+      end
+      else
+      if (startLoc = LOC_RANDOM)
+        and (gNetworking.NetPlayers[I].Team <> 0)
+        and ((rngPlayersTeam = 0) or (rngPlayersTeam = gNetworking.NetPlayers[I].Team)) then
+      begin
+        Dec(playersCnt);
+        rngPlayersTeam := gNetworking.NetPlayers[I].Team;
+      end;
+    end;
+
     for I := 0 to MAX_HANDS - 1 do
     begin
-      ID := fNetworking.NetPlayers.StartingLocToLocal(I+1);
+      ID := gNetworking.NetPlayers.StartingLocToLocal(I+1);
       if ID <> -1 then
-        fMinimap.HandTeam[I] := fNetworking.NetPlayers[ID].Team
+        fMinimap.HandTeam[I] := gNetworking.NetPlayers[ID].Team
       else
-        fMinimap.HandTeam[I] := 0;
+      begin
+        if (playersCnt = 0) then
+          fMinimap.HandTeam[I] := rngPlayersTeam
+        else
+          fMinimap.HandTeam[I] := 0; // We can't set rng team for player without loc chosen
+      end;
     end;
   end;
 
   //If we are in team chat mode and find ourselves not on a team (player went back to no team), switch back to all
-  if (gGameApp.Chat.Mode = cmTeam) and (fNetworking.MyNetPlayer.Team = 0) then
+  if (gChat.Mode = cmTeam) and (gNetworking.MyNetPlayer.Team = 0) then
     ChatMenuSelect(CHAT_MENU_ALL);
 
   //If we are in whisper chat mode and find the player has left, switch back to all
-  if gGameApp.Chat.Mode = cmWhisper then
+  if gChat.Mode = cmWhisper then
   begin
-    if fNetworking.NetPlayers.ServerToLocal(gGameApp.Chat.WhisperRecipient) = -1 then
+    if gNetworking.NetPlayers.ServerToLocal(gChat.WhisperRecipient) = -1 then
       ChatMenuSelect(CHAT_MENU_ALL)
     else
-      ChatMenuSelect(gGameApp.Chat.WhisperRecipient); //In case that player changed his color
+      ChatMenuSelect(gChat.WhisperRecipient); //In case that player changed his color
   end;
 
-  CheckBox_HostControl.Checked := fNetworking.NetPlayers.HostDoesSetup;
-  CheckBox_RandomizeTeamLocations.Checked := fNetworking.NetPlayers.RandomizeTeamLocations;
-  CheckBox_Spectators.Checked := fNetworking.NetPlayers.SpectatorsAllowed;
-  if fNetworking.IsHost then
+  CheckBox_HostControl.Checked := gNetworking.NetPlayers.HostDoesSetup;
+  CheckBox_RandomizeTeamLocations.Checked := gNetworking.NetPlayers.RandomizeTeamLocations;
+  CheckBox_Spectators.Checked := gNetworking.NetPlayers.SpectatorsAllowed;
+  if gNetworking.IsHost then
   begin
-    Button_Start.Enabled := IsGameStartAllowed(fNetworking.CanStart);
-    if fNetworking.CanStart in [gsmNoStartWithWarn, gsmStartWithWarn] then
+    Button_Start.Enabled := IsGameStartAllowed(gNetworking.CanStart);
+    if gNetworking.CanStart in [gsmNoStartWithWarn, gsmStartWithWarn] then
       Button_Start.Caption := gResTexts[TX_MENU_LOBBY_TRY_TO_START]
     else
       Button_Start.Caption := gResTexts[TX_LOBBY_START];
@@ -1932,22 +1981,22 @@ begin
 end;
 
 
-procedure TKMMenuLobby.Lobby_OnPingInfo(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnPingInfo;
 var
   I: Integer;
 begin
   for I := 1 to MAX_LOBBY_SLOTS do
-    if (fNetworking.Connected) and (fLocalToNetPlayers[I] <> -1) and
-       (fNetworking.NetPlayers[fLocalToNetPlayers[I]].IsHuman) then
+    if (gNetworking.Connected) and (fLocalToNetPlayers[I] <> -1) and
+       (gNetworking.NetPlayers[fLocalToNetPlayers[I]].IsHuman) then
     begin
-      Label_Ping[I].Caption := IntToStr(fNetworking.NetPlayers[fLocalToNetPlayers[I]].GetInstantPing);
-      Label_Ping[I].FontColor := GetPingColor(fNetworking.NetPlayers[fLocalToNetPlayers[I]].GetInstantPing);
+      Label_Ping[I].Caption := IntToStr(gNetworking.NetPlayers[fLocalToNetPlayers[I]].GetInstantPing);
+      Label_Ping[I].FontColor := GetPingColor(gNetworking.NetPlayers[fLocalToNetPlayers[I]].GetInstantPing);
     end
     else
       Label_Ping[I].Caption := '';
 
-  Label_ServerName.Caption := UnicodeString(fNetworking.ServerName) + ' #' + IntToStr(fNetworking.ServerRoom+1) +
-                                   '  ' + fNetworking.ServerAddress + ' : ' + IntToStr(fNetworking.ServerPort);
+  Label_ServerName.Caption := UnicodeString(gNetworking.ServerName) + ' #' + IntToStr(gNetworking.ServerRoom+1) +
+                                   '  ' + gNetworking.ServerAddress + ' : ' + IntToStr(gNetworking.ServerPort);
 end;
 
 
@@ -1961,14 +2010,15 @@ begin
 end;
 
 
-procedure TKMMenuLobby.UpdateMapList;
+procedure TKMMenuLobby.UpdateMapList(aIsHost: Boolean);
 begin
   //Terminate any running scans otherwise they will continue to fill the drop box in the background
   fMapsMP.TerminateScan;
   fSavesMP.TerminateScan;
   DropCol_Maps.Clear; //Clear previous items in case scanning finds no maps/saves
 
-  if fNetworking.IsHost then
+  // can't use gNetworking.IsHost here, since we could just open lobby, and we didn't set gNetworking.PlayerKind
+  if aIsHost then
   begin
     DropCol_Maps.Show;
     Label_MapName.Hide;
@@ -2021,12 +2071,12 @@ end;
 
 procedure TKMMenuLobby.SelectRMGMap(); //RMG
 begin
-  if not fNetworking.IsHost then
+  if not gNetworking.IsHost then
     Exit; //Only host can select RMG map
 
   fMapsMP.Lock;
   try
-    fNetworking.SelectMap(MAPS_RMG_NAME, mfMP);
+    gNetworking.SelectMap(MAPS_RMG_NAME, mfMP);
   finally
     fMapsMP.Unlock;
   end;
@@ -2036,13 +2086,13 @@ end;
 
 procedure TKMMenuLobby.MapTypeChanged(Sender: TObject);
 var
-  RMG: Boolean; //RMG
+  isRngChosen: Boolean; //RMG
 begin
-  RMG := Radio_MapType.ItemIndex = 5; //RMG
-  UpdateMapList;
-  gGameApp.GameSettings.MenuLobbyMapType := Radio_MapType.ItemIndex;
-  if not RMG then //RMG
-    fNetworking.SelectNoMap('');
+  isRngChosen := Radio_MapType.ItemIndex = MAP_TYPE_INDEX_RMG; //RMG
+  UpdateMapList(gNetworking.IsHost);
+  gGameSettings.MenuLobbyMapType := Radio_MapType.ItemIndex;
+  if not isRngChosen then //RMG
+    gNetworking.SelectNoMap('');
 end;
 
 
@@ -2052,17 +2102,17 @@ var
   I: Integer;
   CanEdit: Boolean;
 begin
-  I := fNetworking.MyIndex;
+  I := gNetworking.MyIndex;
 
-  CanEdit := ((fNetworking.IsHost or not fNetworking.NetPlayers.HostDoesSetup) and
-              (fNetworking.IsHost or not fNetworking.NetPlayers[I].ReadyToStart));
+  CanEdit := ((gNetworking.IsHost or not gNetworking.NetPlayers.HostDoesSetup) and
+              (gNetworking.IsHost or not gNetworking.NetPlayers[I].ReadyToStart));
 
   if CanEdit then
   begin
-    fNetworking.SelectLoc(aValue + 1, I);
+    gNetworking.SelectLoc(aValue + 1, I);
     //Host with HostDoesSetup could have given us some location we don't know about from a map/save we don't have
-    if fNetworking.SelectGameKind <> ngkNone then
-      DropBox_Loc[fNetPlayersToLocal[I]].SelectByTag(fNetworking.NetPlayers[I].StartLocation);
+    if gNetworking.SelectGameKind <> ngkNone then
+      DropBox_Loc[fNetPlayersToLocal[I]].SelectByTag(gNetworking.NetPlayers[I].StartLocation);
   end;
 end;
 
@@ -2098,16 +2148,16 @@ begin
 //    SetLength(MapsCRCArray, fMapsMP.Count);
 //    for I := 0 to fMapsMP.Count - 1 do
 //      MapsCRCArray[I] := fMapsMP[I].CRC;
-//    gGameApp.GameSettings.FavouriteMaps.RemoveMissing(MapsCRCArray);
+//    gGameSettings.FavouriteMaps.RemoveMissing(MapsCRCArray);
 //  end;
 end;
 
 
 procedure TKMMenuLobby.WakeUpNotReadyClick(Sender: TObject);
 begin
-  if GetTimeSince(fLastTimeAskReady) > ASK_READY_COOLDOWN then
+  if TimeSince(fLastTimeAskReady) > ASK_READY_COOLDOWN then
   begin
-    fNetworking.WakeUpNotReady;
+    gNetworking.WakeUpNotReady;
     Button_SettingsAskReady.Disable;
     fLastTimeAskReady := TimeGet;
   end;
@@ -2148,21 +2198,21 @@ begin
       //Different modes allow different maps
       case Radio_MapType.ItemIndex of
         0, MAP_TYPE_INDEX_RMG:    
-              AddMap := (fMapsMP[I].MissionMode = mmNormal) and not fMapsMP[I].TxtInfo.IsCoop and not fMapsMP[I].TxtInfo.IsSpecial; //BuildMap
-        1:    AddMap := (fMapsMP[I].MissionMode = mmTactic) and not fMapsMP[I].TxtInfo.IsCoop and not fMapsMP[I].TxtInfo.IsSpecial; //FightMap
+              AddMap := fMapsMP[I].IsNormalMission and not fMapsMP[I].TxtInfo.IsCoop and not fMapsMP[I].TxtInfo.IsSpecial; //BuildMap
+        1:    AddMap := fMapsMP[I].IsTacticMission and not fMapsMP[I].TxtInfo.IsCoop and not fMapsMP[I].TxtInfo.IsSpecial; //FightMap
         2:    AddMap := fMapsMP[I].TxtInfo.IsCoop; //CoopMap
         3:    AddMap := fMapsMP[I].TxtInfo.IsSpecial; //Special map
         else  AddMap := False; //Other cases are already handled in Lobby_MapTypeSelect
       end;
 
       //Presect RMG map, if we have it in map list
-      if fNetworking.IsHost
+      if gNetworking.IsHost
         and (Radio_MapType.ItemIndex = MAP_TYPE_INDEX_RMG)
         and (fMapsMP[I].FileName = MAPS_RMG_NAME)
         and fMapsMP[I].TxtInfo.IsRMG then
         SelectRMGMap;
 
-      if AddMap and fNetworking.NetGameFilter.FilterMap(fMapsMP[I].CRC) then
+      if AddMap and gNetworking.NetGameFilter.FilterMap(fMapsMP[I].CRC) then
       begin
         LobbyCl := fMapsMP[I].GetLobbyColor;
 
@@ -2197,8 +2247,8 @@ begin
   end;
 
   //After being reassigned to host we may need to reselect the map
-  if (DropCol_Maps.ItemIndex = -1) and (fNetworking.SelectGameKind = ngkMap) then
-    SelectByName(fNetworking.MapInfo.FileName);
+  if (DropCol_Maps.ItemIndex = -1) and (gNetworking.SelectGameKind = ngkMap) then
+    SelectByName(gNetworking.MapInfo.FileName);
 end;
 
 
@@ -2284,8 +2334,8 @@ begin
   end;
 
   //After being reassigned to host we may need to reselect the save
-  if (DropCol_Maps.ItemIndex = -1) and (fNetworking.SelectGameKind = ngkSave) then
-    SelectByName(fNetworking.SaveInfo.FileName);
+  if (DropCol_Maps.ItemIndex = -1) and (gNetworking.SelectGameKind = ngkSave) then
+    SelectByName(gNetworking.SaveInfo.FileName);
 end;
 
 
@@ -2381,11 +2431,11 @@ begin
       fMapsMP[I].IsFavourite := not fMapsMP[I].IsFavourite;
       if fMapsMP[I].IsFavourite then
       begin
-        gGameApp.GameSettings.FavouriteMaps.Add(fMapsMP[I].MapAndDatCRC);
-        gGameApp.GameSettings.ServerMapsRoster.Add(fMapsMP[I].CRC);
+        gGameSettings.FavouriteMaps.Add(fMapsMP[I].MapAndDatCRC);
+        gServerSettings.ServerMapsRoster.Add(fMapsMP[I].CRC);
       end else begin
-        gGameApp.GameSettings.FavouriteMaps.Remove(fMapsMP[I].MapAndDatCRC);
-        gGameApp.GameSettings.ServerMapsRoster.Remove(fMapsMP[I].CRC);
+        gGameSettings.FavouriteMaps.Remove(fMapsMP[I].MapAndDatCRC);
+        gServerSettings.ServerMapsRoster.Remove(fMapsMP[I].CRC);
       end;
 
       //Update pic
@@ -2409,7 +2459,7 @@ begin
   begin
     fMapsMP.Lock;
     try
-      fNetworking.SelectMap(fMapsMP[I].FileName, fMapsMP[I].MapFolder);
+      gNetworking.SelectMap(fMapsMP[I].FileName, fMapsMP[I].MapFolder);
     finally
       fMapsMP.Unlock;
     end;
@@ -2420,7 +2470,7 @@ begin
   begin
     fSavesMP.Lock;
     try
-      fNetworking.SelectSave(fSavesMP[I].FileName);
+      gNetworking.SelectSave(fSavesMP[I].FileName);
 //      if True then
 
 //      Button_Start.Caption := gResTexts[TX_MENU_LOBBY_TRY_TO_START];
@@ -2431,22 +2481,22 @@ begin
 end;
 
 
-procedure TKMMenuLobby.Lobby_OnUpdateMinimap(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnUpdateMinimap;
 var
-  S: TKMSaveInfo;
+  si: TKMSaveInfo;
 begin
-  S := fNetworking.SaveInfo;
-  if fNetworking.IsSave then
+  if not gNetworking.IsSave then Exit;
+
+  si := gNetworking.SaveInfo;
+
+  if si.IsValid
+  and (gNetworking.MyIndex > 0)
+  and si.LoadMinimap(fMinimap, gNetworking.MyNetPlayer.StartLocation) then
   begin
-    if S.IsValid
-      and (fNetworking.MyIndex > 0)
-      and S.LoadMinimap(fMinimap, fNetworking.MyNetPlayer.StartLocation) then
-    begin
-      MinimapView.SetMinimap(fMinimap);
-      MinimapView.Show;
-    end else
-      MinimapView.Hide;
-  end;
+    MinimapView.SetMinimap(fMinimap);
+    MinimapView.Show;
+  end else
+    MinimapView.Hide;
 end;
 
 
@@ -2506,7 +2556,7 @@ begin
       DropBox_Difficulty.ItemIndex := 0;
 
     Panel_Difficulty.DoSetVisible;
-    DropBox_Difficulty.Enabled := fNetworking.IsHost; //Only Host can change map difficulty
+    DropBox_Difficulty.Enabled := gNetworking.IsHost; //Only Host can change map difficulty
 
   end else
     Panel_Difficulty.Hide;
@@ -2524,33 +2574,33 @@ var
   Txt: UnicodeString;
 begin
   //Common settings
-  MinimapView.Visible := (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
-  TrackBar_LobbyPeacetime.Enabled := fNetworking.IsHost
-                                     and (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid
-                                     and not fNetworking.MapInfo.TxtInfo.BlockPeacetime;
-  TrackBar_SpeedPT.Enabled := (TrackBar_LobbyPeacetime.Position > 0) and fNetworking.IsHost
-                                    and (((fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid)
-                                      or ((fNetworking.SelectGameKind = ngkSave) and fNetworking.SaveInfo.IsValid));
-  TrackBar_SpeedAfterPT.Enabled := fNetworking.IsHost
-                                        and (((fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid)
-                                          or ((fNetworking.SelectGameKind = ngkSave) and fNetworking.SaveInfo.IsValid));
-  CheckBox_RandomizeTeamLocations.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind <> ngkSave);
+  MinimapView.Visible := (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
+  TrackBar_LobbyPeacetime.Enabled := gNetworking.IsHost
+                                     and (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid
+                                     and not gNetworking.MapInfo.TxtInfo.BlockPeacetime;
+  TrackBar_SpeedPT.Enabled := (TrackBar_LobbyPeacetime.Position > 0) and gNetworking.IsHost
+                                    and (((gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid)
+                                      or ((gNetworking.SelectGameKind = ngkSave) and gNetworking.SaveInfo.IsValid));
+  TrackBar_SpeedAfterPT.Enabled := gNetworking.IsHost
+                                        and (((gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid)
+                                          or ((gNetworking.SelectGameKind = ngkSave) and gNetworking.SaveInfo.IsValid));
+  CheckBox_RandomizeTeamLocations.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind <> ngkSave);
 
-  DropBox_Difficulty.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
+  DropBox_Difficulty.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
 
   //In case it was hidden during file transfer
   Panel_SetupTransfer.Hide;
   Panel_SetupMinimap.Show;
 
   //Don't reset the selection if no map is selected
-  if ((fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid)
-    or ((fNetworking.SelectGameKind = ngkSave) and fNetworking.SaveInfo.IsValid) then
+  if ((gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid)
+    or ((gNetworking.SelectGameKind = ngkSave) and gNetworking.SaveInfo.IsValid) then
     Radio_MapType.ItemIndex := DetectMapType;
 
   Memo_MapDesc.Height := Panel_SetupDesc.Height;
   Button_SetupReadme.Hide;
 
-  case fNetworking.SelectGameKind of
+  case gNetworking.SelectGameKind of
     ngkNone: begin
                 Memo_MapDesc.Clear;
                 if aData = '' then
@@ -2562,7 +2612,7 @@ begin
                 end;
               end;
     ngkSave: begin
-                S := fNetworking.SaveInfo;
+                S := gNetworking.SaveInfo;
                 Label_MapName.Caption := aData; //Show save name on host (local is always "downloaded")
                 Txt := S.GameInfo.GetTitleWithTime + '|' + S.GameInfo.GetSaveTimestamp;
                 if not S.IsValid then
@@ -2572,11 +2622,11 @@ begin
                   Txt := WrapColor(S.SaveError.ErrorString, clSaveLoadTry) + '||' +
                          WrapColor(gResTexts[TX_UNSUPPORTED_SAVE_LOAD_WARNING_TXT], clSaveLoadError) + '||' + Txt;
                 Memo_MapDesc.Text := Txt;
-                Lobby_OnUpdateMinimap(nil);
+                Lobby_OnUpdateMinimap;
                 UpdateDifficultyLevels(S);
               end;
     ngkMap:  begin
-                M := fNetworking.MapInfo;
+                M := gNetworking.MapInfo;
 
                 //Only load the minimap preview if the map is valid
                 if M.IsValid then
@@ -2585,7 +2635,7 @@ begin
                   fMinimap.Update(not M.TxtInfo.BlockFullMapPreview);
                   MinimapView.SetMinimap(fMinimap);
 
-                  if not TrackBar_LobbyPeacetime.Enabled and fNetworking.IsHost then
+                  if not TrackBar_LobbyPeacetime.Enabled and gNetworking.IsHost then
                   begin
                     TrackBar_LobbyPeacetime.Position := 0; //No peacetime in coop (trackbar gets disabled above)
                     GameOptionsChange(nil); //Send it to other clients
@@ -2609,19 +2659,19 @@ end;
 procedure TKMMenuLobby.Lobby_OnMapMissing(const aData: UnicodeString; aStartTransfer: Boolean);
 begin
   //Common settings
-  MinimapView.Visible := (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
-  TrackBar_LobbyPeacetime.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind = ngkMap)
-                                     and fNetworking.MapInfo.IsValid and not fNetworking.MapInfo.TxtInfo.BlockPeacetime;
-  TrackBar_SpeedPT.Enabled := (TrackBar_LobbyPeacetime.Position > 0) and fNetworking.IsHost
-                               and (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
-  TrackBar_SpeedAfterPT.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
-  CheckBox_RandomizeTeamLocations.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind <> ngkSave);
+  MinimapView.Visible := (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
+  TrackBar_LobbyPeacetime.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind = ngkMap)
+                                     and gNetworking.MapInfo.IsValid and not gNetworking.MapInfo.TxtInfo.BlockPeacetime;
+  TrackBar_SpeedPT.Enabled := (TrackBar_LobbyPeacetime.Position > 0) and gNetworking.IsHost
+                               and (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
+  TrackBar_SpeedAfterPT.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
+  CheckBox_RandomizeTeamLocations.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind <> ngkSave);
 
-  DropBox_Difficulty.Enabled := fNetworking.IsHost and (fNetworking.SelectGameKind = ngkMap) and fNetworking.MapInfo.IsValid;
+  DropBox_Difficulty.Enabled := gNetworking.IsHost and (gNetworking.SelectGameKind = ngkMap) and gNetworking.MapInfo.IsValid;
 
-  Label_MapName.Caption := fNetworking.MissingFileName;
+  Label_MapName.Caption := gNetworking.MissingFileName;
   Memo_MapDesc.Text := aData; //aData is some error message
-  if fNetworking.MissingFileType = ngkSave then
+  if gNetworking.MissingFileType = ngkSave then
     Radio_MapType.ItemIndex := MAP_TYPE_INDEX_SAVE
   else
     Radio_MapType.ItemIndex := 0;
@@ -2635,24 +2685,24 @@ end;
 
 
 //We have been assigned to be the host of the game because the host disconnected. Reopen lobby page in correct mode.
-procedure TKMMenuLobby.Lobby_OnReassignedToHost(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnReassignedToHost;
 begin
   Reset(lpkHost, True); //Will reset the lobby page into host mode, preserving messages/maps
 
   //Pick correct position of map type selector
   Radio_MapType.ItemIndex := DetectMapType;
 
-  UpdateMapList;
-  Lobby_OnGameOptions(nil);
+  UpdateMapList(True);
+  Lobby_OnGameOptions;
 
-  case fNetworking.SelectGameKind of
-    ngkMap:  Lobby_OnMapName(fNetworking.MapInfo.FileName);
-    ngkSave: Lobby_OnMapName(fNetworking.SaveInfo.FileName);
+  case gNetworking.SelectGameKind of
+    ngkMap:  Lobby_OnMapName(gNetworking.MapInfo.FileName);
+    ngkSave: Lobby_OnMapName(gNetworking.SaveInfo.FileName);
   end;
 end;
 
 
-procedure TKMMenuLobby.Lobby_OnReassignedToJoiner(Sender: TObject);
+procedure TKMMenuLobby.Lobby_OnReassignedToJoiner;
 begin
   Reset(lpkJoiner, True); //Will reset the lobby page into host mode, preserving messages/maps
 
@@ -2663,22 +2713,22 @@ end;
 
 procedure TKMMenuLobby.HandleError(const aMsg: UnicodeString);
 begin
-  fNetworking.PostLocalMessage(aMsg, csSystem);
+  gNetworking.PostLocalMessage(aMsg, csSystem);
 end;
 
 
 procedure TKMMenuLobby.PostLocalMsg(const aMsg: UnicodeString);
 begin
-  fNetworking.PostLocalMessage(aMsg, csChat);
+  gNetworking.PostLocalMessage(aMsg, csChat);
 end;
 
 
 procedure TKMMenuLobby.PostMsg(const aMsg: UnicodeString);
 begin
-  if gGameApp.Chat.Mode = cmWhisper then
-    fNetworking.PostChat(aMsg, gGameApp.Chat.Mode, gGameApp.Chat.WhisperRecipient)
+  if gChat.Mode = cmWhisper then
+    gNetworking.PostChat(aMsg, gChat.Mode, gChat.WhisperRecipient)
   else
-    fNetworking.PostChat(aMsg, gGameApp.Chat.Mode);
+    gNetworking.PostChat(aMsg, gChat.Mode);
 end;
 
 
@@ -2698,7 +2748,7 @@ begin
     case Key of
       VK_RETURN:  Result := DoPost;
       VK_UP:      begin
-                    Str := gGameApp.Chat.GetNextHistoryMsg;
+                    Str := gChat.GetNextHistoryMsg;
                     if Str <> '' then
                     begin
                       Edit_Post.Text := Str;
@@ -2706,7 +2756,7 @@ begin
                     end;
                   end;
       VK_DOWN:    begin
-                    Str := gGameApp.Chat.GetPrevHistoryMsg;
+                    Str := gChat.GetPrevHistoryMsg;
                     if Str <> '' then
                     begin
                       Edit_Post.Text := Str;
@@ -2724,34 +2774,34 @@ var
   RecipientNetIndex: Integer;
 begin
   Result := False;
-  if not gGameApp.Chat.IsPostAllowed then
+  if not gChat.IsPostAllowed then
     Exit;
 
   //Console commands are disabled for now, maybe we'll reuse them later
   //Check for console commands
   {if (Length(ChatMessage) > 1) and (ChatMessage[1] = '/')
   and (ChatMessage[2] <> '/') then //double slash is the escape to place a slash at the start of a sentence
-    fNetworking.ConsoleCommand(ChatMessage)
+    gNetworking.ConsoleCommand(ChatMessage)
   else
   begin
     if (Length(ChatMessage) > 1) and (ChatMessage[1] = '/') and (ChatMessage[2] = '/') then
       Delete(ChatMessage, 1, 1); //Remove one of the /'s
   end;}
 
-  if gGameApp.Chat.Mode = cmWhisper then
+  if gChat.Mode = cmWhisper then
   begin
-    RecipientNetIndex := fNetworking.NetPlayers.ServerToLocal(gGameApp.Chat.WhisperRecipient);
-    if not fNetworking.NetPlayers[RecipientNetIndex].Connected
-      or fNetworking.NetPlayers[RecipientNetIndex].Dropped then
+    RecipientNetIndex := gNetworking.NetPlayers.ServerToLocal(gChat.WhisperRecipient);
+    if not gNetworking.NetPlayers[RecipientNetIndex].Connected
+      or gNetworking.NetPlayers[RecipientNetIndex].Dropped then
     begin
-      fNetworking.PostLocalMessage(Format(gResTexts[TX_MULTIPLAYER_CHAT_PLAYER_NOT_CONNECTED_ANYMORE],
-                                          [fNetworking.NetPlayers[RecipientNetIndex].NiknameColored]),
+      gNetworking.PostLocalMessage(Format(gResTexts[TX_MULTIPLAYER_CHAT_PLAYER_NOT_CONNECTED_ANYMORE],
+                                          [gNetworking.NetPlayers[RecipientNetIndex].NiknameColored]),
                                     csSystem);
       ChatMenuSelect(CHAT_MENU_ALL);
     end else
-      gGameApp.Chat.Post
+      gChat.Post
   end else
-    gGameApp.Chat.Post;
+    gChat.Post;
   Result := True;
   Edit_Post.Text := '';
   Memo_Posts.ScrollToBottom;
@@ -2760,20 +2810,15 @@ end;
 
 procedure TKMMenuLobby.Lobby_OnMessage(const aText: UnicodeString);
 begin
-  if (gGameApp <> nil) and (gGameApp.GameSettings <> nil) then
-  begin
-    if gGameApp.GameSettings.FlashOnMessage then
-      gMain.FlashingStart;
-
-    gGameApp.Chat.AddLine(aText);
-  end;
+  if gChat <> nil then
+    gChat.AddLine(aText);
 end;
 
 
 //We were disconnected from Server. Either we were kicked, or connection broke down
 procedure TKMMenuLobby.Lobby_OnDisconnect(const aData: UnicodeString);
 begin
-  fNetworking.Disconnect;
+  gNetworking.Disconnect;
   gSoundPlayer.Play(sfxnError);
 
   fOnPageChange(gpMultiplayer, aData);
@@ -2825,15 +2870,15 @@ var
 begin
   for I := 1 to MAX_LOBBY_SLOTS do
     PercentBar_PlayerDl_ChVisibility(I, False);
-  fNetworking.NetPlayers.SetDownloadAborted; //Mark all players as not downloading
+  gNetworking.NetPlayers.SetDownloadAborted; //Mark all players as not downloading
 end;
 
 
 procedure TKMMenuLobby.StartBtnChangeEnabled(Sender: TObject; aEnable: Boolean);
 begin
-  Button_SettingsAskReady.Enabled := (((fNetworking.MapInfo <> nil) and fNetworking.MapInfo.IsValid)
-                                        or ((fNetworking.SaveInfo <> nil) and fNetworking.SaveInfo.IsValid))
-                                     and not fNetworking.NetPlayers.AllReady;
+  Button_SettingsAskReady.Enabled := (((gNetworking.MapInfo <> nil) and gNetworking.MapInfo.IsValid)
+                                        or ((gNetworking.SaveInfo <> nil) and gNetworking.SaveInfo.IsValid))
+                                     and not gNetworking.NetPlayers.AllReady;
 end;
 
 
@@ -2841,16 +2886,16 @@ procedure TKMMenuLobby.StartClick(Sender: TObject);
 var
   LoadError, Version, Path: UnicodeString;
 begin
-  if fNetworking.IsHost then
+  if gNetworking.IsHost then
   begin
-    if fNetworking.IsSave then
+    if gNetworking.IsSave then
     begin
-      Version := fNetworking.SaveInfo.GameInfo.VersionU;
-      Path := fNetworking.SaveInfo.Path;
-      if not fNetworking.SaveInfo.IsValidStrictly then //We are trying to load other version save
+      Version := gNetworking.SaveInfo.GameInfo.VersionU;
+      Path := gNetworking.SaveInfo.Path;
+      if not gNetworking.SaveInfo.IsValidStrictly then //We are trying to load other version save
       begin
         try
-          fNetworking.StartClick;
+          gNetworking.StartClick;
         except
           on E: Exception do
           begin
@@ -2864,14 +2909,14 @@ begin
         end;
       end
       else
-        fNetworking.StartClick;
+        gNetworking.StartClick;
     end
     else
-      fNetworking.StartClick;
+      gNetworking.StartClick;
   end
   else
   begin
-    if fNetworking.ReadyToStart then
+    if gNetworking.ReadyToStart then
       Button_Start.Caption := gResTexts[TX_LOBBY_NOT_READY]
     else
       Button_Start.Caption := gResTexts[TX_LOBBY_READY];
@@ -2883,23 +2928,23 @@ procedure TKMMenuLobby.SettingsClick(Sender: TObject);
 begin
   if Sender = Button_ChangeSettings then
   begin
-    Edit_Description.Text := fNetworking.Description;
-    Edit_Password.Text := UnicodeString(fNetworking.Password);
+    Edit_Description.Text := gNetworking.Description;
+    Edit_Password.Text := UnicodeString(gNetworking.Password);
     Panel_Settings.Show;
   end;
 
   if Sender = Button_SettingsResetBans then
   begin
-    if GetTimeSince(fLastTimeResetBans) > RESET_BANS_COOLDOWN then
+    if TimeSince(fLastTimeResetBans) > RESET_BANS_COOLDOWN then
     begin
-      fNetworking.ResetBans;
+      gNetworking.ResetBans;
       Button_SettingsResetBans.Disable;
       fLastTimeResetBans := TimeGet;
     end;
   end;
 
   if Sender = Button_SettingsUseLastPassword then
-    Edit_Password.Text := gGameApp.GameSettings.LastPassword;
+    Edit_Password.Text := gGameSettings.LastPassword;
 
   if Sender = Button_SettingsCancel then
   begin
@@ -2909,10 +2954,10 @@ begin
   if Sender = Button_SettingsSave then
   begin
     Panel_Settings.Hide;
-    fNetworking.Description := Edit_Description.Text;
-    fNetworking.SetPassword(AnsiString(Edit_Password.Text));
+    gNetworking.Description := Edit_Description.Text;
+    gNetworking.SetPassword(AnsiString(Edit_Password.Text));
     if Checkbox_RememberPassword.Checked then
-      gGameApp.GameSettings.LastPassword := UnicodeString(fNetworking.Password);
+      gGameSettings.LastPassword := UnicodeString(gNetworking.Password);
   end;
 end;
 
@@ -2920,14 +2965,14 @@ end;
 procedure TKMMenuLobby.ReturnToLobby(const aSaveName: UnicodeString);
 begin
   Radio_MapType.ItemIndex := MAP_TYPE_INDEX_SAVE; //Save
-  UpdateMapList;
-  Lobby_OnGameOptions(nil);
-  if fNetworking.IsHost then
+  UpdateMapList(gNetworking.IsHost);
+  Lobby_OnGameOptions;
+  if gNetworking.IsHost then
   begin
-    fNetworking.SelectSave(aSaveName);
+    gNetworking.SelectSave(aSaveName);
     //Make sure the save was successfully selected
     Radio_MapType.ItemIndex := DetectMapType;
-    if fNetworking.SelectGameKind = ngkSave then
+    if gNetworking.SelectGameKind = ngkSave then
       Lobby_OnMapName(aSaveName);
   end;
 end;
@@ -2939,13 +2984,13 @@ begin
   if fMapsMP <> nil then fMapsMP.UpdateState;
   if fSavesMP <> nil then fSavesMP.UpdateState;
 
-  if (fLastTimeResetBans <> 0) and (GetTimeSince(fLastTimeResetBans) > RESET_BANS_COOLDOWN) then
+  if (fLastTimeResetBans <> 0) and (TimeSince(fLastTimeResetBans) > RESET_BANS_COOLDOWN) then
   begin
     Button_SettingsResetBans.Enable;
     fLastTimeResetBans := 0;
   end;
 
-  if (fLastTimeAskReady <> 0) and (GetTimeSince(fLastTimeAskReady) > ASK_READY_COOLDOWN) then
+  if (fLastTimeAskReady <> 0) and (TimeSince(fLastTimeAskReady) > ASK_READY_COOLDOWN) then
   begin
     StartBtnChangeEnabled(Button_Start, Button_Start.Enabled);
     fLastTimeAskReady := 0;

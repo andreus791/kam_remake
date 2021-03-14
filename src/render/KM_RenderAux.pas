@@ -12,9 +12,10 @@ type
   TRenderAux = class
   private
     procedure RenderDot(pX, pY: Single; Size: Single = 0.05);
-    procedure RenderDotOnTile(pX, pY: Single);
+    procedure RenderDotOnTile(pX, pY: Single; aSize: Single = 0.1);
     procedure RenderLine(x1, y1, x2, y2: Single);
-    procedure RenderQuad(pX, pY: Integer);
+    procedure RenderQuad(pX, pY: Integer); overload;
+    procedure RenderQuad(pX, pY: Single); overload;
   public
     procedure Circle(x, y, rad: Single; Fill, Line: TColor4);
     procedure CircleOnTerrain(x, y, rad: Single; Fill, Line: TColor4); overload;
@@ -24,10 +25,14 @@ type
     procedure LineOnTerrain(x1, y1, x2, y2: Single; aCol: TColor4; aPattern: Word = $FFFF; aDots: Boolean = True); overload;
     procedure LineOnTerrain(const A, B: TKMPoint; aCol: TColor4; aPattern: Word = $FFFF; aDots: Boolean = True); overload;
     procedure LineOnTerrain(const A, B: TKMPointF; aCol: TColor4; aPattern: Word = $FFFF; aDots: Boolean = True); overload;
+    procedure LineOnTerrain(const aPoints: TKMPointArray; aColor: Cardinal; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF); overload;
+    procedure LineOnTerrain(const aPoints: TKMPointFArray; aColor: Cardinal; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF); overload;
+    procedure LineOnTerrain(aPoints: TKMPointList; aColor: Cardinal; aInset: Single = 0; aThickness: Integer = -1;
+                            aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF); overload;
     procedure Line(const A, B: TKMPoint; aCol: TColor4; aPattern: Word = $FFFF); overload;
     procedure Line(const A, B: TKMPointF; aCol: TColor4; aPattern: Word = $FFFF); overload;
     procedure Line(x1, y1, x2, y2: Single; aCol: TColor4; aPattern: Word = $FFFF); overload;
-    procedure Line(aPoints: TKMPointFArray; aColor: TKMColor4f; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF); overload;
+    procedure Line(const aPoints: TKMPointFArray; aColor: TKMColor4f; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF); overload;
     procedure Triangle(x1, y1, x2, y2, X3, Y3: Single; aCol: TColor4);
     procedure TriangleOnTerrain(x1, y1, x2, y2, X3, Y3: Single; aCol: TColor4);
     procedure TileTerrainIDs(const aRect: TKMRect);
@@ -44,7 +49,11 @@ type
     procedure Passability(const aRect: TKMRect; aPass: Byte);
     procedure RenderResizeMap(const aExceptRect: TKMRect);
     procedure Projectile(x1, y1, x2, y2: Single);
-    procedure Quad(pX, pY: Integer; aCol: TColor4);
+    procedure SetColor(aCol: Cardinal);
+    procedure Quad(pX, pY: Integer); overload;
+    procedure Quad(pX, pY: Integer; aCol: TColor4); overload;
+    procedure Quad(pX, pY: Single); overload;
+    procedure Quad(pX, pY: Single; aCol: TColor4); overload;
     procedure SquareOnTerrain(x1, y1, x2, y2: Single; aLineColor: TColor4);
     procedure Text(pX, pY: Single; const aText: string; aCol: TColor4); overload;
     procedure Text(pX, pY: Single; const aText: string; aCol: TColor4; const aInset: TKMPointF; aConsiderTextLength: Boolean = True); overload;
@@ -63,7 +72,7 @@ var
 
 implementation
 uses
-  KM_Render, KM_Game, KM_Units, KM_Terrain, KM_Resource, KM_ResTileset, KM_CommonUtils;
+  KM_Render, KM_Game, KM_GameParams, KM_Units, KM_Terrain, KM_Resource, KM_ResTileset, KM_CommonUtils;
 
 const
   TILE_TERRAIN_LAYERS_COLORS: array [0..3] of Cardinal =
@@ -81,12 +90,12 @@ begin
 end;
 
 
-procedure TRenderAux.RenderDotOnTile(pX, pY: Single);
+procedure TRenderAux.RenderDotOnTile(pX, pY: Single; aSize: Single = 0.1);
 begin
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
-  pY := gTerrain.FlatToHeight(pX, pY);
+  pY := gTerrain.RenderFlatToHeight(pX, pY);
   glBegin(GL_QUADS);
-    glkRect(pX, pY, pX + 0.1, pY - 0.1);
+    glkRect(pX - aSize/2, pY + aSize/2, pX + aSize/2, pY - aSize/2);
   glEnd;
 end;
 
@@ -96,23 +105,42 @@ begin
   // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   TRender.BindTexture(0);
   glBegin(GL_LINES);
-    glVertex2f(x1, gTerrain.FlatToHeight(x1, y1));
-    glVertex2f(x2, gTerrain.FlatToHeight(x2, y2));
+    glVertex2f(x1, gTerrain.RenderFlatToHeight(x1, y1));
+    glVertex2f(x2, gTerrain.RenderFlatToHeight(x2, y2));
   glEnd;
 end;
 
 
 procedure TRenderAux.RenderQuad(pX, pY: Integer);
 begin
-  if not gTerrain.TileInMapCoords(pX, pY) then exit;
+  if not gTerrain.TileInMapCoords(pX, pY) then Exit;
 
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   glBegin(GL_QUADS);
     with gTerrain do
-    glkQuad(pX-1,pY-1-Land[pY  ,pX  ].Height/CELL_HEIGHT_DIV,
-            pX  ,pY-1-Land[pY  ,pX+1].Height/CELL_HEIGHT_DIV,
-            pX  ,pY-  Land[pY+1,pX+1].Height/CELL_HEIGHT_DIV,
-            pX-1,pY-  Land[pY+1,pX  ].Height/CELL_HEIGHT_DIV);
+    glkQuad(pX-1,pY-1-Land[pY  ,pX  ].RenderHeight/CELL_HEIGHT_DIV,
+            pX  ,pY-1-Land[pY  ,pX+1].RenderHeight/CELL_HEIGHT_DIV,
+            pX  ,pY-  Land[pY+1,pX+1].RenderHeight/CELL_HEIGHT_DIV,
+            pX-1,pY-  Land[pY+1,pX  ].RenderHeight/CELL_HEIGHT_DIV);
+  glEnd;
+end;
+
+
+procedure TRenderAux.RenderQuad(pX, pY: Single);
+var
+  rect: TKMRectF;
+begin
+  rect := KMRectF(pX - 1, pY - 1, pX, pY);
+
+  rect := gTerrain.EnsureVerticesRectWithinMap(rect);
+
+  TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
+  glBegin(GL_QUADS);
+    with gTerrain do
+    glkQuad(rect.Left,  gTerrain.RenderFlatToHeight(rect.Left,  rect.Top),
+            rect.Right, gTerrain.RenderFlatToHeight(rect.Right, rect.Top),
+            rect.Right, gTerrain.RenderFlatToHeight(rect.Right, rect.Bottom),
+            rect.Left,  gTerrain.RenderFlatToHeight(rect.Left,  rect.Bottom));
   glEnd;
 end;
 
@@ -155,7 +183,7 @@ const
   SEC_COUNT = 24;
 var
   I: Integer;
-  C,S: Single;
+  C, S: Single;
 begin
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   glColor4ubv(@Fill);
@@ -164,7 +192,7 @@ begin
     begin
       C := Cos(I / SEC_COUNT * Pi) * Rad;
       S := Sin(I / SEC_COUNT * Pi) * Rad;
-      glVertex2f(X + C, gTerrain.FlatToHeight(X + C, Y + S));
+      glVertex2f(X + C, gTerrain.RenderFlatToHeight(X + C, Y + S));
     end;
   glEnd;
   glColor4ubv(@Line);
@@ -173,7 +201,7 @@ begin
     begin
       C := Cos(I / SEC_COUNT * Pi) * Rad;
       S := Sin(I / SEC_COUNT * Pi) * Rad;
-      glVertex2f(X + C, gTerrain.FlatToHeight(X + C, Y + S));
+      glVertex2f(X + C, gTerrain.RenderFlatToHeight(X + C, Y + S));
     end;
   glEnd;
 end;
@@ -186,15 +214,15 @@ begin
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   glColor4ubv(@aLineColor);
   glBegin(GL_LINE_LOOP);
-    glVertex2f(X1, gTerrain.FlatToHeight(X1, Y1));
+    glVertex2f(X1, gTerrain.RenderFlatToHeight(X1, Y1));
     for I := Ceil(X1) to Trunc(X2) do
-      glVertex2f(I, gTerrain.FlatToHeight(I, Y1));
-    glVertex2f(X2, gTerrain.FlatToHeight(X2, Y1));
+      glVertex2f(I, gTerrain.RenderFlatToHeight(I, Y1));
+    glVertex2f(X2, gTerrain.RenderFlatToHeight(X2, Y1));
 
-    glVertex2f(X2, gTerrain.FlatToHeight(X2, Y2));
+    glVertex2f(X2, gTerrain.RenderFlatToHeight(X2, Y2));
     for I := Trunc(X2) downto Ceil(X1) do
-      glVertex2f(I, gTerrain.FlatToHeight(I, Y2));
-    glVertex2f(X1, gTerrain.FlatToHeight(X1, Y2));
+      glVertex2f(I, gTerrain.RenderFlatToHeight(I, Y2));
+    glVertex2f(X1, gTerrain.RenderFlatToHeight(X1, Y2));
   glEnd;
 end;
 
@@ -211,7 +239,7 @@ procedure TRenderAux.DotOnTerrain(x, y: Single; aCol: TColor4; aSize: Single = 0
 begin
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   glColor4ubv(@aCol);
-  RenderDot(X, gTerrain.FlatToHeight(X, Y), aSize);
+  RenderDot(X, gTerrain.RenderFlatToHeight(X, Y), aSize);
 end;
 
 
@@ -225,8 +253,8 @@ begin
   glDisable(GL_LINE_STIPPLE);
   if aDots then
   begin
-    RenderDot(X1, gTerrain.FlatToHeight(X1, Y1));
-    RenderDot(X2, gTerrain.FlatToHeight(X2, Y2));
+    RenderDot(X1, gTerrain.RenderFlatToHeight(X1, Y1));
+    RenderDot(X2, gTerrain.RenderFlatToHeight(X2, Y2));
   end;
 end;
 
@@ -274,16 +302,16 @@ begin
 end;
 
 
-procedure TRenderAux.Line(aPoints: TKMPointFArray; aColor: TKMColor4f; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip;
+procedure TRenderAux.Line(const aPoints: TKMPointFArray; aColor: TKMColor4f; aThickness: Integer = -1; aLineMode: TKMLineMode = lmStrip;
                           aPattern: Word = $FFFF);
 var
-  I, LineWidth: Integer;
+  I, lineWidth: Integer;
 begin
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
 
   if aThickness <> -1 then
   begin
-    glGetIntegerv(GL_LINE_WIDTH, @LineWidth);
+    glGetIntegerv(GL_LINE_WIDTH, @lineWidth);
     glLineWidth(aThickness);
   end;
 
@@ -302,7 +330,107 @@ begin
 
   // Restore previous value for line width
   if aThickness <> -1 then
-    glLineWidth(LineWidth);
+    glLineWidth(lineWidth);
+end;
+
+
+procedure TRenderAux.LineOnTerrain(const aPoints: TKMPointFArray; aColor: Cardinal; aThickness: Integer = -1;
+                                   aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF);
+var
+  I, lineWidth: Integer;
+begin
+  TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
+
+  if aThickness <> -1 then
+  begin
+    glGetIntegerv(GL_LINE_WIDTH, @lineWidth);
+    glLineWidth(aThickness);
+  end;
+
+  glColor4ubv(@aColor);
+//  glColor4f(aColor.R, aColor.G, aColor.B, aColor.A);
+
+  case aLineMode of
+    lmStrip:  glBegin(GL_LINE_STRIP);
+    lmPairs:  glBegin(GL_LINES);
+    else      raise Exception.Create('Wrong LineMode');
+  end;
+
+  for I := 0 to High(aPoints) do
+    glVertex2f(aPoints[I].X, gTerrain.RenderFlatToHeight(aPoints[I].X, aPoints[I].Y));
+
+  glEnd;
+
+  // Restore previous value for line width
+  if aThickness <> -1 then
+    glLineWidth(lineWidth);
+end;
+
+
+procedure TRenderAux.LineOnTerrain(const aPoints: TKMPointArray; aColor: Cardinal; aThickness: Integer;
+                                   aLineMode: TKMLineMode; aPattern: Word);
+var
+  I, lineWidth: Integer;
+begin
+  TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
+
+  if aThickness <> -1 then
+  begin
+    glGetIntegerv(GL_LINE_WIDTH, @lineWidth);
+    glLineWidth(aThickness);
+  end;
+
+  glColor4ubv(@aColor);
+//  glColor4f(aColor.R, aColor.G, aColor.B, aColor.A);
+
+  case aLineMode of
+    lmStrip:  glBegin(GL_LINE_STRIP);
+    lmPairs:  glBegin(GL_LINES);
+    else      raise Exception.Create('Wrong LineMode');
+  end;
+
+  for I := 0 to High(aPoints) do
+    glVertex2f(aPoints[I].X, gTerrain.RenderFlatToHeight(aPoints[I].X, aPoints[I].Y));
+
+  glEnd;
+
+  // Restore previous value for line width
+  if aThickness <> -1 then
+    glLineWidth(lineWidth);
+end;
+
+
+procedure TRenderAux.LineOnTerrain(aPoints: TKMPointList; aColor: Cardinal; aInset: Single = 0; aThickness: Integer = -1;
+                                   aLineMode: TKMLineMode = lmStrip; aPattern: Word = $FFFF);
+var
+  I, lineWidth: Integer;
+begin
+  TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
+
+  if aThickness <> -1 then
+  begin
+    glGetIntegerv(GL_LINE_WIDTH, @lineWidth);
+    glLineWidth(aThickness);
+  end;
+
+  glColor4ubv(@aColor);
+//  glColor4f(aColor.R, aColor.G, aColor.B, aColor.A);
+
+  case aLineMode of
+    lmStrip:  glBegin(GL_LINE_STRIP);
+    lmPairs:  glBegin(GL_LINES);
+    else      raise Exception.Create('Wrong LineMode');
+  end;
+
+  for I := 0 to aPoints.Count - 1 do
+    glVertex2f(aPoints[I].X + aInset, gTerrain.RenderFlatToHeight(aPoints[I].X + aInset, aPoints[I].Y + aInset));
+
+  glEnd;
+
+  // Restore previous value for line width
+  if aThickness <> -1 then
+    glLineWidth(lineWidth);
+
 end;
 
 
@@ -325,37 +453,37 @@ begin
   glColor4ubv(@aCol);
 
   glBegin(GL_TRIANGLES);
-    glVertex2f(x1, gTerrain.FlatToHeight(x1, y1));
-    glVertex2f(x2, gTerrain.FlatToHeight(x2, y2));
-    glVertex2f(x3, gTerrain.FlatToHeight(x3, y3));
+    glVertex2f(x1, gTerrain.RenderFlatToHeight(x1, y1));
+    glVertex2f(x2, gTerrain.RenderFlatToHeight(x2, y2));
+    glVertex2f(x3, gTerrain.RenderFlatToHeight(x3, y3));
   glEnd;
 end;
 
 
 procedure TRenderAux.TileTerrainIDs(const aRect: TKMRect);
 var
-  I, J, K, Cnt: Integer;
-  CustomStr: String;
+  I, J, K, cnt: Integer;
+  customStr: String;
 begin
 
   for I := aRect.Top to aRect.Bottom do
     for J := aRect.Left to aRect.Right do
     begin
-      CustomStr := '';
+      customStr := '';
       if gTerrain.Land[I,J].IsCustom then
-        CustomStr := '-C';
-      CustomStr := CustomStr + '-' + IntToStr(gTerrain.Land[I,J].BlendingLvl);
+        customStr := '-C';
+      customStr := customStr + '-' + IntToStr(gTerrain.Land[I,J].BlendingLvl);
       if gTerrain.Land[I,J].LayersCnt = 0 then
-        Text(J, I, IntToStr(gTerrain.Land[I,J].BaseLayer.Terrain)+ '-' + IntToStr(gTerrain.Land[I,J].BaseLayer.Rotation) + CustomStr,
+        Text(J, I, IntToStr(gTerrain.Land[I,J].BaseLayer.Terrain)+ '-' + IntToStr(gTerrain.Land[I,J].BaseLayer.Rotation) + customStr,
              TILE_TERRAIN_LAYERS_COLORS[0])
       else begin
-        Cnt := gTerrain.Land[I,J].LayersCnt + 1;
-        Text(J, I, IntToStr(gTerrain.Land[I,J].BaseLayer.Terrain) + '-' + IntToStr(gTerrain.Land[I,J].BaseLayer.Rotation) + CustomStr,
+        cnt := gTerrain.Land[I,J].LayersCnt + 1;
+        Text(J, I, IntToStr(gTerrain.Land[I,J].BaseLayer.Terrain) + '-' + IntToStr(gTerrain.Land[I,J].BaseLayer.Rotation) + customStr,
              TILE_TERRAIN_LAYERS_COLORS[0], KMPointF(0,-0.3));
         for K := 0 to gTerrain.Land[I,J].LayersCnt - 1 do
           Text(J, I, IntToStr(BASE_TERRAIN[gRes.Sprites.GetGenTerrainInfo(gTerrain.Land[I,J].Layer[K].Terrain).TerKind])
                      + '*' + IntToStr(gTerrain.Land[I,J].Layer[K].Rotation),
-               TILE_TERRAIN_LAYERS_COLORS[K+1], KMPointF(0,-0.3 + 0.7*(K+1)/Cnt));
+               TILE_TERRAIN_LAYERS_COLORS[K+1], KMPointF(0,-0.3 + 0.7*(K+1)/cnt));
       end;
     end;
 end;
@@ -365,17 +493,17 @@ procedure TRenderAux.TileTerrainKinds(const aRect: TKMRect);
 
   procedure DrawTerKind(X,Y: Integer);
   var
-    TerKind: TKMTerrainKind;
-    TerKindStr: String;
+    terKind: TKMTerrainKind;
+    terKindStr: String;
   begin
-    if gGame.IsMapEditor then
+    if gGameParams.IsMapEditor then
     begin
-      TerKind := gGame.TerrainPainter.LandTerKind[Y,X].TerKind;
-      case TerKind of
-        tkCustom: TerKindStr := 'C';
-        else      TerKindStr := IntToStr(BASE_TERRAIN[TerKind]);
+      terKind := gGame.TerrainPainter.LandTerKind[Y,X].TerKind;
+      case terKind of
+        tkCustom: terKindStr := 'C';
+        else      terKindStr := IntToStr(BASE_TERRAIN[terKind]);
       end;
-      Text(X - 0.47, Y - 0.47, TerKindStr, icRed);
+      Text(X - 0.47, Y - 0.47, terKindStr, icRed);
     end;
   end;
 
@@ -389,12 +517,12 @@ begin
       for K := 0 to 3 do
         with gTerrain.Land[I,J] do
         begin
-          if BaseLayer.Corners[K] then
+          if BaseLayer.Corner[K] then
             TextAtCorner(J, I, K,
                          IntToStr(BASE_TERRAIN[TILE_CORNERS_TERRAIN_KINDS[BaseLayer.Terrain, (K + 4 - BaseLayer.Rotation) mod 4]]),
                          TILE_TERRAIN_LAYERS_COLORS[0]);
           for L := 0 to LayersCnt - 1 do
-            if Layer[L].Corners[K] then
+            if Layer[L].Corner[K] then
               TextAtCorner(J, I, K,
                            IntToStr(BASE_TERRAIN[gRes.Sprites.GetGenTerrainInfo(Layer[L].Terrain).TerKind]),
                            TILE_TERRAIN_LAYERS_COLORS[L+1]);
@@ -490,15 +618,15 @@ procedure TRenderAux.TileTerrainJamMeter(const aRect: TKMRect);
 const
   JAM_DRAW_STEP = 3;
 var
-  I, J, K, Limit: Integer;
+  I, J, K, limit: Integer;
 begin
   for I := aRect.Top to aRect.Bottom do
     for J := aRect.Left to aRect.Right do
     begin
       if gTerrain.Land[I,J].JamMeter = 0 then Continue;
 
-      Limit := (gTerrain.Land[I,J].JamMeter + JAM_DRAW_STEP - 1) div JAM_DRAW_STEP;
-      for K := 0 to Limit - 1 do
+      limit := (gTerrain.Land[I,J].JamMeter + JAM_DRAW_STEP - 1) div JAM_DRAW_STEP;
+      for K := 0 to limit - 1 do
         Quad(J, I, $20FFFFFF and icOrange);
       //Draw text over quads
       Text(J, I, IntToStr(gTerrain.Land[I,J].JamMeter), icRed);
@@ -510,8 +638,9 @@ procedure TRenderAux.TileTerrainHeight(const aRect: TKMRect);
 var
   I, J: Integer;
 begin
-  for I := aRect.Top to aRect.Bottom do
-    for J := aRect.Left to aRect.Right do
+  for I := aRect.Top to aRect.Bottom + 1 do
+    for J := aRect.Left to aRect.Right + 1 do
+      //Use fHeight to show real height, even when 'Flat terrain' is checked
       Text(J-0.5, I-0.5, IntToStr(gTerrain.Land[I,J].Height), icCyan);
 end;
 
@@ -565,7 +694,32 @@ begin
 end;
 
 
+procedure TRenderAux.SetColor(aCol: Cardinal);
+begin
+  glColor4ubv(@aCol);
+end;
+
+
+procedure TRenderAux.Quad(pX, pY: Integer);
+begin
+  RenderQuad(pX, pY);
+end;
+
+
 procedure TRenderAux.Quad(pX, pY: Integer; aCol: TColor4);
+begin
+  glColor4ubv(@aCol);
+  RenderQuad(pX, pY);
+end;
+
+
+procedure TRenderAux.Quad(pX, pY: Single);
+begin
+  RenderQuad(pX, pY);
+end;
+
+
+procedure TRenderAux.Quad(pX, pY: Single; aCol: TColor4);
 begin
   glColor4ubv(@aCol);
   RenderQuad(pX, pY);
@@ -584,7 +738,7 @@ begin
 
   TRender.BindTexture(0); // We have to reset texture to default (0), because it could be bind to any other texture (atlas)
   glColor4ubv(@aCol);
-  glRasterPos2f(pX + aInset.X - 0.5 - Byte(aConsiderTextLength)*Length(aText)/20, gTerrain.FlatToHeight(pX + aInset.X - 0.5, pY + aInset.Y - 0.5));
+  glRasterPos2f(pX + aInset.X - 0.5 - Byte(aConsiderTextLength)*Length(aText)/20, gTerrain.RenderFlatToHeight(pX + aInset.X - 0.5, pY + aInset.Y - 0.5));
   glPrint(AnsiString(aText));
 end;
 
@@ -604,16 +758,16 @@ end;
 procedure TRenderAux.UnitMoves(const aRect: TKMRect);
 var
   I, K: Integer;
-  VertexUsage: Byte;
+  vertexUsage: Byte;
 begin
   for I := aRect.Top to aRect.Bottom do
   for K := aRect.Left to aRect.Right do
   begin
     if gTerrain.Land[I,K].IsVertexUnit <> vuNone then
     begin
-      VertexUsage := byte(gTerrain.Land[I,K].IsVertexUnit);
-      glColor4f(1-VertexUsage/3, VertexUsage/3, 0.6, 0.8);
-      RenderDot(K, gTerrain.FlatToHeight(K,I), 0.3);
+      vertexUsage := byte(gTerrain.Land[I,K].IsVertexUnit);
+      glColor4f(1-vertexUsage/3, vertexUsage/3, 0.6, 0.8);
+      RenderDot(K, gTerrain.RenderFlatToHeight(K,I), 0.3);
     end;
     if gTerrain.Land[I,K].IsUnit <> nil then
     begin
@@ -629,14 +783,14 @@ var
   I: Integer;
 begin
   for I := 1 to Count do
-    RenderDot(pX+I/5, gTerrain.FlatToHeight(pX,pY));
+    RenderDot(pX+I/5, gTerrain.RenderFlatToHeight(pX,pY));
 end;
 
 
 procedure TRenderAux.UnitRoute(NodeList: TKMPointList; Pos: Integer; aUID: Integer);
 var
   I, K: Integer;
-  FaceX, FaceY: Single;
+  faceX, faceY: Single;
   col: TKMColor3f;
 begin
   if NodeList.Count = 0 then Exit;
@@ -658,7 +812,7 @@ begin
 
   glBegin(GL_LINE_STRIP);
     for I := 0 to NodeList.Count - 1 do
-      glVertex2f(NodeList[I].X-0.5, gTerrain.FlatToHeight(NodeList[I].X-0.5, NodeList[I].Y-0.5));
+      glVertex2f(NodeList[I].X-0.5, gTerrain.RenderFlatToHeight(NodeList[I].X-0.5, NodeList[I].Y-0.5));
   glEnd;
 
   for I := 0 to NodeList.Count - 1 do
@@ -667,12 +821,12 @@ begin
   glColor4f(1,1,1,1); //Vector where unit is going to
   I := Pos;
   K := Min(Pos + 1, NodeList.Count - 1);
-  FaceX := Mix(NodeList[I].X - 0.5, NodeList[K].X - 0.5, 0.4);
-  FaceY := Mix(NodeList[I].Y - 0.5, NodeList[K].Y - 0.5, 0.4) + 0.2; //0.2 to render vector a bit lower so it won't gets overdrawned by another route
+  faceX := Mix(NodeList[I].X - 0.5, NodeList[K].X - 0.5, 0.4);
+  faceY := Mix(NodeList[I].Y - 0.5, NodeList[K].Y - 0.5, 0.4) + 0.2; //0.2 to render vector a bit lower so it won't gets overdrawned by another route
   RenderDotOnTile(NodeList[I].X + 0.5, NodeList[I].Y + 0.5 + 0.2);
   glBegin(GL_LINES);
-    glVertex2f(NodeList[I].X-0.5, gTerrain.FlatToHeight(NodeList[I].X+0.5,NodeList[I].Y+0.5) + 0.2);
-    glVertex2f(FaceX, gTerrain.FlatToHeight(FaceX+1, FaceY+1));
+    glVertex2f(NodeList[I].X-0.5, gTerrain.RenderFlatToHeight(NodeList[I].X+0.5,NodeList[I].Y+0.5) + 0.2);
+    glVertex2f(faceX, gTerrain.RenderFlatToHeight(faceX+1, faceY+1));
   glEnd;
 end;
 
@@ -688,7 +842,7 @@ begin
     for K := aRect.Left to aRect.Right + 1 do
     begin
       glColor4f(0.8, 1, 0.6, 1);
-      glVertex2d(K - 1, I - 1 - gTerrain.Land[I, K].Height / CELL_HEIGHT_DIV);
+      glVertex2d(K - 1, I - 1 - gTerrain.Land[I, K].RenderHeight / CELL_HEIGHT_DIV);
     end;
     glEnd;
   end;
@@ -700,8 +854,8 @@ begin
     for K := aRect.Left to aRect.Right + 1 do
     begin
       //glColor4f(gTerrain.Land[I,K].Height/100,0,0,1.2-sqrt(sqr(I-MapYc)+sqr(K-MapXc))/10);
-      glColor4f(Byte(gTerrain.Land[I,K].Fence = fncHousePlan), Byte(gTerrain.Land[I,K].Fence = fncHousePlan), 0, 1);
-      glVertex2d(K - 1, I - 1 - gTerrain.Land[I, K].Height / CELL_HEIGHT_DIV);
+      glColor4f(Byte(gTerrain.Fences[I,K].Kind = fncHousePlan), Byte(gTerrain.Fences[I,K].Kind = fncHousePlan), 0, 1);
+      glVertex2d(K - 1, I - 1 - gTerrain.Land[I, K].RenderHeight / CELL_HEIGHT_DIV);
     end;
     glEnd;
   glPopAttrib;
@@ -721,10 +875,10 @@ begin
   glColor4ubv(@Col);
   glBegin(GL_LINE_LOOP);
     with gTerrain do begin
-      glVertex2f(P.X-1 + aInset, P.Y-1 + aInset - Land[P.Y  ,P.X  ].Height/CELL_HEIGHT_DIV);
-      glVertex2f(P.X   - aInset, P.Y-1 + aInset - Land[P.Y  ,P.X+1].Height/CELL_HEIGHT_DIV);
-      glVertex2f(P.X   - aInset, P.Y   - aInset - Land[P.Y+1,P.X+1].Height/CELL_HEIGHT_DIV);
-      glVertex2f(P.X-1 + aInset, P.Y   - aInset - Land[P.Y+1,P.X  ].Height/CELL_HEIGHT_DIV);
+      glVertex2f(P.X-1 + aInset, P.Y-1 + aInset - Land[P.Y  ,P.X  ].RenderHeight/CELL_HEIGHT_DIV);
+      glVertex2f(P.X   - aInset, P.Y-1 + aInset - Land[P.Y  ,P.X+1].RenderHeight/CELL_HEIGHT_DIV);
+      glVertex2f(P.X   - aInset, P.Y   - aInset - Land[P.Y+1,P.X+1].RenderHeight/CELL_HEIGHT_DIV);
+      glVertex2f(P.X-1 + aInset, P.Y   - aInset - Land[P.Y+1,P.X  ].RenderHeight/CELL_HEIGHT_DIV);
     end;
   glEnd;
 end;

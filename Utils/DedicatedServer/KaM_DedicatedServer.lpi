@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="10"/>
+    <Version Value="9"/>
     <PathDelim Value="\"/>
     <General>
       <Flags>
@@ -35,22 +35,24 @@
         <PackageName Value="LCL"/>
       </Item1>
     </RequiredPackages>
-    <Units Count="13">
+    <Units Count="15">
       <Unit0>
         <Filename Value="KaM_DedicatedServer.dpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
         <TopLine Value="7"/>
-        <CursorPos X="14" Y="16"/>
-        <UsageCount Value="30"/>
+        <CursorPos X="36" Y="23"/>
+        <UsageCount Value="33"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit0>
       <Unit1>
         <Filename Value="..\..\KaM_Remake.lpr"/>
+        <EditorIndex Value="2"/>
         <TopLine Value="59"/>
-        <CursorPos X="15" Y="4"/>
-        <UsageCount Value="9"/>
+        <CursorPos X="29" Y="79"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit1>
       <Unit2>
@@ -113,23 +115,38 @@
       </Unit10>
       <Unit11>
         <Filename Value="KM_ServerEventHandler.pas"/>
-        <EditorIndex Value="2"/>
+        <EditorIndex Value="4"/>
         <TopLine Value="3"/>
         <CursorPos X="15" Y="13"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="11"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit11>
       <Unit12>
         <Filename Value="C:\lazarus\fpc\3.0.2\source\rtl\win\wininc\defines.inc"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="1340"/>
         <CursorPos X="6" Y="1350"/>
         <UsageCount Value="10"/>
-        <Loaded Value="True"/>
       </Unit12>
+      <Unit13>
+        <Filename Value="..\..\src\res\KM_ResTexts.pas"/>
+        <EditorIndex Value="1"/>
+        <CursorPos X="4" Y="15"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit13>
+      <Unit14>
+        <Filename Value="..\..\src\ext\Xml.VerySimple.pas"/>
+        <EditorIndex Value="3"/>
+        <CursorPos X="29" Y="12"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit14>
     </Units>
-    <JumpHistory Count="20" HistoryIndex="19">
+    <JumpHistory Count="23" HistoryIndex="22">
       <Position1>
         <Filename Value="KaM_DedicatedServer.dpr"/>
         <Caret Line="52" Column="23" TopLine="38"/>
@@ -210,6 +227,16 @@
         <Filename Value="KaM_DedicatedServer.dpr"/>
         <Caret Line="190" TopLine="170"/>
       </Position20>
+      <Position21>
+        <Filename Value="..\..\src\res\KM_ResTexts.pas"/>
+      </Position21>
+      <Position22>
+        <Filename Value="..\..\src\res\KM_ResTexts.pas"/>
+        <Caret Line="15" Column="4"/>
+      </Position22>
+      <Position23>
+        <Filename Value="..\..\src\ext\Xml.VerySimple.pas"/>
+      </Position23>
     </JumpHistory>
   </ProjectOptions>
   <CompilerOptions>

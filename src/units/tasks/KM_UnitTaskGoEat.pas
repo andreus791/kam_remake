@@ -21,6 +21,7 @@ type
     function Execute: TKMTaskResult; override;
 
     function CouldBeCancelled: Boolean; override;
+    function WalkShouldAbandon: Boolean; override;
 
     procedure Save(SaveStream: TKMemoryStream); override;
   end;
@@ -28,7 +29,8 @@ type
 
 implementation
 uses
-  KM_HandsCollection, KM_ResWares, KM_Hand;
+  KM_HandsCollection, KM_Hand,
+  KM_ResTypes;
 
 
 { TTaskGoEat }
@@ -37,7 +39,7 @@ begin
   inherited Create(aUnit);
 
   fType := uttGoEat;
-  fInn      := TKMHouseInn(aInn.GetHousePointer);
+  fInn      := TKMHouseInn(aInn.GetPointer);
   fPlace    := -1;
   fFeedCnt  := 0;
 end;
@@ -59,6 +61,12 @@ begin
   inherited;
 
   fInn := TKMHouseInn(gHands.GetHouseByUID(Cardinal(fInn)));
+end;
+
+
+function TKMTaskGoEat.WalkShouldAbandon: Boolean;
+begin
+  Result := fInn.IsDestroyed;
 end;
 
 
@@ -193,10 +201,7 @@ procedure TKMTaskGoEat.Save(SaveStream: TKMemoryStream);
 begin
   inherited;
   SaveStream.PlaceMarker('TaskGoEat');
-  if fInn <> nil then
-    SaveStream.Write(fInn.UID) //Store ID, then substitute it with reference on SyncLoad
-  else
-    SaveStream.Write(Integer(0));
+  SaveStream.Write(fInn.UID); //Store ID, then substitute it with reference on SyncLoad
   SaveStream.Write(fPlace);
   SaveStream.Write(fFeedCnt);
 end;

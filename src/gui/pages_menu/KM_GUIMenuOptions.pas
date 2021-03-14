@@ -3,8 +3,10 @@ unit KM_GUIMenuOptions;
 interface
 uses
   Classes, Controls, KromOGLUtils, Math, SysUtils,
-  KM_Controls, KM_Settings, KM_Pics, KM_Resolutions, KM_ResKeys,
-  KM_InterfaceDefaults;
+  KM_Controls,
+  KM_MainSettings,
+  KM_Pics, KM_Resolutions, KM_ResKeys,
+  KM_InterfaceDefaults, KM_CommonTypes;
 
 
 type
@@ -16,7 +18,6 @@ type
     fOnPageChange: TKMMenuChangeEventText; // will be in ancestor class
 
     fMainSettings: TKMainSettings;
-    fGameSettings: TKMGameSettings;
     fResolutions: TKMResolutions;
 
     // We remember old values to enable/disable "Apply" button dynamicaly
@@ -35,6 +36,8 @@ type
     procedure KeysClick(Sender: TObject);
     procedure KeysRefreshList;
     function KeysUpdate(Sender: TObject; Key: Word; Shift: TShiftState): Boolean;
+
+    procedure Init;
   protected
     Panel_Options: TKMPanel;
       Panel_Options_GFX: TKMPanel;
@@ -84,6 +87,10 @@ type
             Button_OptionsKeysCancel: TKMButton;
       Button_OptionsBack: TKMButton;
   public
+    OnToggleLocale: TAnsiStringEvent;
+    OnOptionsChange: TEvent;
+    OnPreloadGameResources: TEvent;
+
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     destructor Destroy; override;
     procedure Refresh;
@@ -94,7 +101,10 @@ type
 
 implementation
 uses
-  KM_Main, KM_GameApp, KM_Sound, KM_RenderUI, KM_Resource, KM_ResTexts, KM_ResLocales, KM_ResFonts, KM_ResSound, KM_Video;
+  KM_Main, KM_Music, KM_Sound, KM_RenderUI, KM_Resource, KM_ResTexts, KM_ResLocales, KM_ResFonts, KM_ResSound, KM_Video,
+  KM_ResTypes,
+  KM_GameSettings,
+  KM_GameAppSettings;
 
 
 { TKMGUIMainOptions }
@@ -255,7 +265,6 @@ begin
       CheckBox_MakeSavePoints.OnClick := Change;
 
 
-
     //Replays section
     Panel_Options_Replays := TKMPanel.Create(Panel_Options,300,top,280,50);
     NextBlock(top, Panel_Options_Replays, -6);
@@ -358,33 +367,37 @@ end;
 // hence we need to pass either gGameApp.Settings or a direct Settings link
 procedure TKMMenuOptions.Refresh;
 begin
-  CheckBox_Options_Autosave.Checked        := fGameSettings.Autosave;
-  CheckBox_Options_AutosaveAtGameEnd.Checked := fGameSettings.AutosaveAtGameEnd;
-  CheckBox_Options_ReplayAutopause.Checked := fGameSettings.ReplayAutopause;
-  TrackBar_Options_Brightness.Position     := fGameSettings.Brightness;
-  CheckBox_Options_VSync.Checked           := fMainSettings.VSync;
-  CheckBox_Options_FullFonts.Enabled       := not gResLocales.LocaleByCode(fGameSettings.Locale).NeedsFullFonts;
-  CheckBox_Options_FullFonts.Checked       := fGameSettings.LoadFullFonts or not CheckBox_Options_FullFonts.Enabled;
-  CheckBox_Options_ShadowQuality.Checked   := fGameSettings.AlphaShadows;
-  TrackBar_Options_ScrollSpeed.Position    := fGameSettings.ScrollSpeed;
-  TrackBar_Options_SFX.Position            := Round(fGameSettings.SoundFXVolume * TrackBar_Options_SFX.MaxValue);
-  TrackBar_Options_Music.Position          := Round(fGameSettings.MusicVolume * TrackBar_Options_Music.MaxValue);
-  CheckBox_Options_MusicOff.Checked        := fGameSettings.MusicOff;
-  TrackBar_Options_Music.Enabled           := not CheckBox_Options_MusicOff.Checked;
-  CheckBox_Options_ShuffleOn.Checked       := fGameSettings.ShuffleOn;
-  CheckBox_Options_ShuffleOn.Enabled       := not CheckBox_Options_MusicOff.Checked;
-  CheckBox_Options_VideoEnable.Checked     := fGameSettings.VideoOn;
-  CheckBox_Options_VideoStretch.Checked    := fGameSettings.VideoStretch;
-  CheckBox_Options_VideoStretch.Enabled    := fGameSettings.VideoOn;
-  CheckBox_Options_VideoStartup.Checked    := fGameSettings.VideoStartup;
-  CheckBox_Options_VideoStartup.Enabled    := fGameSettings.VideoOn;
-  TrackBar_Options_VideoVolume.Position    := Round(fGameSettings.VideoVolume * TrackBar_Options_VideoVolume.MaxValue);
-  TrackBar_Options_VideoVolume.Enabled     := fGameSettings.VideoOn;
-  Button_Options_VideoTest.Enabled         := fGameSettings.VideoOn;
-  CheckBox_Options_SnowHouses.Checked      := fGameSettings.AllowSnowHouses;
-  CheckBox_MakeSavePoints.Checked          := fGameSettings.SaveCheckpoints;
+  Init;
 
-  Radio_Options_Lang.ItemIndex := gResLocales.IndexByCode(fGameSettings.Locale);
+  CheckBox_Options_Autosave.Checked        := gGameSettings.Autosave;
+  CheckBox_Options_AutosaveAtGameEnd.Checked := gGameSettings.AutosaveAtGameEnd;
+  CheckBox_Options_ReplayAutopause.Checked := gGameSettings.ReplayAutopause;
+  TrackBar_Options_Brightness.Position     := gGameSettings.Brightness;
+  CheckBox_Options_VSync.Checked           := fMainSettings.VSync;
+  CheckBox_Options_FullFonts.Enabled       := not gResLocales.LocaleByCode(gGameSettings.Locale).NeedsFullFonts;
+  CheckBox_Options_FullFonts.Checked       := gGameSettings.LoadFullFonts or not CheckBox_Options_FullFonts.Enabled;
+  CheckBox_Options_ShadowQuality.Checked   := gGameSettings.AlphaShadows;
+  TrackBar_Options_ScrollSpeed.Position    := gGameSettings.ScrollSpeed;
+  TrackBar_Options_SFX.Position            := Round(gGameSettings.SoundFXVolume * TrackBar_Options_SFX.MaxValue);
+  TrackBar_Options_Music.Position          := Round(gGameSettings.MusicVolume * TrackBar_Options_Music.MaxValue);
+  CheckBox_Options_MusicOff.Checked        := gGameSettings.MusicOff;
+  TrackBar_Options_Music.Enabled           := not CheckBox_Options_MusicOff.Checked;
+  CheckBox_Options_ShuffleOn.Checked       := gGameSettings.ShuffleOn;
+  CheckBox_Options_ShuffleOn.Enabled       := not CheckBox_Options_MusicOff.Checked;
+  CheckBox_Options_VideoEnable.Checked     := gGameSettings.VideoOn;
+  CheckBox_Options_VideoStretch.Checked    := gGameSettings.VideoStretch;
+  CheckBox_Options_VideoStretch.Enabled    := gGameSettings.VideoOn;
+  CheckBox_Options_VideoStartup.Checked    := gGameSettings.VideoStartup;
+  CheckBox_Options_VideoStartup.Enabled    := gGameSettings.VideoOn;
+  TrackBar_Options_VideoVolume.Position    := Round(gGameSettings.VideoVolume * TrackBar_Options_VideoVolume.MaxValue);
+  //Disable Video volume util we will fix it
+  //Video volume is set via windows mixer now, and it affect all other game sounds/music after the end of video playback
+  TrackBar_Options_VideoVolume.Enabled     := False; //gGameSettings.VideoOn;
+  Button_Options_VideoTest.Enabled         := gGameSettings.VideoOn;
+  CheckBox_Options_SnowHouses.Checked      := gGameSettings.AllowSnowHouses;
+  CheckBox_MakeSavePoints.Checked          := gGameSettings.SaveCheckpoints;
+
+  Radio_Options_Lang.ItemIndex := gResLocales.IndexByCode(gGameSettings.Locale);
 
   // We need to reset dropboxes every time we enter Options page
   RefreshResolutions;
@@ -397,56 +410,58 @@ var
   MusicToggled, ShuffleToggled: Boolean;
 begin
   // Change these options only if they changed state since last time
-  MusicToggled := (fGameSettings.MusicOff <> CheckBox_Options_MusicOff.Checked);
-  ShuffleToggled := (fGameSettings.ShuffleOn <> CheckBox_Options_ShuffleOn.Checked);
+  MusicToggled := (gGameSettings.MusicOff <> CheckBox_Options_MusicOff.Checked);
+  ShuffleToggled := (gGameSettings.ShuffleOn <> CheckBox_Options_ShuffleOn.Checked);
 
-  fGameSettings.Autosave        := CheckBox_Options_Autosave.Checked;
-  fGameSettings.AutosaveAtGameEnd := CheckBox_Options_AutosaveAtGameEnd.Checked;
-  fGameSettings.ReplayAutopause := CheckBox_Options_ReplayAutopause.Checked;
-  fGameSettings.Brightness      := TrackBar_Options_Brightness.Position;
+  gGameSettings.Autosave        := CheckBox_Options_Autosave.Checked;
+  gGameSettings.AutosaveAtGameEnd := CheckBox_Options_AutosaveAtGameEnd.Checked;
+  gGameSettings.ReplayAutopause := CheckBox_Options_ReplayAutopause.Checked;
+  gGameSettings.Brightness      := TrackBar_Options_Brightness.Position;
   fMainSettings.VSync           := CheckBox_Options_VSync.Checked;
-  fGameSettings.AlphaShadows    := CheckBox_Options_ShadowQuality.Checked;
-  fGameSettings.ScrollSpeed     := TrackBar_Options_ScrollSpeed.Position;
-  fGameSettings.SoundFXVolume   := TrackBar_Options_SFX.Position / TrackBar_Options_SFX.MaxValue;
-  fGameSettings.MusicVolume     := TrackBar_Options_Music.Position / TrackBar_Options_Music.MaxValue;
-  fGameSettings.MusicOff        := CheckBox_Options_MusicOff.Checked;
-  fGameSettings.ShuffleOn       := CheckBox_Options_ShuffleOn.Checked;
-  fGameSettings.VideoOn         := CheckBox_Options_VideoEnable.Checked;
-  fGameSettings.VideoStretch    := CheckBox_Options_VideoStretch.Checked;
-  fGameSettings.VideoStartup    := CheckBox_Options_VideoStartup.Checked;
-  fGameSettings.VideoVolume     := TrackBar_Options_VideoVolume.Position / TrackBar_Options_VideoVolume.MaxValue;
-  fGameSettings.AllowSnowHouses := CheckBox_Options_SnowHouses.Checked;
-  fGameSettings.SaveCheckpoints := CheckBox_MakeSavePoints.Checked;
+  gGameSettings.AlphaShadows    := CheckBox_Options_ShadowQuality.Checked;
+  gGameSettings.ScrollSpeed     := TrackBar_Options_ScrollSpeed.Position;
+  gGameSettings.SoundFXVolume   := TrackBar_Options_SFX.Position / TrackBar_Options_SFX.MaxValue;
+  gGameSettings.MusicVolume     := TrackBar_Options_Music.Position / TrackBar_Options_Music.MaxValue;
+  gGameSettings.MusicOff        := CheckBox_Options_MusicOff.Checked;
+  gGameSettings.ShuffleOn       := CheckBox_Options_ShuffleOn.Checked;
+  gGameSettings.VideoOn         := CheckBox_Options_VideoEnable.Checked;
+  gGameSettings.VideoStretch    := CheckBox_Options_VideoStretch.Checked;
+  gGameSettings.VideoStartup    := CheckBox_Options_VideoStartup.Checked;
+  gGameSettings.VideoVolume     := TrackBar_Options_VideoVolume.Position / TrackBar_Options_VideoVolume.MaxValue;
+  gGameSettings.AllowSnowHouses := CheckBox_Options_SnowHouses.Checked;
+  gGameSettings.SaveCheckpoints := CheckBox_MakeSavePoints.Checked;
 
   TrackBar_Options_Music.Enabled      := not CheckBox_Options_MusicOff.Checked;
   CheckBox_Options_ShuffleOn.Enabled  := not CheckBox_Options_MusicOff.Checked;
 
-  gSoundPlayer.UpdateSoundVolume(fGameSettings.SoundFXVolume);
-  gGameApp.MusicLib.UpdateMusicVolume(fGameSettings.MusicVolume);
+  gSoundPlayer.UpdateSoundVolume(gGameSettings.SoundFXVolume);
+  gMusic.Volume := gGameSettings.MusicVolume;
   SetupVSync(fMainSettings.VSync);
   if MusicToggled then
   begin
-    gGameApp.MusicLib.ToggleMusic(not fGameSettings.MusicOff);
-    if not fGameSettings.MusicOff then
+    gMusic.ToggleEnabled(not gGameSettings.MusicOff);
+    if not gGameSettings.MusicOff then
       ShuffleToggled := True; // Re-shuffle songs if music has been enabled
   end;
   if ShuffleToggled then
-    gGameApp.MusicLib.ToggleShuffle(fGameSettings.ShuffleOn);
+    gMusic.ToggleShuffle(gGameSettings.ShuffleOn);
 
   if Sender = CheckBox_Options_FullFonts then
   begin
-    fGameSettings.LoadFullFonts := CheckBox_Options_FullFonts.Checked;
+    gGameSettings.LoadFullFonts := CheckBox_Options_FullFonts.Checked;
     if CheckBox_Options_FullFonts.Checked and (gRes.Fonts.LoadLevel <> fllFull) then
     begin
       // When enabling full fonts, use ToggleLocale reload the entire interface
-      gGameApp.ToggleLocale(gResLocales[Radio_Options_Lang.ItemIndex].Code);
+      if Assigned(OnToggleLocale) then
+        OnToggleLocale(gResLocales[Radio_Options_Lang.ItemIndex].Code);
       Exit; // Exit ASAP because whole interface will be recreated
     end;
   end;
 
   if Sender = Radio_Options_Lang then
   begin
-    gGameApp.ToggleLocale(gResLocales[Radio_Options_Lang.ItemIndex].Code);
+    if Assigned(OnToggleLocale) then
+      OnToggleLocale(gResLocales[Radio_Options_Lang.ItemIndex].Code);
     Exit; // Exit ASAP because whole interface will be recreated
   end;
 
@@ -454,12 +469,14 @@ begin
   begin
     CheckBox_Options_VideoStartup.Enabled := CheckBox_Options_VideoEnable.Checked;
     CheckBox_Options_VideoStretch.Enabled := CheckBox_Options_VideoEnable.Checked;
-    TrackBar_Options_VideoVolume.Enabled  := CheckBox_Options_VideoEnable.Checked;
+    //Disable Video volume util we will fix it
+    //Video volume is set via windows mixer now, and it affect all other game sounds/music after the end of video playback
+    TrackBar_Options_VideoVolume.Enabled  := False; //CheckBox_Options_VideoEnable.Checked;
     Button_Options_VideoTest.Enabled      := CheckBox_Options_VideoEnable.Checked;
   end;
 
-  if Assigned(gGameApp.OnOptionsChange) then
-    gGameApp.OnOptionsChange();
+  if Assigned(OnOptionsChange) then
+    OnOptionsChange();
 end;
 
 
@@ -596,32 +613,36 @@ begin
 end;
 
 
-procedure TKMMenuOptions.Show;
+procedure TKMMenuOptions.Init;
 begin
   // Remember what we are working with
   // (we do that on Show because Create gets called from Main/Game constructor and fMain/gGameApp are not yet assigned)
   // Ideally we could pass them as parameters here
   fMainSettings := gMain.Settings;
-  fGameSettings := gGameApp.GameSettings;
   fResolutions := gMain.Resolutions;
-  fLastAlphaShadows := fGameSettings.AlphaShadows;
+  fLastAlphaShadows := gGameSettings.AlphaShadows;
+end;
 
+
+procedure TKMMenuOptions.Show;
+begin
   Refresh;
   Panel_Options.Show;
 end;
 
 
 procedure TKMMenuOptions.KeysClick(Sender: TObject);
-var I: Integer;
+var
+  KF: TKMKeyFunction;
 begin
   if Sender = Button_OptionsKeys then
   begin
     // Reload the keymap in case player changed it and checks his changes in game
-    gResKeys.LoadKeymapFile;
+    gResKeys.Load;
 
     // Update TempKeys from gResKeys
-    for I := 0 to gResKeys.Count - 1 do
-      fTempKeys[I] := gResKeys[I];
+    for KF := Low(TKMKeyFunction) to High(TKMKeyFunction) do
+      fTempKeys[KF] := gResKeys[KF];
 
     KeysRefreshList;
     PopUp_OptionsKeys.Show;
@@ -632,10 +653,10 @@ begin
     PopUp_OptionsKeys.Hide;
 
     // Save TempKeys to gResKeys
-    for I := 0 to gResKeys.Count - 1 do
-      gResKeys[I] := fTempKeys[I];
+    for KF := Low(TKMKeyFunction) to High(TKMKeyFunction) do
+      gResKeys[KF] := fTempKeys[KF];
 
-    gResKeys.SaveKeymap;
+    gResKeys.Save;
   end;
 
   if Sender = Button_OptionsKeysCancel then
@@ -660,66 +681,68 @@ procedure TKMMenuOptions.KeysRefreshList;
   function GetFunctionName(aTX_ID: Integer): String;
   begin
     case aTX_ID of
-      TX_KEY_FUNC_GAME_SPEED_2: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameApp.GameSettings.SpeedMedium)]);
-      TX_KEY_FUNC_GAME_SPEED_3: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameApp.GameSettings.SpeedFast)]);
-      TX_KEY_FUNC_GAME_SPEED_4: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameApp.GameSettings.SpeedVeryFast)]);
+      TX_KEY_FUNC_GAME_SPEED_2: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameSettings.SpeedMedium)]);
+      TX_KEY_FUNC_GAME_SPEED_3: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameSettings.SpeedFast)]);
+      TX_KEY_FUNC_GAME_SPEED_4: Result := Format(gResTexts[aTX_ID], [FormatFloat('##0.##', gGameSettings.SpeedVeryFast)]);
       else                      Result := gResTexts[aTX_ID];
 
     end;
   end;
 
 const
-  KEY_TX: array [TKMFuncArea] of Word = (TX_KEY_COMMON, TX_KEY_GAME, TX_KEY_UNIT, TX_KEY_HOUSE, TX_KEY_SPECTATE_REPLAY, TX_KEY_MAPEDIT);
+  KEY_TX: array [TKMKeyFuncArea] of Word = (TX_KEY_COMMON, TX_KEY_GAME, TX_KEY_UNIT, TX_KEY_HOUSE, TX_KEY_SPECTATE_REPLAY, TX_KEY_MAPEDIT);
 var
-  I, prevI: Integer;
-  K: TKMFuncArea;
+  KF: TKMKeyFunction;
+  prevTopIndex: Integer;
+  K: TKMKeyFuncArea;
   KeyName: UnicodeString;
 begin
-  prevI := ColumnBox_OptionsKeys.TopIndex;
+  prevTopIndex := ColumnBox_OptionsKeys.TopIndex;
 
   ColumnBox_OptionsKeys.Clear;
 
-  for K := Low(TKMFuncArea) to High(TKMFuncArea) do
+  for K := Low(TKMKeyFuncArea) to High(TKMKeyFuncArea) do
   begin
     // Section
     ColumnBox_OptionsKeys.AddItem(MakeListRow([gResTexts[KEY_TX[K]], ' '], [$FF3BB5CF, $FF3BB5CF], [$FF0000FF, $FF0000FF], -1));
 
     // Do not show the debug keys
-    for I := 0 to fTempKeys.Count - 1 do
-      if (fTempKeys[I].Area = K) and not fTempKeys[I].IsChangableByPlayer then
+    for KF := KEY_FUNC_LOW to High(TKMKeyFunction) do
+      if (fTempKeys[KF].Area = K) and not fTempKeys[KF].IsChangableByPlayer then
       begin
-        KeyName := fTempKeys.GetKeyNameById(I);
-        if (I = SC_DEBUG_WINDOW) and (KeyName <> '') then
+        KeyName := fTempKeys.GetKeyNameById(KF);
+        if (KF = kfDebugWindow) and (KeyName <> '') then
           KeyName := KeyName + ' / Ctrl + ' + KeyName; //Also show Ctrl + F11, for debug window hotkey
-        ColumnBox_OptionsKeys.AddItem(MakeListRow([GetFunctionName(fTempKeys[I].TextId), KeyName],
-                                                  [$FFFFFFFF, $FFFFFFFF], [$FF0000FF, $FF0000FF], I));
+        ColumnBox_OptionsKeys.AddItem(MakeListRow([GetFunctionName(fTempKeys[KF].TextId), KeyName],
+                                                  [$FFFFFFFF, $FFFFFFFF], [$FF0000FF, $FF0000FF], Integer(KF)));
       end;
   end;
 
-  ColumnBox_OptionsKeys.TopIndex := prevI;
+  ColumnBox_OptionsKeys.TopIndex := prevTopIndex;
 end;
 
 
 function TKMMenuOptions.KeysUpdate(Sender: TObject; Key: Word; Shift: TShiftState): Boolean;
 var
-  id: Integer;
+  KF: TKMKeyFunction;
 begin
   Result := True; // We handle all keys here
   if ColumnBox_OptionsKeys.ItemIndex = -1 then Exit;
 
   ColumnBox_OptionsKeys.HighlightError := False;
-  id := ColumnBox_OptionsKeys.Rows[ColumnBox_OptionsKeys.ItemIndex].Tag;
 
-  if not InRange(id, 0, fTempKeys.Count - 1) then Exit;
+  if not InRange(ColumnBox_OptionsKeys.Rows[ColumnBox_OptionsKeys.ItemIndex].Tag, 1, fTempKeys.Count) then Exit;
 
-  if not fTempKeys.AllowKeySet(fTempKeys[id].Area, Key) then
+  KF := TKMKeyFunction(ColumnBox_OptionsKeys.Rows[ColumnBox_OptionsKeys.ItemIndex].Tag);
+
+  if not fTempKeys.AllowKeySet(fTempKeys[KF].Area, Key) then
   begin
     ColumnBox_OptionsKeys.HighlightError := True;
     gSoundPlayer.Play(sfxnError);
     Exit;
   end;
 
-  fTempKeys.SetKey(id, Key);
+  fTempKeys.SetKey(KF, Key);
 
   KeysRefreshList;
 end;
@@ -728,10 +751,11 @@ end;
 procedure TKMMenuOptions.BackClick(Sender: TObject);
 begin
   // Return to MainMenu and restore resolution changes
-  fMainSettings.SaveSettings;
+  gGameAppSettings.SaveSettings;
 
-  if fLastAlphaShadows <> fGameSettings.AlphaShadows then
-    gGameApp.PreloadGameResources;  //Update loaded game resources, if we changed alpha shadow setting
+  if    (fLastAlphaShadows <> gGameSettings.AlphaShadows)
+    and Assigned(OnPreloadGameResources) then
+    OnPreloadGameResources;  //Update loaded game resources, if we changed alpha shadow setting
 
   fOnPageChange(gpMainMenu);
 end;

@@ -8,7 +8,7 @@ uses
 type
   TKMGameInputProcess_Single = class(TKMGameInputProcess)
   protected
-    procedure TakeCommand(const aCommand: TKMGameInputCommand); override;
+    procedure DoTakeCommand(const aCommand: TKMGameInputCommand); override;
     procedure SaveExtra(SaveStream: TKMemoryStream); override;
     procedure LoadExtra(LoadStream: TKMemoryStream); override;
   public
@@ -19,12 +19,12 @@ type
 
 implementation
 uses
-  Math, KM_Game, KM_Defaults, KM_CommonUtils;
+  Math, KM_Game, KM_GameParams, KM_Defaults, KM_CommonUtils;
 
 
-procedure TKMGameInputProcess_Single.TakeCommand(const aCommand: TKMGameInputCommand);
+procedure TKMGameInputProcess_Single.DoTakeCommand(const aCommand: TKMGameInputCommand);
 begin
-  if gGame.IsReplay then Exit;
+  if gGameParams.IsReplay then Exit;
 
   StoreCommand(aCommand); //Store the command for the replay (store it first in case Exec crashes and we want to debug it)
   ExecCommand(aCommand);  //Execute the command now
@@ -33,7 +33,8 @@ end;
 
 procedure TKMGameInputProcess_Single.ReplayTimer(aTick: Cardinal);
 var
-  MyRand: Cardinal;
+  myRand: Cardinal;
+  gicCommand: TKMGameInputCommand;
 begin
   //This is to match up with multiplayer random check generation, so multiplayer replays can be replayed in singleplayer mode
   KaMRandom(MaxInt, 'TKMGameInputProcess_Single.ReplayTimer');
@@ -41,20 +42,24 @@ begin
   //There are still more commands left
   if fCursor <= Count then
   begin
-    while (aTick > fQueue[fCursor].Tick) and (fQueue[fCursor].Command.CommandType <> gicNone) and (fCursor < Count) do
+    while (aTick > fQueue[fCursor].Tick) and (fQueue[fCursor].Command.CmdType <> gicNone) and (fCursor < Count) do
       Inc(fCursor);
 
     while (fCursor <= Count) and (aTick = fQueue[fCursor].Tick) do //Could be several commands in one Tick
     begin
       //Call to KaMRandom, just like in StoreCommand
       //We did not generate random checks for those commands
-      if SKIP_RNG_CHECKS_FOR_SOME_GIC and (fQueue[fCursor].Command.CommandType in SkipRandomChecksFor) then
-        MyRand := 0
+      if SKIP_RNG_CHECKS_FOR_SOME_GIC and (fQueue[fCursor].Command.CmdType in SKIP_RANDOM_CHECKS_FOR) then
+        myRand := 0
       else
-        MyRand := Cardinal(KaMRandom(MaxInt, 'TKMGameInputProcess_Single.ReplayTimer 2'));
-      ExecCommand(fQueue[fCursor].Command); //Should always be called to maintain randoms flow
+        myRand := Cardinal(KaMRandom(MaxInt, 'TKMGameInputProcess_Single.ReplayTimer 2'));
+
+      while not fGic2StoredConverter.ParseNextStoredPackedCommand(fQueue[fCursor].Command, gicCommand) do
+        Inc(fCursor);
+
+      ExecCommand(gicCommand); //Should always be called to maintain randoms flow
       //CRC check after the command
-      if (fQueue[fCursor].Rand <> MyRand)
+      if (fQueue[fCursor].Rand <> myRand)
         and not gGame.IgnoreConsistencyCheckErrors then
       begin
         if Assigned(fOnReplayDesync) then // Call before ReplayInconsistancy, fOnReplayDesync could be free after it!
@@ -62,7 +67,7 @@ begin
         if CRASH_ON_REPLAY then
         begin
           Inc(fCursor); //Must be done before exiting in case user decides to continue the replay
-          gGame.ReplayInconsistancy(fQueue[fCursor-1], MyRand);
+          gGame.ReplayInconsistancy(fQueue[fCursor-1], myRand);
           Exit; //ReplayInconsistancy sometimes calls GIP.Free, so exit immidiately
         end;
         Exit;
@@ -90,10 +95,10 @@ end;
 
 procedure TKMGameInputProcess_Single.LoadExtra(LoadStream: TKMemoryStream);
 var
-  LastReplayTick: Cardinal;
+  lastReplayTick: Cardinal;
 begin
-  LoadStream.Read(LastReplayTick);
-  gGame.LastReplayTick := LastReplayTick;
+  LoadStream.Read(lastReplayTick);
+  gGame.LastReplayTick := lastReplayTick;
 end;
 
 

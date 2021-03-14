@@ -36,8 +36,9 @@ type
 
 implementation
 uses
-  KM_GameInputProcess, KM_RenderUI, KM_HandsCollection, KM_ResTexts, KM_Game, KM_GameApp,
-  KM_Resource, KM_ResFonts, KM_ResWares;
+  KM_GameInputProcess, KM_GameSettings, KM_RenderUI, KM_HandsCollection, KM_ResTexts, KM_Game,
+  KM_Resource, KM_ResFonts, KM_ResWares,
+  KM_ResTypes;
 
 
 const
@@ -146,7 +147,7 @@ begin
   value := TKMTrackBar(Sender).Position;
 
   if gGame.IsWareDistributionStoredBetweenGames then
-    gGameApp.GameSettings.WareDistribution[ware, house] := value;
+    gGameSettings.WareDistribution[ware, house] := value;
 
   gGame.GameInputProcess.CmdWareDistribution(gicWareDistributionChange, ware, house, value);
 end;

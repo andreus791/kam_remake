@@ -39,7 +39,7 @@ type
 
 implementation
 uses
-  KromUtils, Math, KM_Defaults, KM_GameApp, KM_Game, KM_Terrain,
+  KromUtils, Math, KM_Defaults, KM_GameApp, KM_Game, KM_GameParams, KM_Terrain,
   KM_InterfaceGame, KM_ResFonts, KM_RenderUI, KM_Points, KM_Maps, KM_ResTexts, KM_ResTileset;
 
 
@@ -71,11 +71,15 @@ begin
 
       // Use left-top-right-bottom order of creation. Same order will be used for Tab focus change
       NumEdit_Resize_Left   := TKMNumericEdit.Create(Panel_Resize_Edit, 0,   Y+30, -MAX_MAP_DIF, MAX_MAP_DIF);
+      NumEdit_Resize_Left.AutoFocusable := False;
       NumEdit_Resize_Top    := TKMNumericEdit.Create(Panel_Resize_Edit, (Panel_Resize_Edit.Width div 2) - 39, Y, -MAX_MAP_DIF, MAX_MAP_DIF);
+      NumEdit_Resize_Top.AutoFocusable := False;
       NumEdit_Resize_Top.Anchors := [anLeft, anTop, anRight];
       NumEdit_Resize_Right  := TKMNumericEdit.Create(Panel_Resize_Edit, Panel_Resize_Edit.Width - 78, Y+30, -MAX_MAP_DIF, MAX_MAP_DIF);
+      NumEdit_Resize_Right.AutoFocusable := False;
       NumEdit_Resize_Right.Anchors := [anLeft, anTop, anRight];
       NumEdit_Resize_Bottom := TKMNumericEdit.Create(Panel_Resize_Edit, (Panel_Resize_Edit.Width div 2) - 39, Y+60, -MAX_MAP_DIF, MAX_MAP_DIF);
+      NumEdit_Resize_Bottom.AutoFocusable := False;
       NumEdit_Resize_Bottom.Anchors := [anLeft, anTop, anRight];
 
       NumEdit_Resize_Left.OnChange    := ResizeRefresh;
@@ -177,7 +181,7 @@ begin
 
   gGame.TerrainPainter.FixTerrainKindInfoAtBorders(False);
 
-  SaveName := TKMapsCollection.FullPath(gGame.GameName, '.dat', fIsMultiplayer);
+  SaveName := TKMapsCollection.FullPath(gGameParams.Name, '.dat', fIsMultiplayer);
   gGame.SaveMapEditor(SaveName, KMRect(NumEdit_Resize_Left.Value,  NumEdit_Resize_Top.Value,
                                        NumEdit_Resize_Right.Value, NumEdit_Resize_Bottom.Value));
   FreeThenNil(gGame);
@@ -232,7 +236,7 @@ begin
   begin
     Panel_Resize_Edit.Hide;
     Panel_Resize_Confirm.Show;
-    if not gGame.MapEditor.IsNewMap or gGame.MapEditor.WasSaved then
+    if not gGame.MapEditor.IsNewMap then
     begin
       Label_Resize_Confirm.Caption := gResTexts[TX_MAPED_MAP_RESIZE_CONFIRM];
       Button_Resize_Confirm_Yes.Visible := True;

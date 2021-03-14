@@ -67,7 +67,9 @@ type
 implementation
 uses
   Classes, KM_Game, KM_Houses, KM_HouseSchool, KM_HandsCollection, KM_Hand, KM_Resource,
-  KM_AIFields, KM_Units, KM_UnitsCollection, KM_HouseMarket, KM_DevPerfLog, KM_DevPerfLogTypes;
+  KM_AIFields, KM_Units, KM_UnitsCollection, KM_HouseMarket, KM_DevPerfLog, KM_DevPerfLogTypes,
+  KM_HandTypes,
+  KM_ResTypes;
 
 
 { TKMCityManagement }
@@ -98,7 +100,7 @@ begin
   SaveStream.PlaceMarker('CityManagement');
   SaveStream.Write(fOwner);
   SaveStream.Write(fUnitReqCnt);
-  SaveStream.Write(fWarriorsDemands, SizeOf(fWarriorsDemands)); // Usend for Army management -> must be saved
+  SaveStream.Write(fWarriorsDemands, SizeOf(fWarriorsDemands)); // Used for Army management -> must be saved
   //SaveStream.Write(fRequiredWeapons, SizeOf(fRequiredWeapons)); // Computed every time
 
   fPredictor.Save(SaveStream);
@@ -149,10 +151,10 @@ end;
 
 procedure TKMCityManagement.UpdateState(aTick: Cardinal);
 const
-  LONG_UPDATE = MAX_HANDS * 2; // 30 sec
+  LONG_UPDATE = MAX_HANDS * 2;
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psAICityAdv, aTick);
+  gPerfLogs.SectionEnter(psAICityAdv);
   {$ENDIF}
   try
     if fSetup.AutoBuild AND (aTick mod MAX_HANDS = fOwner) then
@@ -211,7 +213,7 @@ var
   begin
     Output := aCompletedWatchtowers;
 
-    if (aTick + RECRUIT_PEACE_DELAY > gGame.GameOptions.Peacetime * MIN_2_TICK)
+    if (aTick + RECRUIT_PEACE_DELAY > gGame.Options.Peacetime * MIN_2_TICK)
       AND (Stats.GetHouseQty(htBarracks) > 0)
       AND (aTick > fSetup.RecruitDelay * MIN_2_TICK) then
     begin
@@ -310,7 +312,7 @@ begin
   if GoldShortage then
   begin
     UnitReq[utSerf] := 3; // 3x Serf
-    UnitReq[utWorker] := Byte(fPredictor.WorkerCount > 0);// 1x Worker
+    UnitReq[utWorker] := Byte((fPredictor.WorkerCount > 0) AND (fSetup.AutoBuild OR fSetup.AutoRepair));// 1x Worker
     UnitReq[utMiner] := Stats.GetHouseTotal(htCoalMine) + Stats.GetHouseTotal(htGoldMine) + Stats.GetHouseQty(htIronMine); // Miner can go into iron / gold / coal mines (idealy we need 1 gold and 1 coal but it is hard to catch it)
     UnitReq[utMetallurgist] := Stats.GetHouseTotal(htMetallurgists) + Stats.GetHouseQty(htIronSmithy); // Metallurgist (same problem like in case of miner)
     UnitReq[utWoodcutter] := Byte(Stats.GetHouseQty(htWoodcutters) > 0); // 1x Woodcutter
@@ -342,7 +344,7 @@ begin
     UnitReq[utWorker] := 0;
     if (Stats.GetWareBalance(wtGold) > AI_Par[MANAGEMENT_GoldShortage] * AI_Par[MANAGEMENT_CheckUnitCount_WorkerGoldCoef]) OR (GoldProduced > 0) then // Dont train servs / workers / recruits when we will be out of gold
     begin
-      UnitReq[utWorker] :=  fPredictor.WorkerCount * Byte(not gHands[fOwner].AI.ArmyManagement.Defence.CityUnderAttack) + Byte(not fSetup.AutoBuild) * Byte(fSetup.AutoRepair) * 5;
+      UnitReq[utWorker] :=  fPredictor.WorkerCount * Byte(not gHands[fOwner].AI.ArmyManagement.Defence.CityUnderAttack) * Byte(fSetup.AutoBuild) + Byte(not fSetup.AutoBuild) * Byte(fSetup.AutoRepair) * 5;
       UnitReq[utRecruit] := RecruitsNeeded(Houses[htWatchTower]);
     end;
     if (Stats.GetWareBalance(wtGold) > AI_Par[MANAGEMENT_GoldShortage] * AI_Par[MANAGEMENT_CheckUnitCount_SerfGoldCoef]) OR (GoldProduced > 0) then // Dont train servs / workers / recruits when we will be out of gold
@@ -368,7 +370,7 @@ begin
     begin
       Schools[cnt] := TKMHouseSchool(P.Houses[K]);
       if GoldShortage AND (Schools[cnt].CheckResIn(wtGold) = 0) then // Ignore empty schools when we are out of gold
-        continue;
+        Continue;
       for L := Schools[cnt].QueueLength - 1 downto 0 do
         if (Schools[cnt].Queue[L] <> utNone) then
         begin
@@ -599,16 +601,19 @@ begin
   begin
     H := gHands[fOwner].Houses[I];
     if not H.IsDestroyed
-      AND H.ResourceDepleted
-      AND (H.CheckResOut(wtAll) = 0) then
+      AND H.ResourceDepleted then
     begin
-      Loc := H.Entrance;
-      // Remove avoid building around coal mine
-      if (H.HouseType = htCoalMine) then
-        gAIFields.Influences.RemAvoidBuilding(KMRect(Loc.X-3, Loc.Y-3, Loc.X+4, Loc.Y+2));
-      // Mark house plan as exhausted
-      Builder.Planner.MarkAsExhausted(H.HouseType, Loc);
-      H.DemolishHouse(fOwner);
+      H.IsClosedForWorker := True;
+      if (H.CheckResOut(wtAll) = 0) then
+      begin
+        Loc := H.Entrance;
+        // Remove avoid building around coal mine
+        if (H.HouseType = htCoalMine) then
+          gAIFields.Influences.RemAvoidBuilding(KMRect(Loc.X-3, Loc.Y-3, Loc.X+4, Loc.Y+2));
+        // Mark house plan as exhausted
+        Builder.Planner.MarkAsExhausted(H.HouseType, Loc);
+        H.DemolishHouse(fOwner);
+      end;
     end;
   end;
 end;
@@ -745,7 +750,7 @@ var
     Iron := False;
     for I := 1 to 3 do
     begin
-      UT := AITroopTrainOrder[antiGT,I];
+      UT := AI_TROOP_TRAIN_ORDER[antiGT,I];
       if (UT <> utNone) AND not gHands[fOwner].Locks.GetUnitBlocked(UT) then
         if (I = 1) then
           Iron := True
@@ -762,33 +767,33 @@ var
     // Compute strength of specific enemy group
     with EnemyEval.Groups[aGT] do
       EnemyStrength := (Attack + AttackHorse * Byte(antiGT = gtMounted))
-                        * ifthen( (antiGT = gtRanged), DefenceProjectiles, Defence )
+                        * IfThen( (antiGT = gtRanged), DefenceProjectiles, Defence )
                         * HitPoints;
 
     // Decrease strength by owner's existing units
     with AllyEval.Groups[antiGT] do
       EnemyStrength := Max(0, EnemyStrength - (Attack + AttackHorse * Byte(aGT = gtMounted))
-                                               * ifthen( (aGT = gtRanged), DefenceProjectiles, Defence )
+                                               * IfThen( (aGT = gtRanged), DefenceProjectiles, Defence )
                                                * HitPoints);
 
     // Compute unit requirements
     for I := 1 to 3 do
     begin
-      UT := AITroopTrainOrder[antiGT,I];
+      UT := AI_TROOP_TRAIN_ORDER[antiGT,I];
       // Skip unit type in case that it is blocked
       if (UT = utNone) OR gHands[fOwner].Locks.GetUnitBlocked(UT) then
-        continue;
+        Continue;
       // Calculate required count of specific unit type
-      UnitEval := gAIFields.Eye.ArmyEvaluation.UnitEvaluation[UT, True];
+      UnitEval := gAIFields.Eye.ArmyEvaluation.UnitEvaluation(UT, True);
       with UnitEval do
         UnitStrength := Max(0, Attack + AttackHorse * Byte(aGT = gtMounted)
-                               * ifthen( (aGT = gtRanged), DefenceProjectiles, Defence )
+                               * IfThen( (aGT = gtRanged), DefenceProjectiles, Defence )
                                * HitPoints);
 
-      UnitsRequired := Power(EnemyStrength / UnitStrength, 1/3) * ifthen( (I = 1), aIronRatio, 1-aIronRatio );
+      UnitsRequired := Power(EnemyStrength / UnitStrength, 1/3) * IfThen( (I = 1), aIronRatio, 1-aIronRatio );
       fWarriorsDemands[UT] := fWarriorsDemands[UT] + Max(0, Round(UnitsRequired)   );
       if (I = 2) then // In case that utAxeFighter is not blocked skip militia
-        break;
+        Break;
     end;
   end;
 
@@ -894,9 +899,9 @@ begin
 
   // Humans may spam archers -> AI will not produce long-range support because of balancing units in team
   // So it is better to calculate AllyEval just for Owner
-  //AllyEval := gAIFields.Eye.ArmyEvaluation.GetAllianceStrength(aPlayer, atAlly);
-  AllyEval := gAIFields.Eye.ArmyEvaluation.Evaluation[fOwner];
-  EnemyEval := gAIFields.Eye.ArmyEvaluation.AllianceEvaluation[fOwner, atEnemy];
+  //AllyEval := gAIFields.Eye.ArmyEvaluation.AllianceEvaluation(aPlayer, atAlly);
+  AllyEval := gAIFields.Eye.ArmyEvaluation.PlayerEvaluation(fOwner);
+  EnemyEval := gAIFields.Eye.ArmyEvaluation.AllianceEvaluation(fOwner, atEnemy);
 
   // Compute requirements of warriors
   for UT := Low(fWarriorsDemands) to High(fWarriorsDemands) do
@@ -931,7 +936,7 @@ begin
       Fraction := Available / Max(1,Required);
 
   // Dont produce bows and spears when we dont produce leather
-  if (gGame.GameOptions.Peacetime < 45) AND (
+  if (gGame.Options.Peacetime < 45) AND (
     (gHands[fOwner].Stats.GetWareBalance(wtLeather) = 0) AND
     (gHands[fOwner].Stats.GetWareBalance(wtArmor) = 0) ) then
   begin
@@ -981,7 +986,7 @@ begin
     // Check house cnt
     HouseCnt := gHands[fOwner].Stats.GetHouseQty(HT);
     if (HouseCnt = 0) then
-      continue;
+      Continue;
     // Find produced ware which is the most required
     MostRequired := 1.0;
     MaxWT := wtNone;
@@ -1002,7 +1007,7 @@ begin
         begin
           H := gHands[fOwner].Houses[I];
           if (H.HouseType <> HT) then
-            continue;
+            Continue;
           for K := 1 to 4 do
             H.ResOrder[K] := 0;
           H.ResOrder[MaxIdx] := WEAPONS_PER_A_UPDATE; // With update each 1-2 minutes there is not need to calculate something more
@@ -1014,7 +1019,7 @@ begin
               if (WT = wtArmor) then
               begin
                 H.ResOrder[K] := 10;
-                break;
+                Break;
               end;
             end;
           end;
@@ -1045,6 +1050,7 @@ begin
                         +COLOR_YELLOW+'%.2f'+COLOR_WHITE+')|', [Available, Required, Fraction]
                       );
 end;
+
 
 end.
 

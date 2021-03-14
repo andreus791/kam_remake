@@ -167,13 +167,11 @@ uses
   KM_UnitWarrior, KM_AIParameters;
 
 
-
-
 { TAISquad }
 constructor TAISquad.Create(aGroup: TKMUnitGroup);
 begin
   inherited Create;
-  fGroup := aGroup.GetGroupPointer();
+  fGroup := aGroup.GetPointer();
   fOnPlace := True;
   fTargetChanged := True;
   fWalkTimeLimit := 0;
@@ -262,7 +260,7 @@ begin
       Exit;
     fTargetChanged := True;
     gHands.CleanUpUnitPointer(fTargetUnit);
-    fTargetUnit := aUnit.GetUnitPointer;
+    fTargetUnit := aUnit.GetPointer;
   end
   else
     gHands.CleanUpUnitPointer(fTargetUnit); // aUnit = nil case
@@ -284,7 +282,7 @@ begin
   fTargetChanged := True;
   gHands.CleanUpHousePointer(fTargetHouse);
   if (aHouse <> nil) then
-    fTargetHouse := aHouse.GetHousePointer;
+    fTargetHouse := aHouse.GetPointer;
 end;
 
 
@@ -332,7 +330,7 @@ procedure TAISquad.UpdateState(aTick: Cardinal);
         if (BestTgt <> nil) then
         begin
           gHands.CleanUpUnitPointer(fTargetUnit);
-          fTargetUnit := BestTgt.GetUnitPointer;
+          fTargetUnit := BestTgt.GetPointer;
         end;
       end;
     end;
@@ -450,9 +448,6 @@ begin
 end;
 
 
-
-
-
 { TAICompany }
 constructor TAICompany.Create(aOwner: TKMHandID; aCompanyMode: TKMCompanyMode);
 var
@@ -560,14 +555,14 @@ begin
   if (aHouse = nil) AND (aUnit <> nil) then
   begin
     gHands.CleanUpUnitPointer(fTargetUnit);
-    fTargetUnit := aUnit.GetUnitPointer;
+    fTargetUnit := aUnit.GetPointer;
     fTargetOwner := aUnit.Owner;
     Result := True;
   end
   else if (aHouse <> nil) AND (aUnit = nil) then
   begin
     gHands.CleanUpHousePointer(fTargetHouse);
-    fTargetHouse := aHouse.GetHousePointer;
+    fTargetHouse := aHouse.GetPointer;
     fTargetOwner := aHouse.Owner;
     Result := True;
   end;
@@ -1104,7 +1099,7 @@ var
         Squad := AvailableSquads[GT].Squads[I];
         Squad.FinalPosition := KMPointDir(  Positions[Cnt], KMGetDirection( Squad.Position, Positions[Cnt] )  );
         // Time limit does not make sence for unit in combat
-        //Squad.TimeLimit := gGame.GameTickCount + KMDistanceAbs(Position, Squads[ClosestIdx].Position) * TIME_PER_A_TILE;
+        //Squad.TimeLimit := gGameParams.GameTick + KMDistanceAbs(Position, Squads[ClosestIdx].Position) * TIME_PER_A_TILE;
         Cnt := Cnt + 1;
         if (Cnt >= Length(Positions)) then
           Exit;
@@ -1433,13 +1428,6 @@ begin
 end;
 
 
-
-
-
-
-
-
-
 { TKMArmyAttack }
 constructor TKMArmyAttack.Create(aOwner: TKMHandID);
 begin
@@ -1590,7 +1578,6 @@ begin
   else
     fCompanies.Remove( Company );
 end;
-
 
 
 procedure TKMArmyAttack.LogStatus(var aBalanceText: UnicodeString);

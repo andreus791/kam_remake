@@ -6,7 +6,6 @@ uses
 
 
 type
-
   // Log message type
   TKMLogMessageType = (
     lmtDefault,            //default type
@@ -21,7 +20,7 @@ type
 
   TKMLogMessageTypeSet = set of TKMLogMessageType;
 
-  //Logging system
+  // Logging system
   TKMLog = class
   private
     CS: TCriticalSection;
@@ -35,6 +34,8 @@ type
     procedure Lock;
     procedure Unlock;
 
+    procedure InitLog;
+
     procedure AddLineTime(const aText: UnicodeString; aLogType: TKMLogMessageType; aDoCloseFile: Boolean = True); overload;
     procedure AddLineTime(const aText: UnicodeString; aFlushImmidiately: Boolean = True); overload;
     procedure AddLineNoTime(const aText: UnicodeString; aWithPrefix: Boolean = True; aDoCloseFile: Boolean = True); overload;
@@ -44,7 +45,7 @@ type
     MessageTypes: TKMLogMessageTypeSet;
     constructor Create(const aPath: UnicodeString);
     destructor Destroy; override;
-    procedure InitLog;
+
     // AppendLog adds the line to Log along with time passed since previous line added
     procedure AddTime(const aText: UnicodeString); overload;
     procedure AddTimeNoFlush(const aText: UnicodeString); overload;
@@ -95,8 +96,8 @@ const
   DEFAULT_LOG_TYPES_TO_WRITE: TKMLogMessageTypeSet = [lmtDefault, lmtNetConnection];
 
 
-//New thread, in which old logs are deleted (used internally)
 type
+  // New thread, in which old logs are deleted (used internally)
   TKMOldLogsDeleter = class(TThread)
   private
     fPathToLogs: UnicodeString;
@@ -140,7 +141,6 @@ begin
   finally
     FindClose(SearchRec);
   end;
-
 end;
 
 
@@ -160,6 +160,7 @@ begin
   CS := TCriticalSection.Create;
   InitLog;
 end;
+
 
 procedure TKMLog.SetDefaultMessageTypes;
 begin
@@ -240,8 +241,8 @@ begin
     end;
     WriteLn(fl, Format('%12s %9.3fs %7dms     %s', [
                   FormatDateTime('hh:nn:ss.zzz', Now),
-                  GetTimeSince(fFirstTick) / 1000,
-                  GetTimeSince(fPreviousTick),
+                  TimeSince(fFirstTick) / 1000,
+                  TimeSince(fPreviousTick),
                   aText]));
 
     if aDoCloseFile then
@@ -389,11 +390,13 @@ begin
   Result := lmtDelivery in MessageTypes;
 end;
 
+
 function TKMLog.CanLogCommands: Boolean;
 begin
   if Self = nil then Exit(False);
   Result := lmtCommands in MessageTypes;
 end;
+
 
 function TKMLog.CanLogRandomChecks: Boolean;
 begin
@@ -401,11 +404,13 @@ begin
   Result := lmtRandomChecks in MessageTypes;
 end;
 
+
 function TKMLog.CanLogNetConnection: Boolean;
 begin
   if Self = nil then Exit(False);
   Result := lmtNetConnection in MessageTypes;
 end;
+
 
 function TKMLog.CanLogNetPacketOther: Boolean;
 begin
@@ -413,11 +418,13 @@ begin
   Result := lmtNetPacketOther in MessageTypes;
 end;
 
+
 function TKMLog.CanLogNetPacketCommand: Boolean;
 begin
   if Self = nil then Exit(False);
   Result := lmtNetPacketCommand in MessageTypes;
 end;
+
 
 function TKMLog.CanLogNetPacketPingFps: Boolean;
 begin
@@ -487,7 +494,6 @@ begin
 
   AddLineNoTime(aText, aWithPrefix);
 end;
-
 
 
 procedure TKMLog.AddNoTimeNoFlush(const aText: UnicodeString);

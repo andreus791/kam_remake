@@ -8,7 +8,7 @@ unit KM_ArmyDefence;
 interface
 uses
   Classes, KM_CommonClasses, KM_CommonTypes, KM_Defaults,
-  KM_Points, KM_UnitGroup, KM_NavMeshDefences, KM_ArmyAttack, KM_AIDefensePos;
+  KM_Points, KM_UnitGroup, KM_NavMeshDefences, KM_AIDefensePos;
 
 
 type
@@ -48,15 +48,13 @@ type
     fFirstLineCnt: Word;
     fPositions: TKMList;
 
-    fAttack: TKMArmyAttack;
-
     function GetCount: Integer; inline;
     function GetPosition(aIndex: Integer): TKMDefencePosition; inline;
     function GetGroupsCount(): Word;
   public
     TroopFormations: array [TKMGroupType] of TKMFormation; //Defines how defending troops will be formatted. 0 means leave unchanged.
 
-    constructor Create(aOwner: TKMHandID; aAttack: TKMArmyAttack);
+    constructor Create(aOwner: TKMHandID);
     destructor Destroy; override;
     procedure Save(SaveStream: TKMemoryStream);
     procedure Load(LoadStream: TKMemoryStream);
@@ -94,8 +92,9 @@ const
 implementation
 uses
   Math,
-  KM_Game, KM_HandsCollection, KM_Hand, KM_RenderAux,
-  KM_AIFields, KM_NavMesh;
+  KM_GameParams, KM_HandsCollection, KM_Hand, KM_RenderAux,
+  KM_AIFields, KM_NavMesh,
+  KM_UnitGroupTypes;
 
 
 { TKMDefencePosition }
@@ -122,10 +121,7 @@ begin
   SaveStream.Write(fWeight);
   SaveStream.Write(fLine);
   SaveStream.Write(fPosition);
-  if (fGroup <> nil) then
-    SaveStream.Write(fGroup.UID) //Store ID
-  else
-    SaveStream.Write(Integer(0));
+  SaveStream.Write(fGroup.UID); //Store ID
 end;
 
 
@@ -150,13 +146,13 @@ procedure TKMDefencePosition.SetGroup(aGroup: TKMUnitGroup);
 begin
   gHands.CleanUpGroupPointer(fGroup);
   if (aGroup <> nil) then
-    fGroup := aGroup.GetGroupPointer;
+    fGroup := aGroup.GetPointer;
 end;
 
 
 procedure TKMDefencePosition.SetPosition(const Value: TKMPointDir);
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   fPosition := Value;
 end;
 
@@ -172,7 +168,7 @@ end;
 function TKMDefencePosition.CanAccept(aGroup: TKMUnitGroup; aMaxUnits: Integer): Boolean;
 begin
   Result := (Group = nil)
-            OR ((GroupType = UnitGroups[aGroup.UnitType]) AND (Group.Count < aMaxUnits));
+            OR ((GroupType = UNIT_TO_GROUP_TYPE[aGroup.UnitType]) AND (Group.Count < aMaxUnits));
 end;
 
 
@@ -194,11 +190,8 @@ begin
 end;
 
 
-
-
-
 { TKMArmyDefence }
-constructor TKMArmyDefence.Create(aOwner: TKMHandID; aAttack: TKMArmyAttack);
+constructor TKMArmyDefence.Create(aOwner: TKMHandID);
 var
   GT: TKMGroupType;
 begin
@@ -207,7 +200,6 @@ begin
   fOwner := aOwner;
   fCityUnderAttack := False;
   fPositions := TKMList.Create;
-  fAttack := aAttack;
 
   for GT := Low(TKMGroupType) to High(TKMGroupType) do
   begin
@@ -532,15 +524,8 @@ end;
 
 
 procedure TKMArmyDefence.Paint();
-const
-  COLOR_WHITE = $FFFFFF;
-  COLOR_BLACK = $000000;
-  COLOR_GREEN = $00FF00;
-  COLOR_RED = $0000FF;
-  COLOR_YELLOW = $00FFFF;
-  COLOR_BLUE = $FF0000;
 var
-  I, K, Idx, Threat: Integer;
+  I, K, Idx, Threat, AllianceIdx: Integer;
   Col: Cardinal;
   Loc, Pos: TKMPoint;
   GT: TKMGroupType;
@@ -559,7 +544,7 @@ begin
     Col := $22;
     if (Positions[I].Group = nil) then
       Col := 0;
-    gRenderAux.CircleOnTerrain(Loc.X, Loc.Y, 1, (Col shl 24) OR COLOR_GREEN, $FFFFFFFF);
+    gRenderAux.CircleOnTerrain(Loc.X, Loc.Y, 1, (Col shl 24) OR tcGreen, $FFFFFFFF);
   end;
 
   // Draw defence position of selected unit
@@ -568,19 +553,21 @@ begin
       if (gMySpectator.Selected = Positions[I].Group) then
       begin
         Loc := Positions[I].Position.Loc;
-        gRenderAux.CircleOnTerrain(Loc.X, Loc.Y, 1, $AA000000 OR COLOR_RED, $FFFFFFFF);
+        gRenderAux.CircleOnTerrain(Loc.X, Loc.Y, 1, $AA000000 OR tcRed, $FFFFFFFF);
         break;
       end;
 
+  if not gAIFields.Influences.GetAllianceIdx(fOwner,AllianceIdx) then
+    Exit;
   // First line of defences
   for I := 0 to fPositions.Count - 1 do
     if (Positions[I].Line = 0) then
     begin
-      Threat := 0;
       Loc := Positions[I].Position.Loc;
       Idx := gAIFields.NavMesh.KMPoint2Polygon[Loc];
-      for GT := Low(TKMGroupType) to High(TKMGroupType) do
-        Threat := Threat + gAIFields.Influences.EnemyGroupPresence[ fOwner, Idx, GT ];
+      Threat := 0;
+      for GT := Low(GT) to High(GT) do
+        Threat := Threat + gAIFields.Influences.Presence[ AllianceIdx, Idx, GT ];
 
       // Draw defensive lines as a triangles
       Col := Max( $22, Min($FF, Threat) );
@@ -591,7 +578,7 @@ begin
           Nodes[Polygons[Idx].Indices[1]].X,
           Nodes[Polygons[Idx].Indices[1]].Y,
           Nodes[Polygons[Idx].Indices[2]].X,
-          Nodes[Polygons[Idx].Indices[2]].Y, (Col shl 24) OR COLOR_RED);
+          Nodes[Polygons[Idx].Indices[2]].Y, (Col shl 24) OR tcRed);
 
       // Draw hostile units around defensive lines
       if (Threat > 0) then
@@ -600,8 +587,8 @@ begin
         for K := 0 to Length(UGA) - 1 do
         begin
           Pos := UGA[K].Position;
-          gRenderAux.CircleOnTerrain(Pos.X, Pos.Y, 1, $44000000 OR COLOR_RED, $FF000000 OR COLOR_RED);
-          //gRenderAux.LineOnTerrain(Pos, Loc, $AA000000 OR COLOR_BLACK);
+          gRenderAux.CircleOnTerrain(Pos.X, Pos.Y, 1, $44000000 OR tcRed, $FF000000 OR tcRed);
+          //gRenderAux.LineOnTerrain(Pos, Loc, $AA000000 OR clBlack);
         end;
       end;
     end;

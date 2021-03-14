@@ -5,6 +5,12 @@ uses
   Math, KM_Points, KM_CommonClasses;
 
 
+type
+  TKMNetPlayerKind = (lpkHost, lpkJoiner);
+  TKMNetGameState = (lgsNone, lgsConnecting, lgsQuery, lgsLobby, lgsLoading, lgsGame, lgsReconnecting);
+  TKMNetGameKind = (ngkNone, ngkMap, ngkSave);
+  TKMChatSound = (csNone, csJoin, csLeave, csSystem, csGameStart, csSaveGame, csChat, csChatWhisper, csChatTeam);
+
 const
   NET_ADDRESS_EMPTY = 0;    //Yet undefined
   NET_ADDRESS_OTHERS = -1;  //Recipient
@@ -206,8 +212,8 @@ type
     property SpeedRng: TKMRangeSingle read fSpeedRng;
     property SpeedAfterPTRng: TKMRangeSingle read fSpeedAfterPTRng;
 
-    procedure Save(aStream: TKMemoryStreamBinary);
-    procedure Load(aStream: TKMemoryStreamBinary);
+    procedure Save(aStream: TKMemoryStream);
+    procedure Load(aStream: TKMemoryStream);
   end;
 
 const
@@ -262,7 +268,7 @@ begin
 end;
 
 
-procedure TKMPGameFilter.Save(aStream: TKMemoryStreamBinary);
+procedure TKMPGameFilter.Save(aStream: TKMemoryStream);
 begin
   aStream.Write(fDynamicFOW);
   aStream.Write(fMapsFilterEnabled);
@@ -273,7 +279,7 @@ begin
 end;
 
 
-procedure TKMPGameFilter.Load(aStream: TKMemoryStreamBinary);
+procedure TKMPGameFilter.Load(aStream: TKMemoryStream);
 var
   StrA: AnsiString;
 begin

@@ -4,7 +4,7 @@ interface
 uses
   Controls, SysUtils,
   KM_Controls, KM_Defaults, KM_Pics,
-  KM_InterfaceDefaults, KM_Campaigns, KM_MapTypes,
+  KM_InterfaceDefaults, KM_MapTypes, KM_CampaignTypes,
   KM_GameTypes, KM_CommonTypes;
 
 
@@ -72,9 +72,10 @@ type
 
 implementation
 uses
-  KM_ResTexts, KM_Game, KM_GameApp, KM_HandsCollection,
+  KM_ResTexts, KM_Game, KM_GameApp, KM_GameParams, KM_HandsCollection,
   KM_CommonUtils, KM_Resource, KM_Hand, KM_RenderUI, KM_ResFonts,
-  KM_ResWares, KM_HandStats, KM_Video;
+  KM_ResWares, KM_HandStats,
+  KM_ResTypes;
 
 
 { TKMGUIMenuResultsSP }
@@ -130,17 +131,17 @@ var
   ShowAIResults: Boolean;
   Cap: UnicodeString;
 begin
-  fGameMode := gGame.GameMode;
+  fGameMode := gGameParams.Mode;
 
   //Remember which map we played so we could restart it
-  fRepeatGameName := gGame.GameName;
-  fRepeatMission := gGame.MissionFile;
+  fRepeatGameName := gGameParams.Name;
+  fRepeatMission := gGameParams.MissionFile;
   fRepeatSave := gGame.SaveFile;
   fRepeatCampName := gGame.CampaignName;
   fRepeatCampMap := gGame.CampaignMap;
   fRepeatLocation := gGame.PlayerLoc;
   fRepeatColor := gGame.PlayerColor;
-  fRepeatDifficulty := gGame.MissionDifficulty;
+  fRepeatDifficulty := gGameParams.MissionDifficulty;
   fRepeatAIType := gGame.AIType;
 
   // When exit mission update stats to build actual charts
@@ -152,7 +153,7 @@ begin
 
   //If the player canceled mission, hide the AI graph lines so he doesn't see secret info about enemy (e.g. army size)
   //That info should only be visible if the mission was won or a replay
-  ShowAIResults := gGame.IsReplay
+  ShowAIResults := gGameParams.IsReplay
                    or (fGameResultMsg in [grWin, grReplayEnd])
                    or ((fGameResultMsg = grGameContinues) and (gMySpectator.Hand.AI.HasWon));
 
@@ -167,22 +168,6 @@ begin
     Button_Back.Caption := gResTexts[TX_RESULTS_BACK_TO_GAME]
   else
     Button_Back.Caption := gResTexts[TX_MENU_BACK];  
-
-  if fGameMode = gmCampaign then
-  begin
-    case fGameResultMsg of
-      grWin:              gVideoPlayer.AddMissionVideo(fRepeatMission, 'Victory');
-      grDefeat, grCancel: gVideoPlayer.AddMissionVideo(fRepeatMission, 'Defeat');
-    end;
-  end
-  else
-  begin
-    case fGameResultMsg of
-      grWin:              gVideoPlayer.AddVideo('Victory');
-      grDefeat, grCancel: gVideoPlayer.AddVideo('Defeat');
-    end;
-  end;
-  gVideoPlayer.Play;
 
   //Header
   case fGameResultMsg of
@@ -199,17 +184,17 @@ begin
   //Append mission name and time after the result message
   if Label_Results.Caption <> '' then
     Label_Results.Caption := Label_Results.Caption + ' - ';
-  Label_Results.Caption := Label_Results.Caption + gGame.GameName; //Don't show the mission time in SP because it's already shown elsewhere
+  Label_Results.Caption := Label_Results.Caption + gGameParams.Name; //Don't show the mission time in SP because it's already shown elsewhere
 
   //Append difficulty level to game results caption
-  if gGame.MissionDifficulty <> mdNone then
-    Label_Results.Caption := Label_Results.Caption + ' (' + gResTexts[DIFFICULTY_LEVELS_TX[gGame.MissionDifficulty]] + ')';
+  if gGameParams.MissionDifficulty <> mdNone then
+    Label_Results.Caption := Label_Results.Caption + ' (' + gResTexts[DIFFICULTY_LEVELS_TX[gGameParams.MissionDifficulty]] + ')';
 
 
   //This is SP menu, we are dead sure there's only one Human player (NOT REALLY)
   HumanId := -1;
   for I := 0 to gHands.Count - 1 do
-    if gHands[I].HandType = hndHuman then
+    if gHands[I].IsHuman then
       HumanId := I;
 
   //Still possible to have no Humans, if we play some MP replay in SP replay mode
@@ -240,16 +225,16 @@ begin
   Chart_Houses.MaxLength    := gHands[HumanId].Stats.ChartCount;
   Chart_Wares.MaxLength     := gHands[HumanId].Stats.ChartCount;
 
-  Chart_Army.MaxTime      := gGame.GameTick div 10;
-  Chart_Citizens.MaxTime  := gGame.GameTick div 10;
-  Chart_Houses.MaxTime    := gGame.GameTick div 10;
-  Chart_Wares.MaxTime     := gGame.GameTick div 10;
+  Chart_Army.MaxTime      := gGameParams.Tick div 10;
+  Chart_Citizens.MaxTime  := gGameParams.Tick div 10;
+  Chart_Houses.MaxTime    := gGameParams.Tick div 10;
+  Chart_Wares.MaxTime     := gGameParams.Tick div 10;
 
   //Citizens
   TempGraphCount := 0; //Reset
   for I := 0 to gHands.Count - 1 do
     with gHands[I] do
-      if HandType = hndComputer then
+      if IsComputer then
         AddToTempGraph(OwnerName(False), FlagColor, Stats.ChartCitizens)
       else
       begin
@@ -266,7 +251,7 @@ begin
   TempGraphCount := 0; //Reset
   for I := 0 to gHands.Count - 1 do
     with gHands[I] do
-      if HandType = hndComputer then
+      if IsComputer then
         AddToTempGraph(OwnerName(False), FlagColor, Stats.ChartHouses)
       else
         Chart_Houses.AddLine(OwnerName, FlagColor, Stats.ChartHouses);
@@ -291,7 +276,7 @@ begin
   TempGraphCount := 0; //Reset
   for I := 0 to gHands.Count - 1 do
   with gHands[I] do
-    if HandType = hndComputer then
+    if IsComputer then
       AddToTempGraph(OwnerName(False), FlagColor, Stats.ChartArmy[cakInstantaneous, utAny])
     else
       Chart_Army.AddLine(OwnerName, FlagColor, Stats.ChartArmy[cakInstantaneous, utAny]);
@@ -300,9 +285,9 @@ begin
     for I := 0 to TempGraphCount - 1 do
       Chart_Army.AddLine(TempGraphs[I].OwnerName, TempGraphs[I].Color, TempGraphs[I].G);
 
-  Button_ResultsHouses.Enabled := (gGame.MissionMode = mmNormal);
-  Button_ResultsCitizens.Enabled := (gGame.MissionMode = mmNormal);
-  Button_ResultsWares.Enabled := (gGame.MissionMode = mmNormal);
+  Button_ResultsHouses.Enabled := gGameParams.IsNormalMission;
+  Button_ResultsCitizens.Enabled := gGameParams.IsNormalMission;
+  Button_ResultsWares.Enabled := gGameParams.IsNormalMission;
 end;
 
 

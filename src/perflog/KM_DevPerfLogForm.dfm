@@ -23,23 +23,30 @@ object FormPerfLogs: TFormPerfLogs
     Visible = False
   end
   object Label2: TLabel
-    Left = 95
+    Left = 182
     Top = 8
     Width = 49
     Height = 13
     Caption = 'Scale (ms)'
   end
-  object cbStackedGFX: TCheckBox
+  object lblPerflogSaveThreshold: TLabel
     Left = 8
-    Top = 24
+    Top = 83
+    Width = 102
+    Height = 13
+    Caption = 'Save Threshold (ms):'
+  end
+  object cbStackedGFX: TCheckBox
+    Left = 95
+    Top = 27
     Width = 81
     Height = 17
     Caption = 'Stacked GFX'
     TabOrder = 0
     OnClick = DoChange
   end
-  object seFrameBudget: TSpinEdit
-    Left = 95
+  object seScale: TSpinEdit
+    Left = 182
     Top = 27
     Width = 49
     Height = 22
@@ -48,10 +55,10 @@ object FormPerfLogs: TFormPerfLogs
     TabOrder = 1
     Value = 20
     OnChange = DoChange
-    OnKeyDown = seFrameBudgetKeyDown
+    OnKeyDown = seScaleKeyDown
   end
   object cbStackedCPU: TCheckBox
-    Left = 8
+    Left = 95
     Top = 8
     Width = 81
     Height = 17
@@ -60,14 +67,42 @@ object FormPerfLogs: TFormPerfLogs
     OnClick = DoChange
   end
   object cbSmoothLines: TCheckBox
-    Left = 161
-    Top = 8
+    Left = 8
+    Top = 27
     Width = 81
     Height = 17
     Caption = 'Smooth lines'
     Checked = True
     State = cbChecked
     TabOrder = 3
+    OnClick = DoChange
+  end
+  object sePerfLogSaveThreshold: TSpinEdit
+    Left = 116
+    Top = 80
+    Width = 40
+    Height = 22
+    MaxValue = 300
+    MinValue = 1
+    TabOrder = 4
+    Value = 20
+  end
+  object btnPerfLogExport: TButton
+    Left = 169
+    Top = 80
+    Width = 68
+    Height = 22
+    Caption = 'Export'
+    TabOrder = 5
+    OnClick = DoExport
+  end
+  object cbEnabled: TCheckBox
+    Left = 8
+    Top = 8
+    Width = 81
+    Height = 17
+    Caption = 'Enabled'
+    TabOrder = 6
     OnClick = DoChange
   end
 end

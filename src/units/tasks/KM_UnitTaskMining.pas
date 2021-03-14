@@ -5,7 +5,8 @@ uses
   Math, SysUtils,
   KM_CommonClasses, KM_Defaults, KM_Points,
   KM_Units, KM_UnitWorkplan, KM_Terrain,
-  KM_ResWares;
+
+  KM_ResTypes;
 
 
 type
@@ -35,7 +36,7 @@ type
 implementation
 uses
   KM_Houses, KM_HouseWoodcutters, KM_HandsCollection,
-  KM_Resource, KM_ResMapElements, KM_ResTexts, KM_ResHouses,
+  KM_Resource, KM_ResMapElements, KM_ResTexts,
   KM_Hand, KM_ResUnits, KM_ScriptingEvents;
 
 
@@ -165,10 +166,10 @@ begin
   begin
     P := KMGetVertexTile(WorkPlan.Loc, WorkPlan.WorkDir);
     //Check all tiles around the tree, like we do in TKMTerrain.FindTree
-    Result := gTerrain.TileIsLocked(P)
-      or ((P.X > 1) and gTerrain.TileIsLocked(KMPoint(P.X-1, P.Y))) //if K=1, K-1 will be off map
-      or ((P.Y > 1) and gTerrain.TileIsLocked(KMPoint(P.X, P.Y-1)))
-      or ((P.X > 1) and (P.Y > 1) and gTerrain.TileIsLocked(KMPoint(P.X-1, P.Y-1)))
+    Result := not gTerrain.TileIsGoodToCutTree(P)
+      or ((P.X > 1) and not gTerrain.TileIsGoodToCutTree(KMPoint(P.X-1, P.Y))) //if K=1, K-1 will be off map
+      or ((P.Y > 1) and not gTerrain.TileIsGoodToCutTree(KMPoint(P.X, P.Y-1)))
+      or ((P.X > 1) and (P.Y > 1) and not gTerrain.TileIsGoodToCutTree(KMPoint(P.X-1, P.Y-1)))
   end
   else
     Result := gTerrain.TileIsLocked(WorkPlan.Loc);
@@ -200,7 +201,7 @@ begin
                         end;
     gsFarmerWine:      Result := TileIsWineField(WorkPlan.Loc) and (Land[WorkPlan.Loc.Y, WorkPlan.Loc.X].FieldAge = CORN_AGE_MAX);
     gsFisherCatch:     Result := CatchFish(KMPointDir(WorkPlan.Loc,WorkPlan.WorkDir),true);
-    gsWoodCutterPlant: Result := TileGoodForTree(WorkPlan.Loc.X, WorkPlan.Loc.Y);
+    gsWoodCutterPlant: Result := TileGoodToPlantTree(WorkPlan.Loc.X, WorkPlan.Loc.Y);
     gsWoodCutterCut:   begin
                           P := KMGetVertexTile(WorkPlan.Loc, WorkPlan.WorkDir);
                           Result := ObjectIsChopableTree(P, caAgeFull) and (Land[P.Y, P.X].TreeAge >= TREE_AGE_FULL);

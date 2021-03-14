@@ -6,7 +6,8 @@ uses
   Generics.Collections,
   Classes, Math, SysUtils, StrUtils, uPSRuntime, uPSDebugger, uPSPreProcessor,
   KM_Defaults, KM_Houses, KM_ScriptingIdCache, KM_Units, KM_ScriptingConsoleCommands,
-  KM_UnitGroup, KM_ResHouses, KM_ResWares, KM_ScriptingTypes, KM_CommonClasses;
+  KM_UnitGroup, KM_ResHouses, KM_ResWares, KM_ScriptingTypes, KM_CommonClasses,
+  KM_ResTypes;
 
 
 const
@@ -159,8 +160,8 @@ type
 
 function HouseTypeValid(aHouseType: Integer): Boolean; inline;
 begin
-  Result := (aHouseType in [Low(HouseIndexToType)..High(HouseIndexToType)])
-            and (HouseIndexToType[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
+  Result := (aHouseType in [Low(HOUSE_ID_TO_TYPE)..High(HOUSE_ID_TO_TYPE)])
+            and (HOUSE_ID_TO_TYPE[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
 end;
 
 
@@ -392,14 +393,13 @@ begin
 end;
 
 
-
 procedure TKMScriptEvents.CallEventHandlers(aEventType: TKMScriptEventType; const aParams: array of Integer;
                                             aFloatParam: Single = FLOAT_PARAM_NONE);
 var
   I: Integer;
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psScripting, gGame.GameTick);
+  gPerfLogs.SectionEnter(psScripting);
   {$ENDIF}
   try
     for I := Low(fEventHandlers[aEventType]) to High(fEventHandlers[aEventType]) do
@@ -618,7 +618,7 @@ begin
   if MethodAssigned(evtMarketTrade) then
   begin
     fIDCache.CacheHouse(aMarket, aMarket.UID); //Improves cache efficiency since aMarket will probably be accessed soon
-    CallEventHandlers(evtMarketTrade, [aMarket.UID, WareTypeToIndex[aFrom], WareTypeToIndex[aTo]]);
+    CallEventHandlers(evtMarketTrade, [aMarket.UID, WARE_TY_TO_ID[aFrom], WARE_TY_TO_ID[aTo]]);
   end;
 end;
 
@@ -708,7 +708,7 @@ begin
   if MethodAssigned(evtHouseWareCountChanged) then
   begin
     fIDCache.CacheHouse(aHouse, aHouse.UID); //Improves cache efficiency since aHouse will probably be accessed soon
-    CallEventHandlers(evtHouseWareCountChanged, [aHouse.UID, WareTypeToIndex[aWare], aCnt, aChangeCnt]);
+    CallEventHandlers(evtHouseWareCountChanged, [aHouse.UID, WARE_TY_TO_ID[aWare], aCnt, aChangeCnt]);
   end;
 end;
 
@@ -729,7 +729,7 @@ end;
 procedure TKMScriptEvents.ProcHouseAfterDestroyed(aHouseType: TKMHouseType; aOwner: TKMHandID; aX, aY: Word);
 begin
   if MethodAssigned(evtHouseAfterDestroyed) then
-    CallEventHandlers(evtHouseAfterDestroyed, [HouseTypeToIndex[aHouseType] - 1, aOwner, aX, aY]);
+    CallEventHandlers(evtHouseAfterDestroyed, [HOUSE_TYPE_TO_ID[aHouseType] - 1, aOwner, aX, aY]);
 end;
 
 
@@ -747,7 +747,7 @@ end;
 procedure TKMScriptEvents.ProcHousePlanPlaced(aPlayer: TKMHandID; aX, aY: Word; aType: TKMHouseType);
 begin
   if MethodAssigned(evtHousePlanPlaced) then
-    CallEventHandlers(evtHousePlanPlaced, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
+    CallEventHandlers(evtHousePlanPlaced, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HOUSE_TYPE_TO_ID[aType] - 1]);
 end;
 
 
@@ -756,7 +756,7 @@ end;
 procedure TKMScriptEvents.ProcHousePlanRemoved(aPlayer: TKMHandID; aX, aY: Word; aType: TKMHouseType);
 begin
   if MethodAssigned(evtHousePlanRemoved) then
-    CallEventHandlers(evtHousePlanRemoved, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HouseTypeToIndex[aType] - 1]);
+    CallEventHandlers(evtHousePlanRemoved, [aPlayer, aX + gRes.Houses[aType].EntranceOffsetX, aY, HOUSE_TYPE_TO_ID[aType] - 1]);
 end;
 
 
@@ -817,7 +817,7 @@ var
   handler: TMethod;
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psScripting, gGame.GameTick);
+  gPerfLogs.SectionEnter(psScripting);
   {$ENDIF}
   try
     if MethodAssigned(evtGroupBeforeOrderSplit) then
@@ -908,7 +908,7 @@ end;
 procedure TKMScriptEvents.ProcUnitAfterDied(aUnitType: TKMUnitType; aOwner: TKMHandID; aX, aY: Word);
 begin
   if MethodAssigned(evtUnitAfterDied) then
-    CallEventHandlers(evtUnitAfterDied, [UnitTypeToIndex[aUnitType], aOwner, aX, aY]);
+    CallEventHandlers(evtUnitAfterDied, [UNIT_TYPE_TO_ID[aUnitType], aOwner, aX, aY]);
 end;
 
 
@@ -1095,7 +1095,7 @@ begin
   if MethodAssigned(evtWareProduced) then
   begin
     if (aType <> wtNone) then
-      CallEventHandlers(evtWareProduced, [aHouse.UID, WareTypeToIndex[aType], aCount]);
+      CallEventHandlers(evtWareProduced, [aHouse.UID, WARE_TY_TO_ID[aType], aCount]);
   end;
 end;
 

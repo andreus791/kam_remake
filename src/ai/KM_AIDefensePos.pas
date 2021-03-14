@@ -45,6 +45,7 @@ type
 
   TAIDefencePositions = class
   private
+    fOwner: TKMHandID;
     fPositions: TKMList;
     function GetPosition(aIndex: Integer): TAIDefencePosition; inline;
     function GetCount: Integer; inline;
@@ -52,7 +53,7 @@ type
     //Defines how defending troops will be formatted. 0 means leave unchanged.
     TroopFormations: array [TKMGroupType] of TKMFormation;
 
-    constructor Create;
+    constructor Create(aPlayer: TKMHandID);
     destructor Destroy; override;
 
     procedure Add(const aPos: TKMPointDir; aGroupType: TKMGroupType; aRadius: Integer; aDefenceType: TAIDefencePosType);
@@ -82,7 +83,8 @@ type
 implementation
 uses
   Math, SysUtils,
-  KM_Game, KM_HandsCollection, KM_RenderAux;
+  KM_GameParams, KM_HandsCollection, KM_RenderAux, KM_RenderPool, KM_Hand,
+  KM_UnitGroupTypes;
 
 
 { TAIDefencePosition }
@@ -111,27 +113,27 @@ begin
 
   //Take new one
   if aGroup <> nil then
-    fCurrentGroup := aGroup.GetGroupPointer;
+    fCurrentGroup := aGroup.GetPointer;
 end;
 
 
 procedure TAIDefencePosition.SetDefenceType(const Value: TAIDefencePosType);
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   fDefenceType := Value;
 end;
 
 
 procedure TAIDefencePosition.SetGroupType(const Value: TKMGroupType);
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   fGroupType := Value;
 end;
 
 
 procedure TAIDefencePosition.SetPosition(const Value: TKMPointDir);
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   fPosition := Value;
 end;
 
@@ -143,10 +145,7 @@ begin
   SaveStream.Write(fGroupType, SizeOf(fGroupType));
   SaveStream.Write(fRadius);
   SaveStream.Write(fDefenceType, SizeOf(fDefenceType));
-  if fCurrentGroup <> nil then
-    SaveStream.Write(fCurrentGroup.UID) //Store ID
-  else
-    SaveStream.Write(Integer(0));
+  SaveStream.Write(fCurrentGroup.UID); //Store ID
 end;
 
 
@@ -170,7 +169,7 @@ end;
 
 function TAIDefencePosition.CanAccept(aGroup: TKMUnitGroup; aMaxUnits: Integer): Boolean;
 begin
-  Result := (fGroupType = UnitGroups[aGroup.UnitType]);
+  Result := (fGroupType = UNIT_TO_GROUP_TYPE[aGroup.UnitType]);
 
   if not Result then Exit;
 
@@ -204,12 +203,13 @@ end;
 
 
 { TAIDefencePositions }
-constructor TAIDefencePositions.Create;
+constructor TAIDefencePositions.Create(aPlayer: TKMHandID);
 var
   GT: TKMGroupType;
 begin
   inherited Create;
 
+  fOwner := aPlayer;
   fPositions := TKMList.Create;
 
   for GT := Low(TKMGroupType) to High(TKMGroupType) do
@@ -397,6 +397,7 @@ procedure TAIDefencePositions.Save(SaveStream: TKMemoryStream);
 var I: Integer;
 begin
   SaveStream.PlaceMarker('ClsDefencePositions');
+  SaveStream.Write(fOwner);
   SaveStream.Write(TroopFormations, SizeOf(TroopFormations));
   SaveStream.Write(Count);
 
@@ -409,6 +410,7 @@ procedure TAIDefencePositions.Load(LoadStream: TKMemoryStream);
 var I, NewCount: Integer;
 begin
   LoadStream.CheckMarker('ClsDefencePositions');
+  LoadStream.Read(fOwner);
   LoadStream.Read(TroopFormations, SizeOf(TroopFormations));
   LoadStream.Read(NewCount);
 
@@ -453,15 +455,24 @@ begin
   for I := 0 to Count - 1 do
   begin
     if Positions[I].fDefenceType = adtFrontLine then
-      gRenderAux.Quad(Positions[I].fPosition.Loc.X, Positions[I].fPosition.Loc.Y, $FFFF0000)
+      gRenderAux.Quad(Positions[I].Position.Loc.X, Positions[I].fPosition.Loc.Y, $FFFF0000)
     else
-      gRenderAux.Quad(Positions[I].fPosition.Loc.X, Positions[I].fPosition.Loc.Y, $FF00FF00);
+      gRenderAux.Quad(Positions[I].Position.Loc.X, Positions[I].fPosition.Loc.Y, $FF00FF00);
 
-    str := 'nil';
-    if Positions[I].CurrentGroup <> nil then
-      str := IntToStr(Positions[I].CurrentGroup.UID);
+    gRenderPool.RenderSpriteOnTile(Positions[I].Position.Loc, 510 + Byte(Positions[I].Position.Dir), gHands[fOwner].FlagColor);
+    gRenderAux.CircleOnTerrain(Positions[I].Position.Loc.X-0.5, Positions[I].Position.Loc.Y-0.5, Positions[I].Radius,
+                               gHands[fOwner].FlagColor AND $08FFFFFF,
+                               gHands[fOwner].FlagColor);
+    //group type and position number will be painted by InterfaceMapEditor
 
-    gRenderAux.Text(Positions[I].fPosition.Loc.X, Positions[I].fPosition.Loc.Y, str, icRed);
+    if not gGameParams.IsMapEditor then
+    begin
+      str := 'nil';
+      if Positions[I].CurrentGroup <> nil then
+        str := IntToStr(Positions[I].CurrentGroup.UID);
+
+      gRenderAux.Text(Positions[I].fPosition.Loc.X, Positions[I].fPosition.Loc.Y, str, icRed);
+    end;
   end;
 end;
 

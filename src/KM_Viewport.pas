@@ -56,7 +56,7 @@ implementation
 uses
   Math, KromUtils,
   KM_Resource, KM_ResCursors,
-  KM_Main, KM_GameApp, KM_Game, KM_Sound,
+  KM_Main, KM_GameApp, KM_GameSettings, KM_Sound,
   KM_Defaults, KM_CommonUtils;
 
 
@@ -213,7 +213,7 @@ begin
   fPanFrom := fPosition;
   fPanImmidiately := aTicksCnt = 0;
   fPanProgress := 0;
-  fPanDuration := Round(aTicksCnt * gGame.GameTickDuration);
+  fPanDuration := Round(aTicksCnt * gGameApp.Game.TickDuration);
   //Panning will be skipped when duration is zero
   if fPanImmidiately then
     SetPosition(aLoc);
@@ -313,14 +313,16 @@ begin
   end;
 
   // Both advancements have minimal value > 0
-  ScrollAdv := (0.5 + gGameApp.GameSettings.ScrollSpeed / 5) * aFrameTime / 100;
-  ZoomAdv := (0.2 + gGameApp.GameSettings.ScrollSpeed / 20) * aFrameTime / 1000;
+  // ScrollAdv depends on Zoom. Value was taken empirically
+  ScrollAdv := (0.5 + gGameSettings.ScrollSpeed / 5) * aFrameTime / 100 / Math.Power(fZoom, 0.8);
+
+  ZoomAdv := (0.2 + gGameSettings.ScrollSpeed / 20) * aFrameTime / 1000;
 
   if SCROLL_ACCEL then
   begin
     if fScrollStarted = 0 then
       fScrollStarted := TimeGet;
-    TimeSinceStarted := GetTimeSince(fScrollStarted);
+    TimeSinceStarted := TimeSince(fScrollStarted);
     if TimeSinceStarted < SCROLL_ACCEL_TIME then
       ScrollAdv := Mix(ScrollAdv, 0, TimeSinceStarted / SCROLL_ACCEL_TIME);
   end;
@@ -335,8 +337,8 @@ begin
   if ScrollKeyUp    then fPosition.Y := fPosition.Y - ScrollAdv;
   if ScrollKeyRight then fPosition.X := fPosition.X + ScrollAdv;
   if ScrollKeyDown  then fPosition.Y := fPosition.Y + ScrollAdv;
-  if ZoomKeyIn      then fZoom := fZoom + ZoomAdv;
-  if ZoomKeyOut     then fZoom := fZoom - ZoomAdv;
+  if ZoomKeyIn      then fZoom := fZoom * (1 + ZoomAdv);
+  if ZoomKeyOut     then fZoom := fZoom * (1 - ZoomAdv);
   //Mouse
   if CursorPoint.X <= ScreenBounds.Left   + SCROLL_FLEX then begin inc(I,1); fPosition.X := fPosition.X - ScrollAdv*(1+(ScreenBounds.Left   - CursorPoint.X)/SCROLL_FLEX); end;
   if CursorPoint.Y <= ScreenBounds.Top    + SCROLL_FLEX then begin inc(I,2); fPosition.Y := fPosition.Y - ScrollAdv*(1+(ScreenBounds.Top    - CursorPoint.Y)/SCROLL_FLEX); end;

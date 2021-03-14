@@ -40,16 +40,18 @@ type
     procedure Load(LoadStream: TKMemoryStream);
     procedure SyncLoad;
     procedure UpdateState(aTick: Cardinal);
-    procedure Paint(const aRect: TKMRect);
+    procedure UpdateVisualState;
+    procedure Paint(const aRect: TKMRect; aTickLag: Single);
   end;
 
 
 implementation
 uses
   SysUtils,
-  KM_Game, KM_HandsCollection, KM_Log, KM_Resource, KM_ResUnits, KM_UnitWarrior,
+  KM_Game, KM_GameParams, KM_HandsCollection, KM_Log, KM_Resource, KM_ResUnits, KM_UnitWarrior,
   KM_UnitActionWalkTo,
-  KM_DevPerfLog, KM_DevPerfLogTypes;
+  KM_DevPerfLog, KM_DevPerfLogTypes,
+  KM_CommonExceptions;
 
 
 { TKMUnitsCollection }
@@ -141,7 +143,7 @@ end;
 
 procedure TKMUnitsCollection.AddUnitToList(aUnit: TKMUnit);
 begin
-  Assert(gGame.IsMapEditor); // Allow to add existing Unit directly only in MapEd
+  Assert(gGameParams.IsMapEditor); // Allow to add existing Unit directly only in MapEd
   if aUnit <> nil then
     fUnits.Add(aUnit);
 end;
@@ -159,13 +161,13 @@ var
   I: Integer;
   newMapRect: TKMRect;
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   if Count <= 0 then Exit;
 
   newMapRect := KMRectGrow(gTerrain.MapRect, aInsetRect);
 
   for I := 0 to Count - 1 do
-    if not KMInRect(Units[I].CurrPosition, newMapRect) then
+    if not KMInRect(Units[I].Position, newMapRect) then
       Units[I].CloseUnit;
 end;
 
@@ -174,7 +176,7 @@ procedure TKMUnitsCollection.RemoveAllUnits;
 var
   I: Integer;
 begin
-  Assert(gGame.IsMapEditor);
+  Assert(gGameParams.IsMapEditor);
   if Count <= 0 then Exit;
 
   for I := 0 to Count - 1 do
@@ -185,7 +187,7 @@ end;
 
 procedure TKMUnitsCollection.DeleteUnitFromList(aUnit: TKMUnit);
 begin
-  Assert(gGame.IsMapEditor); // Allow to delete existing Unit directly only in MapEd
+  Assert(gGameParams.IsMapEditor); // Allow to delete existing Unit directly only in MapEd
   if (aUnit <> nil) then
     fUnits.Extract(aUnit);  // use Extract instead of Delete, cause Delete nils inner objects somehow
 end;
@@ -248,7 +250,7 @@ begin
   for I := 0 to Count - 1 do
     if not Units[I].IsDeadOrDying and Units[I].Visible and (Units[I].UnitType in aTypes) then
     begin
-      Dist := KMLengthSqr(Units[I].CurrPosition, aPoint);
+      Dist := KMLengthSqr(Units[I].Position, aPoint);
       if Dist < BestDist then
       begin
         BestDist := Dist;
@@ -264,7 +266,7 @@ var
 begin
   Result := 0;
   for I := 0 to Count - 1 do
-    Inc(Result, Units[I].GetPointerCount);
+    Inc(Result, Units[I].PointerCount);
 end;
 
 
@@ -295,11 +297,13 @@ begin
   begin
     LoadStream.Read(UnitType, SizeOf(UnitType));
     case UnitType of
-      utSerf:                  U := TKMUnitSerf.Load(LoadStream);
-      utWorker:                U := TKMUnitWorker.Load(LoadStream);
-      utWoodCutter..utFisher,{utWorker,}utStoneCutter..utMetallurgist:
+      utSerf:                   U := TKMUnitSerf.Load(LoadStream);
+      utWorker:                 U := TKMUnitWorker.Load(LoadStream);
+      utWoodCutter..utFisher,
+      {utWorker,}
+      utStoneCutter..utMetallurgist:
                                 U := TKMUnitCitizen.Load(LoadStream);
-      utRecruit:               U := TKMUnitRecruit.Load(LoadStream);
+      utRecruit:                U := TKMUnitRecruit.Load(LoadStream);
       WARRIOR_MIN..WARRIOR_MAX: U := TKMUnitWarrior.Load(LoadStream);
       ANIMAL_MIN..ANIMAL_MAX:   U := TKMUnitAnimal.Load(LoadStream);
       else                      U := nil;
@@ -322,19 +326,34 @@ begin
 end;
 
 
+procedure TKMUnitsCollection.UpdateVisualState;
+var
+  I: Integer;
+begin
+  Assert(gGameParams.IsMapEditor);
+
+  for I := Count - 1 downto 0 do
+    if not Units[I].IsDead then
+      Units[I].UpdateVisualState;
+end;
+
+
 procedure TKMUnitsCollection.UpdateState(aTick: Cardinal);
 var
   I: Integer;
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psUnits, aTick);
+  gPerfLogs.SectionEnter(psUnits);
   {$ENDIF}
   try
     for I := Count - 1 downto 0 do
       if not Units[I].IsDead then
-        Units[I].UpdateState
+      begin
+        Units[I].UpdateState;
+        Units[I].UpdateVisualState;
+      end
       else
-        if FREE_POINTERS and (Units[I].GetPointerCount = 0) then
+        if FREE_POINTERS and (Units[I].PointerCount = 0) then
           fUnits.Delete(I);
   finally
     {$IFDEF PERFLOG}
@@ -349,8 +368,8 @@ begin
     //   --     ROUGH OUTLINE     --   //
     // - Units and houses have fPointerCount, which is the number of pointers to them. (e.g. tasks,
     //   deliveries) This is kept up to date by the thing that is using the pointer. On create it uses
-    //   GetUnitPointer to get the pointer and increase the pointer count and on destroy it decreases
-    //   it with ReleaseUnitPointer.
+    //   GetPointer to get the pointer and increase the pointer count and on destroy it decreases
+    //   it with ReleasePointer.
     // - When a unit dies, the object is not destroyed. Instead a flag (boolean) is set to say that we
     //   want to destroy but can't because there still might be pointers to the unit. From then on
     //   every update state it checks to see if the pointer count is 0 yet. If it is then the unit is
@@ -361,7 +380,7 @@ begin
 end;
 
 
-procedure TKMUnitsCollection.Paint(const aRect: TKMRect);
+procedure TKMUnitsCollection.Paint(const aRect: TKMRect; aTickLag: Single);
 const
   Margin = 2;
 var
@@ -378,7 +397,7 @@ begin
           and (Units[I].Action is TKMUnitActionWalkTo)
           and TKMUnitActionWalkTo(Units[I].Action).NeedToPaint(growRect))
         or KMInRect(Units[I].PositionF, growRect)) then
-    Units[I].Paint;
+    Units[I].Paint(aTickLag);
 end;
 
 

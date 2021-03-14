@@ -162,7 +162,7 @@ type
     function GetErrorMessage(const aErrorType, aShortErrorDescription, aModule: String; aRow, aCol, aPos: Integer): TKMScriptErrorMessage; overload;
 
     property ValidationIssues: TScriptValidatorResult read fValidationIssues;
-    procedure LoadFromFile(const aFileName, aCampaignDataTypeFile: UnicodeString; aCampaignData: TKMemoryStreamBinary);
+    procedure LoadFromFile(const aFileName, aCampaignDataTypeFile: UnicodeString; aCampaignData: TKMemoryStream);
     procedure ExportDataToText;
 
     procedure Save(SaveStream: TKMemoryStream);
@@ -203,7 +203,9 @@ const
 
 implementation
 uses
-  TypInfo, Math, KromUtils, KM_Game, KM_Resource, KM_ResUnits, KM_Log, KM_CommonUtils, KM_ResWares, KM_ScriptingConsoleCommands;
+  TypInfo, Math, KromUtils, KM_GameParams, KM_Resource, KM_ResUnits, KM_Log, KM_CommonUtils, KM_ResWares,
+  KM_ScriptingConsoleCommands,
+  KM_ResTypes;
 
 const
   SCRIPT_LOG_EXT = '.log.txt';
@@ -304,7 +306,7 @@ begin
 end;
 
 
-procedure TKMScripting.LoadFromFile(const aFileName, aCampaignDataTypeFile: UnicodeString; aCampaignData: TKMemoryStreamBinary);
+procedure TKMScripting.LoadFromFile(const aFileName, aCampaignDataTypeFile: UnicodeString; aCampaignData: TKMemoryStream);
 begin
   RecreateValidationIssues;
 
@@ -315,7 +317,6 @@ begin
   if gScriptEvents.HasConsoleCommands then
     try
       gScriptEvents.ParseConsoleCommandsProcedures(fScriptCode);
-
     except
       on E: EConsoleCommandParseError do
       begin
@@ -423,6 +424,8 @@ begin
       + 'utWolf,         utFish,         utWatersnake,   utSeastar,'
       + 'utCrab,         utWaterflower,  utWaterleaf,    utDuck)');
 
+    Sender.AddTypeS('TReplaceFlags', '(rfReplaceAll, rfIgnoreCase)'); //Needed for string util Utils.StringReplace
+
     // Register classes and methods to the script engine.
     // After that they can be used from within the script.
     c := Sender.AddClassN(nil, AnsiString(fStates.ClassName));
@@ -431,6 +434,7 @@ begin
     RegisterMethodCheck(c, 'function AIAutoBuild(aPlayer: Byte): Boolean');
     RegisterMethodCheck(c, 'function AIAutoDefence(aPlayer: Byte): Boolean');
     RegisterMethodCheck(c, 'function AIAutoRepair(aPlayer: Byte): Boolean');
+    RegisterMethodCheck(c, 'procedure AIDefencePositionGet(aPlayer, aID: Byte; out aX, aY: Integer; out aGroupType: Byte; out aRadius: Word; out aDefType: Byte)');
     RegisterMethodCheck(c, 'function AIDefendAllies(aPlayer: Byte): Boolean');
     RegisterMethodCheck(c, 'function AIEquipRate(aPlayer: Byte; aType: Byte): Integer');
     RegisterMethodCheck(c, 'procedure AIGroupsFormationGet(aPlayer, aType: Byte; out aCount, aColumns: Integer)');
@@ -535,6 +539,7 @@ begin
     RegisterMethodCheck(c, 'function MapTileIsCoal(X, Y: Integer): Word');
     RegisterMethodCheck(c, 'function MapTileIsGold(X, Y: Integer): Word');
     RegisterMethodCheck(c, 'function MapTileIsIce(X, Y: Integer): Boolean');
+    RegisterMethodCheck(c, 'function MapTileIsInMapCoords(X, Y: Integer): Boolean');
     RegisterMethodCheck(c, 'function MapTileIsIron(X, Y: Integer): Word');
     RegisterMethodCheck(c, 'function MapTileIsSand(X, Y: Integer): Boolean');
     RegisterMethodCheck(c, 'function MapTileIsSnow(X, Y: Integer): Boolean');
@@ -619,6 +624,7 @@ begin
     RegisterMethodCheck(c, 'function UnitsGroup(aUnitID: Integer): Integer');
     RegisterMethodCheck(c, 'function UnitType(aUnitID: Integer): Integer');
     RegisterMethodCheck(c, 'function UnitTypeName(aUnitType: Byte): AnsiString');
+    RegisterMethodCheck(c, 'function UnitUnlocked(aPlayer: Word; aUnitType: Integer): Boolean');
 
     RegisterMethodCheck(c, 'function WareTypeName(aWareType: Byte): AnsiString');
     RegisterMethodCheck(c, 'function WarriorInFight(aUnitID: Integer; aCountCitizens: Boolean): Boolean');
@@ -819,6 +825,12 @@ begin
 
     RegisterMethodCheck(c, 'function ColorBrightness(const aHexColor: string): Single');
 
+    RegisterMethodCheck(c, 'function CompareString(const Str1, Str2: String): Integer');
+    RegisterMethodCheck(c, 'function CompareText(const Str1, Str2: String): Integer');
+    RegisterMethodCheck(c, 'function CopyString(Str: String; Index, Count: Integer): String');
+
+    RegisterMethodCheck(c, 'procedure DeleteString(var Str: String; Index, Count: Integer)');
+
     RegisterMethodCheck(c, 'function EnsureRangeS(aValue, aMin, aMax: Single): Single');
     RegisterMethodCheck(c, 'function EnsureRangeI(aValue, aMin, aMax: Integer): Integer');
 
@@ -835,7 +847,11 @@ begin
     RegisterMethodCheck(c, 'function InRangeI(aValue, aMin, aMax: Integer): Boolean');
     RegisterMethodCheck(c, 'function InRangeS(aValue, aMin, aMax: Single): Boolean');
 
+    RegisterMethodCheck(c, 'procedure InsertString(Source: String; var Target: String; Index: Integer)');
+
     RegisterMethodCheck(c, 'function KMPoint(X,Y: Integer): TKMPoint');
+
+    RegisterMethodCheck(c, 'function LowerCase(const Str: String): String');
 
     RegisterMethodCheck(c, 'function MaxI(A, B: Integer): Integer');
     RegisterMethodCheck(c, 'function MaxS(A, B: Single): Single');
@@ -849,6 +865,10 @@ begin
     RegisterMethodCheck(c, 'function MinInArrayI(aArray: array of Integer): Integer');
     RegisterMethodCheck(c, 'function MinInArrayS(aArray: array of Single): Single');
 
+    RegisterMethodCheck(c, 'procedure MoveString(const Source: String; var Destination: String; Count: Integer)');
+
+    RegisterMethodCheck(c, 'function Pos(SubStr, Str: String): Integer');
+
     RegisterMethodCheck(c, 'function Power(Base, Exponent: Extended): Extended');
 
     RegisterMethodCheck(c, 'function RandomRangeI(aFrom, aTo: Integer): Integer');
@@ -856,10 +876,14 @@ begin
     RegisterMethodCheck(c, 'function RGBDecToBGRHex(aR, aG, aB: Byte): AnsiString');
     RegisterMethodCheck(c, 'function RGBToBGRHex(const aHexColor: string): AnsiString');
 
-    RegisterMethodCheck(c, 'function RoundToDown(aValue: Single; aBase: Integer): Integer');
-    RegisterMethodCheck(c, 'function RoundToUp(aValue: Single; aBase: Integer): Integer');
+    RegisterMethodCheck(c, 'function CeilTo(aValue: Single; aBase: Integer): Integer');
+    RegisterMethodCheck(c, 'function FloorTo(aValue: Single; aBase: Integer): Integer');
+    RegisterMethodCheck(c, 'function RoundTo(aValue: Single; aBase: Integer): Integer');
+    RegisterMethodCheck(c, 'function TruncTo(aValue: Single; aBase: Integer): Integer');
 
     RegisterMethodCheck(c, 'function Sqr(A: Extended): Extended');
+
+    RegisterMethodCheck(c, 'function StringReplace(const Str, OldPattern, NewPattern: string; Flags: TReplaceFlags): String');
 
     RegisterMethodCheck(c, 'function SumI(aArray: array of Integer): Integer');
     RegisterMethodCheck(c, 'function SumS(aArray: array of Single): Single');
@@ -867,7 +891,13 @@ begin
     RegisterMethodCheck(c, 'function TimeToString(aTicks: Integer): AnsiString');
     RegisterMethodCheck(c, 'function TimeToTick(aHours, aMinutes, aSeconds: Integer): Cardinal');
 
-    // Register objects
+    RegisterMethodCheck(c, 'function Trim(const Str: String): String');
+    RegisterMethodCheck(c, 'function TrimLeft(const Str: String): String');
+    RegisterMethodCheck(c, 'function TrimRight(const Str: String): String');
+
+    RegisterMethodCheck(c, 'function UpperCase(const Str: String): String');
+
+        // Register objects
     AddImportedClassVariable(Sender, 'States', AnsiString(fStates.ClassName));
     AddImportedClassVariable(Sender, 'Actions', AnsiString(fActions.ClassName));
     AddImportedClassVariable(Sender, 'Utils', AnsiString(fUtils.ClassName));
@@ -1070,6 +1100,7 @@ begin
       RegisterMethod(@TKMScriptStates.AIAutoBuild,                              'AIAutoBuild');
       RegisterMethod(@TKMScriptStates.AIAutoDefence,                            'AIAutoDefence');
       RegisterMethod(@TKMScriptStates.AIAutoRepair,                             'AIAutoRepair');
+      RegisterMethod(@TKMScriptStates.AIDefencePositionGet,                     'AIDefencePositionGet');
       RegisterMethod(@TKMScriptStates.AIDefendAllies,                           'AIDefendAllies');
       RegisterMethod(@TKMScriptStates.AIEquipRate,                              'AIEquipRate');
       RegisterMethod(@TKMScriptStates.AIGroupsFormationGet,                     'AIGroupsFormationGet');
@@ -1174,6 +1205,7 @@ begin
       RegisterMethod(@TKMScriptStates.MapTileIsCoal,                            'MapTileIsCoal');
       RegisterMethod(@TKMScriptStates.MapTileIsGold,                            'MapTileIsGold');
       RegisterMethod(@TKMScriptStates.MapTileIsIce,                             'MapTileIsIce');
+      RegisterMethod(@TKMScriptStates.MapTileIsInMapCoords,                     'MapTileIsInMapCoords');
       RegisterMethod(@TKMScriptStates.MapTileIsIron,                            'MapTileIsIron');
       RegisterMethod(@TKMScriptStates.MapTileIsSand,                            'MapTileIsSand');
       RegisterMethod(@TKMScriptStates.MapTileIsSnow,                            'MapTileIsSnow');
@@ -1258,6 +1290,7 @@ begin
       RegisterMethod(@TKMScriptStates.UnitsGroup,                               'UnitsGroup');
       RegisterMethod(@TKMScriptStates.UnitType,                                 'UnitType');
       RegisterMethod(@TKMScriptStates.UnitTypeName,                             'UnitTypeName');
+      RegisterMethod(@TKMScriptStates.UnitUnlocked,                             'UnitUnlocked');
 
       RegisterMethod(@TKMScriptStates.WareTypeName,                             'WareTypeName');
       RegisterMethod(@TKMScriptStates.WarriorInFight,                           'WarriorInFight');
@@ -1457,6 +1490,12 @@ begin
 
       RegisterMethod(@TKMScriptUtils.ColorBrightness,                           'ColorBrightness');
 
+      RegisterMethod(@TKMScriptUtils.CompareString,                             'CompareString');
+      RegisterMethod(@TKMScriptUtils.CompareText,                               'CompareText');
+      RegisterMethod(@TKMScriptUtils.CopyString,                                'CopyString');
+
+      RegisterMethod(@TKMScriptUtils.DeleteString,                              'DeleteString');
+
       RegisterMethod(@TKMScriptUtils.EnsureRangeI,                              'EnsureRangeI');
       RegisterMethod(@TKMScriptUtils.EnsureRangeS,                              'EnsureRangeS');
 
@@ -1473,7 +1512,11 @@ begin
       RegisterMethod(@TKMScriptUtils.InRangeI,                                  'InRangeI');
       RegisterMethod(@TKMScriptUtils.InRangeS,                                  'InRangeS');
 
+      RegisterMethod(@TKMScriptUtils.InsertString,                              'InsertString');
+
       RegisterMethod(@TKMScriptUtils.KMPoint,                                   'KMPoint');
+
+      RegisterMethod(@TKMScriptUtils.LowerCase,                                 'LowerCase');
 
       RegisterMethod(@TKMScriptUtils.MaxI,                                      'MaxI');
       RegisterMethod(@TKMScriptUtils.MaxS,                                      'MaxS');
@@ -1487,6 +1530,10 @@ begin
       RegisterMethod(@TKMScriptUtils.MinInArrayI,                               'MinInArrayI');
       RegisterMethod(@TKMScriptUtils.MinInArrayS,                               'MinInArrayS');
 
+      RegisterMethod(@TKMScriptUtils.MoveString,                                'MoveString');
+
+      RegisterMethod(@TKMScriptUtils.Pos,                                       'Pos');
+
       RegisterMethod(@TKMScriptUtils.Power,                                     'Power');
 
       RegisterMethod(@TKMScriptUtils.RandomRangeI,                              'RandomRangeI');
@@ -1494,16 +1541,27 @@ begin
       RegisterMethod(@TKMScriptUtils.RGBDecToBGRHex,                            'RGBDecToBGRHex');
       RegisterMethod(@TKMScriptUtils.RGBToBGRHex,                               'RGBToBGRHex');
 
-      RegisterMethod(@TKMScriptUtils.RoundToDown,                               'RoundToDown');
-      RegisterMethod(@TKMScriptUtils.RoundToUp,                                 'RoundToUp');
+
+      RegisterMethod(@TKMScriptUtils.CeilTo,                                    'CeilTo');
+      RegisterMethod(@TKMScriptUtils.FloorTo,                                   'FloorTo');
+      RegisterMethod(@TKMScriptUtils.RoundTo,                                   'RoundTo');
+      RegisterMethod(@TKMScriptUtils.TruncTo,                                   'TruncTo');
 
       RegisterMethod(@TKMScriptUtils.SumI,                                      'SumI');
       RegisterMethod(@TKMScriptUtils.SumS,                                      'SumS');
 
       RegisterMethod(@TKMScriptUtils.Sqr,                                       'Sqr');
 
+      RegisterMethod(@TKMScriptUtils.StringReplace,                             'StringReplace');
+
       RegisterMethod(@TKMScriptUtils.TimeToString,                              'TimeToString');
       RegisterMethod(@TKMScriptUtils.TimeToTick,                                'TimeToTick');
+
+      RegisterMethod(@TKMScriptUtils.Trim,                                      'Trim');
+      RegisterMethod(@TKMScriptUtils.TrimLeft,                                  'TrimLeft');
+      RegisterMethod(@TKMScriptUtils.TrimRight,                                 'TrimRight');
+
+      RegisterMethod(@TKMScriptUtils.UpperCase,                                 'UpperCase');
 
     end;
 
@@ -1659,7 +1717,7 @@ begin
   end;
 
   //The log path can't be stored in the save since it might be in MapsMP or MapsDL on different clients
-  fErrorHandler.ScriptLogFile := ExeDir + ChangeFileExt(gGame.MissionFile, SCRIPT_LOG_EXT);
+  fErrorHandler.ScriptLogFile := ExeDir + ChangeFileExt(gGameParams.MissionFile, SCRIPT_LOG_EXT);
 end;
 
 
@@ -1916,7 +1974,6 @@ begin
 end;
 
 
-
 procedure TKMScriptErrorHandler.HandleErrors;
 begin
   HandleScriptError(seCompileError, AppendErrorPrefix('Script compile errors:' + EolW, fErrorString));
@@ -2138,8 +2195,8 @@ const
 
   function AllowGameUpdate: Boolean;
   begin
-    Result := ((gGame <> nil) and not gGame.IsMapEditor)
-              or ((gGame = nil) and (gScripting <> nil));
+    Result := ((gGameParams <> nil) and not gGameParams.IsMapEditor)
+              or ((gGameParams = nil) and (gScripting <> nil));
   end;
 
   procedure LoadCustomEventDirectives;
@@ -2235,7 +2292,7 @@ const
     ErrorStr: UnicodeString;
     DirectiveParamSL: TStringList;
     HasError: Boolean;
-    THTroopCost: array[0..4] of Integer;
+    THTroopCost: array[Low(TH_TROOP_COST)..High(TH_TROOP_COST)] of Integer;
   begin
     if UpperCase(DirectiveName) = UpperCase(CUSTOM_TH_TROOP_COST_DIRECTIVE) then
     begin
@@ -2246,17 +2303,20 @@ const
         try
           StringSplit(DirectiveParam, ',', DirectiveParamSL);
 
-          if DirectiveParamSL.Count <> 6 then
+          HasError := False;
+          if DirectiveParamSL.Count <> Length(THTroopCost) then
           begin
-            fErrorHandler.AppendErrorStr(Format('Directive ''%s'' has wrong number of parameters: expected 6, actual: %d. At [%d:%d]' + sLineBreak,
-                                                [CUSTOM_TH_TROOP_COST_DIRECTIVE, DirectiveParamSL.Count, Parser.Row, Parser.Col]));
+            HasError := True;
+            fErrorHandler.AppendErrorStr(Format('Directive ''%s'' has wrong number of parameters: expected %d, actual: %d. At [%d:%d]' + sLineBreak,
+                                                [CUSTOM_TH_TROOP_COST_DIRECTIVE, Length(THTroopCost), DirectiveParamSL.Count,
+                                                 Parser.Row, Parser.Col]));
             if fValidationIssues <> nil then
               fValidationIssues.AddError(Parser.Row, Parser.Col, CUSTOM_TH_TROOP_COST_DIRECTIVE,
-                                         'Wrong number of parameters: expected 6, actual: ' + IntToStr(DirectiveParamSL.Count));
+                                         Format('Wrong number of parameters: expected %d, actual: %d',
+                                                [Length(THTroopCost), DirectiveParamSL.Count]));
           end;
 
-          HasError := False;
-          for I := 0 to 5 do
+          for I := Low(THTroopCost) to High(THTroopCost) do
             if TryStrToInt(DirectiveParamSL[I], TroopCost) then
               THTroopCost[I] := EnsureRange(TroopCost, 1, 255)
             else begin

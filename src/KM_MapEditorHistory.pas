@@ -4,7 +4,9 @@ interface
 uses
   Classes, Generics.Collections, SysUtils,
   KM_Defaults, KM_Points, KM_CommonTypes, KM_Houses,
-  KM_ResWares, KM_ResHouses, KM_MapEdTypes, KM_Terrain, KM_UnitGroup;
+  KM_ResWares, KM_ResHouses, KM_MapEdTypes, KM_Terrain,
+  KM_UnitGroupTypes,
+  KM_ResTypes;
 
 
 type
@@ -42,8 +44,8 @@ type
   private
     // Each Undo step stores whole terrain for simplicity
     fData: array of array of TKMUndoTile;
-    function MakeUndoTile(aTile: TKMTerrainTile; aPaintedTile: TKMPainterTile): TKMUndoTile;
-    procedure RestoreTileFromUndo(var aTile: TKMTerrainTile; var aPaintedTile: TKMPainterTile; aUndoTile: TKMUndoTile;
+    function MakeUndoTile(const aTile: TKMTerrainTile; const aPaintedTile: TKMPainterTile; const aMapEdTile: TKMMapEdTerrainTile): TKMUndoTile;
+    procedure RestoreTileFromUndo(var aTile: TKMTerrainTile; var aPaintedTile: TKMPainterTile; var aMapEdTile: TKMMapEdTerrainTile; aUndoTile: TKMUndoTile;
                                   aUnderHouse: Boolean);
   public
     constructor Create(const aCaption: string);
@@ -159,10 +161,8 @@ implementation
 uses
   Math,
   KM_HandsCollection, KM_Hand, KM_Units, KM_UnitsCollection,
-  KM_Game, KM_CommonUtils, KM_Resource, KM_HouseTownhall, KM_HouseBarracks;
-
-const
-  CHECKPOINTS_MAX_CNT = 500;
+  KM_GameSettings, KM_Game, KM_CommonUtils, KM_Resource, KM_HouseTownhall, KM_HouseBarracks,
+  KM_UnitGroup;
 
 
 { TKMCheckpoint }
@@ -213,11 +213,11 @@ begin
 
   for I := 0 to gTerrain.MapY - 1 do
   for K := 0 to gTerrain.MapX - 1 do
-    fData[I,K] := MakeUndoTile(gTerrain.Land[I+1,K+1], gGame.TerrainPainter.LandTerKind[I+1,K+1]);
+    fData[I,K] := MakeUndoTile(gTerrain.Land[I+1,K+1], gGame.TerrainPainter.LandTerKind[I+1,K+1], gGame.MapEditor.Land[I+1,K+1]);
 end;
 
 
-function TKMCheckpointTerrain.MakeUndoTile(aTile: TKMTerrainTile; aPaintedTile: TKMPainterTile): TKMUndoTile;
+function TKMCheckpointTerrain.MakeUndoTile(const aTile: TKMTerrainTile; const aPaintedTile: TKMPainterTile; const aMapEdTile: TKMMapEdTerrainTile): TKMUndoTile;
 var
   L: Integer;
 begin
@@ -232,10 +232,11 @@ begin
   Result.TerKind            := aPaintedTile.TerKind;
   Result.Tiles              := aPaintedTile.Tiles;
   Result.HeightAdd          := aPaintedTile.HeightAdd;
+  Result.FieldAge           := aTile.FieldAge;
   Result.TileOverlay        := aTile.TileOverlay;
   Result.TileOwner          := aTile.TileOwner;
-  Result.CornOrWine         := aTile.CornOrWine;
-  Result.CornOrWineTerrain  := aTile.CornOrWineTerrain;
+  Result.CornOrWine         := aMapEdTile.CornOrWine;
+  Result.CornOrWineTerrain  := aMapEdTile.CornOrWineTerrain;
 
   SetLength(Result.Layer, aTile.LayersCnt);
   for L := 0 to aTile.LayersCnt - 1 do
@@ -247,24 +248,24 @@ end;
 
 
 procedure TKMCheckpointTerrain.RestoreTileFromUndo(var aTile: TKMTerrainTile; var aPaintedTile: TKMPainterTile;
-                                                   aUndoTile: TKMUndoTile; aUnderHouse: Boolean);
+                                                   var aMapEdTile: TKMMapEdTerrainTile; aUndoTile: TKMUndoTile; aUnderHouse: Boolean);
 var
   L: Integer;
 begin
   aTile.BaseLayer.Terrain   := aUndoTile.BaseLayer.Terrain;
   aUndoTile.BaseLayer.UnpackRotAndCorners(aTile.BaseLayer.Rotation, aTile.BaseLayer.Corners);
 
-  aTile.LayersCnt           := aUndoTile.LayersCnt;
-  aTile.Height              := aUndoTile.Height;
-  aTile.Obj                 := aUndoTile.Obj;
-  aTile.IsCustom            := aUndoTile.IsCustom;
-  aTile.BlendingLvl         := aUndoTile.BlendingLvl;
-  aPaintedTile.TerKind      := aUndoTile.TerKind;
-  aPaintedTile.Tiles        := aUndoTile.Tiles;
-  aPaintedTile.HeightAdd    := aUndoTile.HeightAdd;
-  aTile.FieldAge            := aUndoTile.FieldAge;
-  aTile.CornOrWine          := aUndoTile.CornOrWine;
-  aTile.CornOrWineTerrain   := aUndoTile.CornOrWineTerrain;
+  aTile.LayersCnt               := aUndoTile.LayersCnt;
+  aTile.Height                  := aUndoTile.Height;
+  aTile.Obj                     := aUndoTile.Obj;
+  aTile.IsCustom                := aUndoTile.IsCustom;
+  aTile.BlendingLvl             := aUndoTile.BlendingLvl;
+  aPaintedTile.TerKind          := aUndoTile.TerKind;
+  aPaintedTile.Tiles            := aUndoTile.Tiles;
+  aPaintedTile.HeightAdd        := aUndoTile.HeightAdd;
+  aTile.FieldAge                := aUndoTile.FieldAge;
+  aMapEdTile.CornOrWine         := aUndoTile.CornOrWine;
+  aMapEdTile.CornOrWineTerrain  := aUndoTile.CornOrWineTerrain;
 
   // Do not remove roads under houses and do not update owner under house
   if not aUnderHouse then
@@ -287,8 +288,8 @@ var
 begin
   for I := 0 to gTerrain.MapY-1 do
   for K := 0 to gTerrain.MapX-1 do
-    RestoreTileFromUndo(gTerrain.Land[I+1,K+1], gGame.TerrainPainter.LandTerKind[I+1,K+1], fData[I,K],
-                        gHands.HousesHitTest(K+1,I+1) <> nil);
+    RestoreTileFromUndo(gTerrain.Land[I+1,K+1], gGame.TerrainPainter.LandTerKind[I+1,K+1], gGame.MapEditor.Land[I+1,K+1],
+                        fData[I,K], gHands.HousesHitTest(K+1,I+1) <> nil);
 
   if not aUpdateImmidiately then Exit;
 
@@ -296,7 +297,6 @@ begin
 //  gTerrain.UpdateLighting(gTerrain.MapRect);
   gTerrain.UpdateAll(gTerrain.MapRect);
 end;
-
 
 
 { TKMCheckpointFields }
@@ -381,7 +381,7 @@ begin
       and not gHands.PlayerAnimals.Units[K].IsDeadOrDying then
     begin
       fUnits[L].UnitType := U.UnitType;
-      fUnits[L].Position := U.CurrPosition;
+      fUnits[L].Position := U.Position;
       fUnits[L].Owner := PLAYER_ANIMAL;
 
       fUnits[L].Condition := U.Condition;
@@ -400,7 +400,7 @@ begin
       if U.UnitType in [CITIZEN_MIN..CITIZEN_MAX] then
       begin
         fUnits[L].UnitType := U.UnitType;
-        fUnits[L].Position := U.CurrPosition;
+        fUnits[L].Position := U.Position;
         fUnits[L].Owner := I;
 
         fUnits[L].Condition := U.Condition;
@@ -672,7 +672,7 @@ begin
   end else
   begin
     // Delete the very first checkpoint when we reached the limit
-    if fCheckpoints.Count >= CHECKPOINTS_MAX_CNT then
+    if fCheckpoints.Count >= gGameSettings.MapEdHistoryDepth then
       fCheckpoints.Delete(0);
 
     // Otherwise create new one
@@ -682,7 +682,7 @@ begin
     IncCounter;
   end;
 
-  if Assigned (fOnAddCheckpoint) then
+  if Assigned(fOnAddCheckpoint) then
     fOnAddCheckpoint;
 end;
 

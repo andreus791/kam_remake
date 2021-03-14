@@ -623,7 +623,7 @@ begin
     if Found and ((Nodes = 4) or (fBrushMask = mkNone)) then
     begin
       gTerrain.Land[pY,pX].BaseLayer.Terrain := T;
-      gTerrain.Land[pY,pX].BaseLayer.SetCorners([0,1,2,3]);
+      gTerrain.Land[pY,pX].BaseLayer.SetAllCorners;
       gTerrain.Land[pY,pX].LayersCnt := 0;
       gTerrain.Land[pY,pX].BaseLayer.Rotation := Rot mod 4;
     end
@@ -748,11 +748,11 @@ begin
     for I := 0 to 3 do
       if not terKindFound[I] then
       begin
-        if tile.BaseLayer.Corners[I] then
+        if tile.BaseLayer.Corner[I] then
           aCornersTerKinds[I] := TILE_CORNERS_TERRAIN_KINDS[tile.BaseLayer.Terrain, (I + 4 - tile.BaseLayer.Rotation) mod 4]
         else
           for L := 0 to tile.LayersCnt - 1 do
-            if tile.Layer[L].Corners[I] then
+            if tile.Layer[L].Corner[I] then
               aCornersTerKinds[I] := gRes.Sprites.GetGenTerrainInfo(tile.Layer[L].Terrain).TerKind;
       end;
   end;
@@ -765,7 +765,7 @@ var
   I, J, Tmp: Integer;
   CornerI: array[0..3] of Integer;
 begin
-  Result := mtNone; // makes compiler happy
+  Result := TKMTileMaskType.mtNone; // makes compiler happy
   // A B
   // D C
   A := aCornerTerKinds[0];
@@ -777,7 +777,7 @@ begin
   // A A
   if (A = B) and (A = C) and (A = D) then
   begin
-    Result := mtNone;
+    Result := TKMTileMaskType.mtNone;
     aLayerOrder[0].TerKind := A;
     aLayerOrder[0].SetCorners([0,1,2,3]);
     aLayerOrder[0].Rotation := 0;
@@ -994,19 +994,9 @@ begin
 
   case J of
     3:      Exit;
-    4:      begin
-              Result := mt_4Square;
-              Exit;
-            end
+    4:      Exit(mt_4Square);
     else    raise Exception.Create('Wrong number of corners with different TerKind: ' + IntToStr(J));
   end;
-
-
-  aLayerOrder[0].TerKind := A;
-  aLayerOrder[0].Rotation := 0;
-  aLayerOrder[0].SetCorners([0,1,2,3]);
-
-  Result := mtNone;
 end;
 
 
@@ -1194,16 +1184,16 @@ procedure TKMTerrainPainter.MagicBrush(const X,Y: Integer; aMaskKind: TKMTileMas
 
         BaseLayer.Terrain := BASE_TERRAIN[LayerOrder[0].TerKind];
         BaseLayer.Rotation := 0;
-        BaseLayer.Corners := LayerOrder[0].Corners;
+        BaseLayer.SetCorners(LayerOrder[0].Corners);
         LayersCnt := TILE_MASKS_LAYERS_CNT[MaskType] - 1;
 
-        if MaskType = mtNone then Exit;
+        if MaskType = TKMTileMaskType.mtNone then Exit;
 
         for I := 1 to LayersCnt do // start from 1, just for convinience
         begin
           Layer[I-1].Terrain := gGenTerrainTransitions[LayerOrder[I].TerKind, MaskKind, MaskType, LayerOrder[I].SubType];
           Layer[I-1].Rotation := LayerOrder[I].Rotation;
-          Layer[I-1].Corners := LayerOrder[I].Corners;
+          Layer[I-1].SetCorners(LayerOrder[I].Corners);
         end;
       end
   end;
@@ -1228,7 +1218,7 @@ begin
     case aMaskKind of
       mkNone:  begin
                   gTerrain.Land[Y,X].LayersCnt := 0; // Simple way to clear all layers
-                  gTerrain.Land[Y,X].BaseLayer.SetCorners([0,1,2,3]);
+                  gTerrain.Land[Y,X].BaseLayer.SetAllCorners;
                 end;
       else      for L := 0 to gTerrain.Land[Y,X].LayersCnt - 1 do
                 begin
@@ -1355,6 +1345,7 @@ end;
 procedure TKMTerrainPainter.DoApplyBrush;
 var
   X, Y: Integer;
+  rect: TKMRect;
 begin
   // Clear fBrushAreaTerKind array. It will be refilled in BrushTerrainTile
   fBrushAreaTerKindCnt := 0;
@@ -1374,7 +1365,9 @@ begin
   if fBrushMask <> mkNone then
     UseMagicBrush(X, Y, fSize, (fShape = hsSquare), True);
 
-  gTerrain.UpdatePassability(KMRectGrow(KMRect(KMPoint(fMapXc, fMapYc)), (fSize div 2) + 1));
+  rect := KMRectGrow(KMRect(KMPoint(fMapXc, fMapYc)), (fSize div 2) + 1);
+  gTerrain.UpdatePassability(rect);
+  gTerrain.UpdateLighting(rect); //Also update lighting because of water
 end;
 
 
@@ -1469,11 +1462,12 @@ begin
 
   gTerrain.Land[aLoc.Y, aLoc.X].IsCustom := aIsCustom;
   gTerrain.Land[aLoc.Y, aLoc.X].BaseLayer.Terrain := aTile;
-  gTerrain.Land[aLoc.Y, aLoc.X].BaseLayer.SetCorners([0,1,2,3]);
+  gTerrain.Land[aLoc.Y, aLoc.X].BaseLayer.SetAllCorners;
   gTerrain.Land[aLoc.Y, aLoc.X].LayersCnt := 0;
   gTerrain.Land[aLoc.Y, aLoc.X].BaseLayer.Rotation := aRotation;
 
   gTerrain.UpdatePassability(aLoc);
+  gTerrain.UpdateLighting(aLoc.X, aLoc.Y); //Also update lighting because of water
 end;
 
 
@@ -1764,12 +1758,7 @@ end;
 
 
 procedure TKMTerrainPainter.InitSize(X, Y: Word);
-//var
-//  I: Integer;
 begin
-//  for I := 0 to High(fUndos) do
-//    SetLength(fUndos[I].Data, Y+1, X+1);
-
   fBrushAreaTerKindCnt := 0;
 
   SetLength(LandTerKind, Y+1, X+1);
@@ -1796,7 +1785,7 @@ procedure TKMTerrainPainter.LoadFromFile(const aFileName: UnicodeString);
 var
   I, K: Integer;
   TerType: ShortInt; //Krom's editor saves terrain kind as ShortInt
-  S: TKMemoryStreamBinary;
+  S: TKMemoryStream;
   NewX, NewY: Integer;
   ResHead: packed record
     x1: Word;
@@ -1877,30 +1866,20 @@ end;
 
 procedure TKMTerrainPainter.Save(SaveStream: TKMemoryStream);
 var
-  I, K: Integer;
+  I: Integer;
 begin
   for I := 1 to gTerrain.MapY do
-    for K := 1 to gTerrain.MapX do
-    begin
-      SaveStream.Write(LandTerKind[I,K].TerKind, SizeOf(LandTerKind[I,K].TerKind));
-      SaveStream.Write(LandTerKind[I,K].Tiles);
-      SaveStream.Write(LandTerKind[I,K].HeightAdd);
-    end;
+    SaveStream.Write(LandTerKind[I,1], SizeOf(LandTerKind[I,1]) * gTerrain.MapX);
 end;
 
 
 procedure TKMTerrainPainter.Load(LoadStream: TKMemoryStream);
 var
-  I, K: Integer;
+  I: Integer;
 begin
   InitSize(gTerrain.MapX, gTerrain.MapY);
   for I := 1 to gTerrain.MapY do
-    for K := 1 to gTerrain.MapX do
-    begin
-      LoadStream.Read(LandTerKind[I,K].TerKind, SizeOf(LandTerKind[I,K].TerKind));
-      LoadStream.Read(LandTerKind[I,K].Tiles);
-      LoadStream.Read(LandTerKind[I,K].HeightAdd);
-    end;
+    LoadStream.Read(LandTerKind[I,1], SizeOf(LandTerKind[I,1]) * gTerrain.MapX);
 end;
 
 
@@ -1913,7 +1892,7 @@ end;
 procedure TKMTerrainPainter.SaveToFile(const aFileName: UnicodeString; const aInsetRect: TKMRect);
 var
   I, K, IFrom, KFrom: Integer;
-  S: TKMemoryStreamBinary;
+  S: TKMemoryStream;
   NewX, NewY: Integer;
   ResHead: packed record
     x1: Word;
@@ -1986,14 +1965,10 @@ procedure TKMTerrainPainter.RotateTile(const aLoc: TKMPoint);
 
   procedure RotateCorners(var aLayer: TKMTerrainLayer);
   var
-    I: Integer;
-    Corners: TKMTileCorners;
+    tmp: Byte;
   begin
-    Corners := aLayer.Corners;
-    aLayer.ClearCorners;
-    for I := 0 to 3 do
-      if Corners[I] then
-        aLayer.Corners[(I + 1) mod 4] := True;
+    tmp := aLayer.Corners;
+    aLayer.Corners := ((tmp shl 1) and $F) or (tmp shr 3);
   end;
 
 var

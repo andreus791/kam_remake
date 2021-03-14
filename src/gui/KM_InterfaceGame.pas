@@ -5,8 +5,9 @@ uses
   {$IFDEF MSWindows} Windows, {$ENDIF}
   {$IFDEF Unix} LCLType, {$ENDIF}
   SysUtils, Controls, Classes, Math, KM_Defaults, KM_Controls, KM_Points,
-  KM_InterfaceDefaults, KM_CommonTypes,
-  KM_GameCursor, KM_Render, KM_Minimap, KM_Viewport, KM_ResHouses, KM_ResWares, KM_ResFonts;
+  KM_InterfaceDefaults, KM_CommonTypes, KM_AIDefensePos,
+  KM_GameCursor, KM_Render, KM_Minimap, KM_Viewport, KM_ResFonts,
+  KM_ResTypes;
 
 
 type
@@ -16,11 +17,15 @@ type
     fDragScrollingCursorPos: TPoint;
     fDragScrollingViewportPos: TKMPointF;
     fOnUserAction: TKMUserActionEvent;
+
     procedure ResetDragScrolling;
+    procedure PaintDefences;
   protected
     fMinimap: TKMMinimap;
     fViewport: TKMViewport;
     fDragScrolling: Boolean;
+
+    fPaintDefences: Boolean;
 
     function IsDragScrollingAllowed: Boolean; virtual;
     function GetHintPositionBase: TKMPoint; override;
@@ -38,6 +43,8 @@ type
 
     function CursorToMapCoord(X, Y: Integer): TKMPointF;
 
+    procedure DebugControlsUpdated(aSenderTag: Integer); override;
+
     procedure KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
     procedure KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean); override;
     procedure KeyPress(Key: Char); override;
@@ -51,6 +58,8 @@ type
     procedure SyncUIView(const aCenter: TKMPointF; aZoom: Single = 1);
     procedure UpdateGameCursor(X, Y: Integer; Shift: TShiftState);
     procedure UpdateStateIdle(aFrameTime: Cardinal); virtual; abstract;
+
+    procedure Paint; override;
   end;
 
 
@@ -62,6 +71,8 @@ const
   PAGE_TITLE_Y = 5; // Page title offset
   TERRAIN_PAGE_TITLE_Y = PAGE_TITLE_Y + 2; // Terrain pages title offset
   STATS_LINES_CNT = 13; //Number of stats (F3) lines
+
+  DEFENCE_LINE_TYPE_COL: array [TAIDefencePosType] of Cardinal = ($FF80FF00, $FFFF8000);
 
   // Shortcuts
   // All shortcuts are in English and are the same for all languages to avoid
@@ -165,7 +176,8 @@ const
 
 implementation
 uses
-  KM_Main, KM_Terrain, KM_RenderPool, KM_Resource, KM_ResCursors, KM_ResKeys;
+  KM_Main, KM_Terrain, KM_RenderPool, KM_Resource, KM_ResCursors, KM_ResKeys, KM_HandsCollection, KM_GameParams,
+  KM_RenderUI, KM_CommonUtils, KM_Pics, KM_GameSettings;
 
 
 { TKMUserInterfaceGame }
@@ -181,6 +193,8 @@ begin
   fDragScrollingCursorPos.Y := 0;
   fDragScrollingViewportPos := KMPOINTF_ZERO;
 
+  fPaintDefences := False;
+
   gRenderPool := TRenderPool.Create(fViewport, aRender);
 end;
 
@@ -191,6 +205,15 @@ begin
   FreeAndNil(fViewport);
   FreeAndNil(gRenderPool);
   Inherited;
+end;
+
+
+procedure TKMUserInterfaceGame.DebugControlsUpdated(aSenderTag: Integer);
+begin
+  inherited;
+
+  if aSenderTag = Ord(dcFlatTerrain) then
+    gTerrain.UpdateLighting;
 end;
 
 
@@ -217,7 +240,7 @@ end;
 procedure TKMUserInterfaceGame.KeyDown(Key: Word; Shift: TShiftState; var aHandled: Boolean);
   {$IFDEF MSWindows}
 var
-  WindowRect: TRect;
+  windowRect: TRect;
   {$ENDIF}
 begin
   if Assigned(fOnUserAction) then
@@ -225,22 +248,29 @@ begin
 
   aHandled := True;
   //Scrolling
-  if Key = gResKeys[SC_SCROLL_LEFT].Key       then fViewport.ScrollKeyLeft  := True
-  else if Key = gResKeys[SC_SCROLL_RIGHT].Key then fViewport.ScrollKeyRight := True
-  else if Key = gResKeys[SC_SCROLL_UP].Key    then fViewport.ScrollKeyUp    := True
-  else if Key =  gResKeys[SC_SCROLL_DOWN].Key then fViewport.ScrollKeyDown  := True
-  else if Key = gResKeys[SC_ZOOM_IN].Key      then fViewport.ZoomKeyIn      := True
-  else if Key = gResKeys[SC_ZOOM_OUT].Key     then fViewport.ZoomKeyOut     := True
-  else if Key = gResKeys[SC_ZOOM_RESET].Key   then fViewport.ResetZoom
-  else if (Key = gResKeys[SC_MAP_DRAG_SCROLL].Key)
+  if Key = gResKeys[kfScrollLeft].Key       then
+    fViewport.ScrollKeyLeft  := True
+  else if Key = gResKeys[kfScrollRight].Key then
+    fViewport.ScrollKeyRight := True
+  else if Key = gResKeys[kfScrollUp].Key    then
+    fViewport.ScrollKeyUp    := True
+  else if Key =  gResKeys[kfScrollDown].Key then
+    fViewport.ScrollKeyDown  := True
+  else if Key = gResKeys[kfZoomIn].Key      then
+    fViewport.ZoomKeyIn      := True
+  else if Key = gResKeys[kfZoomOut].Key     then
+    fViewport.ZoomKeyOut     := True
+  else if Key = gResKeys[kfZoomReset].Key   then
+    fViewport.ResetZoom
+  else if (Key = gResKeys[kfMapDragScroll].Key)
       and IsDragScrollingAllowed then
   begin
     fDragScrolling := True;
    // Restrict the cursor to the window, for now.
    //TODO: Allow one to drag out of the window, and still capture.
    {$IFDEF MSWindows}
-     WindowRect := gMain.ClientRect(1); //Reduce ClientRect by 1 pixel, to fix 'jump viewport' bug when dragscrolling over the window border
-     ClipCursor(@WindowRect);
+     windowRect := gMain.ClientRect(1); //Reduce ClientRect by 1 pixel, to fix 'jump viewport' bug when dragscrolling over the window border
+     ClipCursor(@windowRect);
    {$ENDIF}
    fDragScrollingCursorPos.X := gGameCursor.Pixel.X;
    fDragScrollingCursorPos.Y := gGameCursor.Pixel.Y;
@@ -258,16 +288,27 @@ begin
   if Assigned(fOnUserAction) then
     fOnUserAction(uatKeyUp);
 
+  inherited;
+
+  if aHandled then Exit;
+
   aHandled := True;
   //Scrolling
-  if Key = gResKeys[SC_SCROLL_LEFT].Key       then fViewport.ScrollKeyLeft  := False
-  else if Key = gResKeys[SC_SCROLL_RIGHT].Key then fViewport.ScrollKeyRight := False
-  else if Key = gResKeys[SC_SCROLL_UP].Key    then fViewport.ScrollKeyUp    := False
-  else if Key =  gResKeys[SC_SCROLL_DOWN].Key then fViewport.ScrollKeyDown  := False
-  else if Key = gResKeys[SC_ZOOM_IN].Key      then fViewport.ZoomKeyIn      := False
-  else if Key = gResKeys[SC_ZOOM_OUT].Key     then fViewport.ZoomKeyOut     := False
-  else if Key = gResKeys[SC_ZOOM_RESET].Key   then fViewport.ResetZoom
-  else if Key = gResKeys[SC_MAP_DRAG_SCROLL].Key then
+  if Key = gResKeys[kfScrollLeft].Key       then
+    fViewport.ScrollKeyLeft := False
+  else if Key = gResKeys[kfScrollRight].Key then
+    fViewport.ScrollKeyRight := False
+  else if Key = gResKeys[kfScrollUp].Key    then
+    fViewport.ScrollKeyUp := False
+  else if Key =  gResKeys[kfScrollDown].Key then
+    fViewport.ScrollKeyDown  := False
+  else if Key = gResKeys[kfZoomIn].Key      then
+    fViewport.ZoomKeyIn := False
+  else if Key = gResKeys[kfZoomOut].Key     then
+    fViewport.ZoomKeyOut := False
+  else if Key = gResKeys[kfZoomReset].Key   then
+    fViewport.ResetZoom
+  else if Key = gResKeys[kfMapDragScroll].Key then
   begin
     if fDragScrolling then
       ResetDragScrolling;
@@ -301,6 +342,7 @@ end;
 procedure TKMUserInterfaceGame.MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer);
 begin
   inherited;
+
   if Assigned(fOnUserAction) then
     fOnUserAction(uatMouseDown);
 end;
@@ -318,7 +360,7 @@ begin
   aHandled := False;
   if fDragScrolling then
   begin
-    if GetKeyState(gResKeys[SC_MAP_DRAG_SCROLL].Key) < 0 then
+    if GetKeyState(gResKeys[kfMapDragScroll].Key) < 0 then
     begin
       UpdateGameCursor(X, Y, Shift);
       VP.X := fDragScrollingViewportPos.X + (fDragScrollingCursorPos.X - X) / (CELL_SIZE_PX * fViewport.Zoom);
@@ -333,7 +375,7 @@ end;
 
 procedure TKMUserInterfaceGame.MouseWheel(Shift: TShiftState; WheelSteps, X, Y: Integer; var aHandled: Boolean);
 var
-  PrevCursor: TKMPointF;
+  prevCursor: TKMPointF;
 begin
   inherited;
 
@@ -346,14 +388,58 @@ begin
   if aHandled then Exit;
   
   UpdateGameCursor(X, Y, Shift); // Make sure we have the correct cursor position to begin with
-  PrevCursor := gGameCursor.Float;
-  fViewport.Zoom := fViewport.Zoom + WheelSteps*3/50;
+  prevCursor := gGameCursor.Float;
+  // +1 for ScrollSpeed = 0.
+  // Sqrt to reduce Scroll speed importance
+  // 11 = 10 + 1, 10 is default scroll speed
+  fViewport.Zoom := fViewport.Zoom * (1 + WheelSteps * Sqrt((gGameSettings.ScrollSpeed + 1) / 11) / 12);
   UpdateGameCursor(X, Y, Shift); // Zooming changes the cursor position
   // Move the center of the screen so the cursor stays on the same tile, thus pivoting the zoom around the cursor
-  fViewport.Position := KMPointF(fViewport.Position.X + PrevCursor.X-gGameCursor.Float.X,
-                                 fViewport.Position.Y + PrevCursor.Y-gGameCursor.Float.Y);
+  fViewport.Position := KMPointF(fViewport.Position.X + prevCursor.X-gGameCursor.Float.X,
+                                 fViewport.Position.Y + prevCursor.Y-gGameCursor.Float.Y);
   UpdateGameCursor(X, Y, Shift); // Recentering the map changes the cursor position
   aHandled := True;
+end;
+
+
+procedure TKMUserInterfaceGame.PaintDefences;
+var
+  I, K: Integer;
+  DP: TAIDefencePosition;
+  locF: TKMPointF;
+  screenLoc: TKMPoint;
+begin
+  for I := 0 to gHands.Count - 1 do
+    for K := 0 to gHands[I].AI.General.DefencePositions.Count - 1 do
+    begin
+      DP := gHands[I].AI.General.DefencePositions[K];
+      locF := gTerrain.FlatToHeight(KMPointF(DP.Position.Loc.X-0.5, DP.Position.Loc.Y-0.5));
+      screenLoc := fViewport.MapToScreen(locF);
+
+      if KMInRect(screenLoc, fViewport.ViewRect) then
+      begin
+        //Dir selector
+        TKMRenderUI.WritePicture(screenLoc.X, screenLoc.Y, 0, 0, [], rxGui,  510 + Byte(DP.Position.Dir));
+        TKMRenderUI.WriteTextInShape(IntToStr(K+1), screenLoc.X, screenLoc.Y - 28, DEFENCE_LINE_TYPE_COL[DP.DefenceType],
+                                     FlagColorToTextColor(GROUP_TXT_COLOR[DP.GroupType]), $80000000, IntToStr(I + 1), gHands[I].FlagColor, icWhite);
+        //GroupType icon
+        TKMRenderUI.WritePicture(screenLoc.X, screenLoc.Y, 0, 0, [], rxGui, GROUP_IMG[DP.GroupType]);
+      end;
+    end;
+end;
+
+
+procedure TKMUserInterfaceGame.Paint;
+begin
+  if (mlDefencesAll in gGameParams.VisibleLayers) then
+    fPaintDefences := True;
+
+  if fPaintDefences then
+    PaintDefences;
+
+  fPaintDefences := False;
+
+  inherited;
 end;
 
 
@@ -378,8 +464,8 @@ end;
 
 procedure TKMUserInterfaceGame.SyncUIView(const aCenter: TKMPointF; aZoom: Single = 1);
 begin
+  fViewport.Zoom := aZoom; // Set Zoom first, since it can apply restrictions on Position near map borders
   fViewport.Position := aCenter;
-  fViewport.Zoom := aZoom;
 end;
 
 

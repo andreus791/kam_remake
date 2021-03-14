@@ -4,7 +4,6 @@ interface
 uses
   Classes, Math, StrUtils, SysUtils,
   Vcl.Forms, Vcl.Controls,
-  KM_CommonTypes,
   KM_DevPerfLogSingle, KM_DevPerfLogStack, KM_DevPerfLogTypes;
 
 
@@ -12,6 +11,7 @@ type
   // Collection of PerfLoggers
   TKMPerfLogs = class
   private
+    fTick: Integer;
     fPerfLogForm: TForm;
     fItems: array [TPerfSectionDev] of TKMPerfLogSingle;
     fStackCPU: TKMPerfLogStackCPU;
@@ -19,8 +19,11 @@ type
     function GetItem(aSection: TPerfSectionDev): TKMPerfLogSingle;
     function GetStackCPU: TKMPerfLogStackCPU;
     function GetStackGFX: TKMPerfLogStackGFX;
+
+    procedure SectionEnter(aSection: TPerfSectionDev; aTick: Integer; aTag: Integer = 0); overload;
   public
-    FrameBudget: Integer;
+    Enabled: Boolean;
+    Scale: Integer;
     Smoothing: Boolean;
     SaveOnExit: Boolean;
 
@@ -31,7 +34,8 @@ type
     property StackCPU: TKMPerfLogStackCPU read GetStackCPU;
     property StackGFX: TKMPerfLogStackGFX read GetStackGFX;
 
-    procedure SectionEnter(aSection: TPerfSectionDev; aTick: Integer = -1; aTag: Integer = 0);
+    procedure SectionEnter(aSection: TPerfSectionDev); overload;//; aTick: Integer = -1; aTag: Integer = 0);
+
     procedure SectionLeave(aSection: TPerfSectionDev);
 
     procedure Clear;
@@ -41,55 +45,10 @@ type
     procedure ShowForm(aContainer: TWinControl);
     function FormHeight: Integer;
 
-    class function IsCPUSection(aSection: TPerfSectionDev): Boolean;
-    class function IsGFXSection(aSection: TPerfSectionDev): Boolean;
+    procedure TickBegin(aTick: Integer);
+    procedure TickEnd;
   end;
 
-
-const
-  // Tabs are for GUI structure
-  // Can not use typed constants within another constants declaration :(
-  // http://stackoverflow.com/questions/28699518/
-  // Avoid Green, it blends with mostly green terrain
-  SECTION_INFO: array [TPerfSectionDev] of record
-    Name: string;
-    ClassName: TKMPerfLogClass;
-    Color: TKMColor3f;
-  end = (
-    (Name: 'All';                     ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0;B:0);),
-    (Name: 'GameTick';                ClassName: TKMPerfLogSingleCPU; Color: (R:1.0;G:1;B:0);),
-    (Name: '   Hands';                ClassName: TKMPerfLogSingleCPU; Color: (R:1;G:0.25;B:0);),
-    (Name: '     Units';              ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0.5;B:0.5);),
-    (Name: '     Deliveries';         ClassName: TKMPerfLogSingleCPU; Color: (R:0.75;G:0.25;B:0.25);),
-    (Name: '     WalkConnect';        ClassName: TKMPerfLogSingleCPU; Color: (R:1;G:0.75;B:0.75);),
-    (Name: '   FOW';                  ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0.75;B:0);),
-    (Name: '   Pathfinding';          ClassName: TKMPerfLogSingleCPU; Color: (R:0.0;G:1;B:0.75);),
-    (Name: '   HungarianReorder';     ClassName: TKMPerfLogSingleCPU; Color: (R:1.0;G:0;B:1);),
-    (Name: '   AIFields';             ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0.5;B:1);),
-    (Name: '   AI';                   ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0.75;B:1);),
-    (Name: '     AI City Advanced';   ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:0.75;B:0.25);),
-    (Name: '     AI Army Advanced';   ClassName: TKMPerfLogSingleCPU; Color: (R:0.25;G:0.75;B:1);),
-    (Name: '     AI City Classic';    ClassName: TKMPerfLogSingleCPU; Color: (R:0.25;G:0.5;B:1);),
-    (Name: '     AI Army Classic';    ClassName: TKMPerfLogSingleCPU; Color: (R:0.5;G:0.5;B:0.25);),
-    (Name: '   Terrain';              ClassName: TKMPerfLogSingleCPU; Color: (R:0.5;G:0.5;B:0.5);),
-    (Name: '   TerrainFinder';        ClassName: TKMPerfLogSingleCPU; Color: (R:0;G:1;B:1);),
-    (Name: '   Scripting';            ClassName: TKMPerfLogSingleCPU; Color: (R:1;G:0.25;B:0.75);),
-    (Name: '   Minimap';              ClassName: TKMPerfLogSingleCPU; Color: (R:0.7;G:0;B:0.9);),
-    (Name: 'Render.CPU';              ClassName: TKMPerfLogSingleCPU; Color: (R:1.0;G:0;B:0);),
-    (Name: 'Render.GFX';              ClassName: TKMPerfLogSingleGFX; Color: (R:0;G:1;B:1);),
-    (Name: '     Terrain';            ClassName: TKMPerfLogSingleGFX; Color: (R:0;G:0.25;B:0.25);),
-    (Name: '       TerBase';          ClassName: TKMPerfLogSingleGFX; Color: (R:0;G:0.5;B:0.25);),
-    (Name: '         Tiles';          ClassName: TKMPerfLogSingleGFX; Color: (R:0.25;G:0;B:0.25);),
-    (Name: '         Water';          ClassName: TKMPerfLogSingleGFX; Color: (R:0.25;G:0;B:0.5);),
-    (Name: '         Layers';         ClassName: TKMPerfLogSingleGFX; Color: (R:0.5;G:0;B:0.25);),
-    (Name: '         Overlays';       ClassName: TKMPerfLogSingleGFX; Color: (R:0.5;G:0.5;B:0.25);),
-    (Name: '         Light';          ClassName: TKMPerfLogSingleGFX; Color: (R:0.5;G:0.25;B:0);),
-    (Name: '         Shadows';        ClassName: TKMPerfLogSingleGFX; Color: (R:0.75;G:0.5;B:0);),
-    (Name: '     RenderList';         ClassName: TKMPerfLogSingleGFX; Color: (R:0.5;G:1;B:0.75);),
-    (Name: '     FOWRender';          ClassName: TKMPerfLogSingleGFX; Color: (R:0.75;G:1;B:0.75);),
-    (Name: '   UpdateVBO';            ClassName: TKMPerfLogSingleCPU; Color: (R:0.5;G:0.5;B:1);),
-    (Name: '   GUI';                  ClassName: TKMPerfLogSingleGFX; Color: (R:1.0;G:0.25;B:0);)
-  );
 
 {$IFDEF PERFLOG}
 var
@@ -100,7 +59,7 @@ var
 implementation
 uses
   KM_DevPerfLogForm,
-  TypInfo, KM_Defaults, KM_RenderUI, KM_RenderAux, KM_ResFonts;
+  TypInfo, KM_Defaults, KM_CommonTypes, KM_RenderUI, KM_RenderAux, KM_ResFonts;
 
 
 { TKMPerfLogs }
@@ -112,11 +71,14 @@ var
 begin
   inherited Create;
   {$IFDEF PERFLOG}
-  FrameBudget := 20;
+  Scale := 20;
 
   for I := LOW_PERF_SECTION to High(TPerfSectionDev) do
   begin
-    fItems[I] := SECTION_INFO[I].ClassName.Create;
+    case SECTION_INFO[I].Kind of
+      plkCPU: fItems[I] := TKMPerfLogSingleCPU.Create;
+      plkGFX: fItems[I] := TKMPerfLogSingleGFX.Create;
+    end;
     fItems[I].Enabled := (I in aSections);
     fItems[I].Color := TKMColor4f.New(SECTION_INFO[I].Color);
     fItems[I].Display := (I in aSections);
@@ -126,6 +88,7 @@ begin
 
   fStackCPU := TKMPerfLogStackCPU.Create;
   fStackGFX := TKMPerfLogStackGFX.Create;
+  Enabled := False;
   {$ENDIF}
 end;
 
@@ -156,47 +119,43 @@ end;
 
 function TKMPerfLogs.GetItem(aSection: TPerfSectionDev): TKMPerfLogSingle;
 begin
+  if Self = nil then Exit(nil);
+
   // This easy check allows us to exit if the Log was not initialized, e.g. in utils
-  if Self <> nil then
-    Result := fItems[aSection]
-  else
-    Result := nil;
+  Result := fItems[aSection]
 end;
 
 
 function TKMPerfLogs.GetStackGFX: TKMPerfLogStackGFX;
 begin
+  if Self = nil then Exit(nil);
+
   // This easy check allows us to exit if the Log was not initialized, e.g. in utils
-  if Self <> nil then
-    Result := fStackGFX
-  else
-    Result := nil;
-end;
-
-
-class function TKMPerfLogs.IsCPUSection(aSection: TPerfSectionDev): Boolean;
-begin
-  Result := SECTION_INFO[aSection].ClassName = TKMPerfLogSingleCPU;
-end;
-
-
-class function TKMPerfLogs.IsGFXSection(aSection: TPerfSectionDev): Boolean;
-begin
-  Result := SECTION_INFO[aSection].ClassName = TKMPerfLogSingleGFX;
+  Result := fStackGFX
 end;
 
 
 function TKMPerfLogs.GetStackCPU: TKMPerfLogStackCPU;
 begin
+  if Self = nil then Exit(nil);
+
   // This easy check allows us to exit if the Log was not initialized, e.g. in utils
-  if Self <> nil then
-    Result := fStackCPU
-  else
-    Result := nil;
+  Result := fStackCPU
 end;
 
 
-procedure TKMPerfLogs.SectionEnter(aSection: TPerfSectionDev; aTick: Integer = -1; aTag: Integer = 0);
+procedure TKMPerfLogs.SectionEnter(aSection: TPerfSectionDev);
+begin
+  if (Self = nil) or not Enabled then Exit;
+
+  if IsCPUSection(aSection) then
+    SectionEnter(aSection, fTick)
+  else
+    SectionEnter(aSection, -1);
+end;
+
+
+procedure TKMPerfLogs.SectionEnter(aSection: TPerfSectionDev; aTick: Integer; aTag: Integer = 0);
 begin
   if Self = nil then Exit;
 
@@ -211,11 +170,11 @@ end;
 
 procedure TKMPerfLogs.SectionLeave(aSection: TPerfSectionDev);
 begin
-  if Self = nil then Exit;
+  if (Self = nil) or not Enabled then Exit;
 
   fItems[aSection].SectionLeave;
 
-  if SECTION_INFO[aSection].ClassName = TKMPerfLogSingleCPU then
+  if SECTION_INFO[aSection].Kind = plkCPU then
     fStackCPU.SectionRollback(aSection)
   else
     fStackGFX.SectionRollback(aSection);
@@ -261,7 +220,7 @@ var
   x, y: Single;
   lbl: string;
 begin
-  if Self = nil then Exit;
+  if (Self = nil) or not Enabled then Exit;
 
   lastTick := 0;
   cCount := 0;
@@ -273,13 +232,13 @@ begin
 
   for PS := LOW_PERF_SECTION to High(TPerfSectionDev) do
   begin
-    fItems[PS].Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, FrameBudget, Smoothing);
+    fItems[PS].Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, Scale, Smoothing);
     UpdateCntNLastTick(fItems[PS].Count, fItems[PS].EnterTick);
   end;
 
   // Stacked chart
-  fStackCPU.Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, FrameBudget, Smoothing);
-  fStackGFX.Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, FrameBudget, Smoothing);
+  fStackCPU.Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, Scale, Smoothing);
+  fStackGFX.Render(aLeft + PAD_SIDE, aLeft + aWidth - PAD_SIDE * 2, aHeight - PAD_Y, scaleY, EMA_ALPHA, Scale, Smoothing);
 
   needChart := fStackCPU.Display or fStackGFX.Display;
   for PS := LOW_PERF_SECTION to High(TPerfSectionDev) do
@@ -296,7 +255,7 @@ begin
       y := scaleY / 10 * K;
       gRenderAux.Line(aLeft + PAD_SIDE + 0.5, aHeight - PAD_Y + 0.5 - y, aLeft + PAD_SIDE - 3.5, aHeight - PAD_Y + 0.5 - y, icWhite);
 
-      lbl := FormatFloat('##0.#', FrameBudget / 10 * K) + 'ms';
+      lbl := FormatFloat('##0.#', Scale / 10 * K) + 'ms';
       TKMRenderUI.WriteText(aLeft + PAD_SIDE - 5, Trunc(aHeight - PAD_Y - y - 8), 0, lbl, fntMini, taRight);
     end;
 
@@ -328,7 +287,7 @@ var
   I: TPerfSectionDev;
   S: TStringList;
 begin
-  if Self = nil then Exit;
+  if (Self = nil) or not Enabled then Exit;
 
   ForceDirectories(ExtractFilePath(aFilename));
 
@@ -367,7 +326,6 @@ begin
 
   fPerfLogForm.Parent := aContainer;
 
-
   if aContainer = nil then
   begin
     fPerfLogForm.Align := alNone;
@@ -375,6 +333,37 @@ begin
   end;
 
   TFormPerfLogs(fPerfLogForm).Show(Self);
+end;
+
+
+procedure TKMPerfLogs.TickBegin(aTick: Integer);
+begin
+  if (Self = nil) or not Enabled then Exit;
+
+  fTick := aTick;
+  StackCPU.TickBegin;
+  SectionEnter(psGameTick, aTick);
+end;
+
+
+procedure TKMPerfLogs.TickEnd;
+var
+  I: TPerfSectionDev;
+begin
+  if (Self = nil) or not Enabled then Exit;
+
+  StackCPU.TickEnd;
+  SectionLeave(psGameTick);
+
+  // Enter and leave section to add zero records for not happened events in that tick
+  // (f.e. for game save)
+  // that will make 'rare' graphs move at the same positions as other 'every tick' graphs
+  for I := LOW_PERF_SECTION to High(TPerfSectionDev) do
+    if IsCPUSection(I) then
+    begin
+      fItems[I].SectionEnter(fTick);
+      fItems[I].SectionLeave;
+    end;
 end;
 
 

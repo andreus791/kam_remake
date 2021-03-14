@@ -7,16 +7,18 @@ unit KM_RandomMapGenerator;
 {$I KaM_Remake.inc}
 interface
 uses
-  KM_CommonTypes, KM_Terrain, Math,  // KM_Utils = random number
-  KM_Points, KM_RMGUtils, KM_Defaults, KM_ResWares;
+  KM_CommonTypes, KM_Terrain, Math,
+  KM_Points, KM_RMGUtils, KM_Defaults;
 
 
 type
-
-  TBiomeType = (btGrass,btBigGrass,btWetland,btSwamp,btWater,btCoal,btGrassGround,btGround,btTreeGrass,btGroundSnow,btSnow1,btSnow2,btIce,btCoastSand,btGrassSand1,btGrassSand2,btGrassSand3,btSand,btStone,btGold,btEgold,btIron,btEIron,btDark);
-  TObstacleType = (otSwamp,otWater,otWetland,otEgold,otEIron);
-  TObjects = (oStone,oShrub,oBranch,oMushroom,oFlower,oGrass,oDebris,oTreeDry,oTree,oConifer,oTreeTropical,oCactus,oPalm,oWaterTypes);
-  TObjectMix = (omStone,omGrass,omSwamp,omGround,omSnow,omCoal,omDesert,omWater, omWetland);
+  TBiomeType = (btGrass, btBigGrass, btWetland, btSwamp, btWater, btCoal, btGrassGround, btGround, btTreeGrass, btGroundSnow,
+    btSnow1, btSnow2, btIce, btCoastSand, btGrassSand1, btGrassSand2, btGrassSand3, btSand, btStone, btGold, btEgold, btIron,
+    btEIron, btDark);
+  TObstacleType = (otSwamp, otWater, otWetland, otEgold, otEIron);
+  TObjects = (oStone, oShrub, oBranch, oMushroom, oFlower, oGrass, oDebris, oTreeDry, oTree, oConifer, oTreeTropical,
+    oCactus, oPalm, oWaterTypes);
+  TObjectMix = (omStone, omGrass, omSwamp, omGround, omSnow, omCoal, omDesert, omWater, omWetland);
   TBiomeTypeArray = array of TBiomeType;
 
 
@@ -57,7 +59,7 @@ type
       ObjectDensity, ForestDensity, Trees: Byte;
     end;
     Seed: Integer;
-    BasicTiles, CA: Boolean;
+    Decomposition, BasicTiles, CA: Boolean;
   end;
 
 
@@ -98,10 +100,10 @@ type
     procedure MineFinalFixer(var TilesPartsArr: TTileParts; var A: TKMByte2Array);
   public
     RMGSettings: TKMRMGSettings;
-    constructor Create();
-    destructor Destroy(); override;
-    procedure SaveSettings();
-    procedure LoadSettings();
+    constructor Create;
+    destructor Destroy; override;
+    procedure SaveSettings;
+    procedure LoadSettings;
 
     property Resources: TKMBalancedResources read fRes;
   // Random number generators
@@ -109,8 +111,7 @@ type
   end;
 
 
-
-  const
+const
   len_BIOME = 24;
   BT: array[0..len_BIOME-1,0..len_BIOME-1] of Integer = (
   //  0  1  2  3  4   5  6  7  8  9  10 11 12 13 14  15 16 17 18 19  20 21 22 23
@@ -195,51 +196,144 @@ type
     False  // 23 btDark
   );
 
-  WT: array[0..399] of Boolean = ( // Walkable tiles
-  //  0      1      2      3      4        5      6      7      8      9       10     11     12     13     14       15
+  WT: array[0..399] of Boolean = ( // Walkable tiles (For RMG it cannot be copy/paste of KaM tiles)
+  // 000    001    002    003    004      005    006    007    008    009      010    011    012    013    014      015
     True,  True,  True,  True,  False,   True,  True,  False, True,  True,    False, True,  False, True,  True,    False,
+  // 016    017    018    019    020      021    022    023    024    025      026    027    028    029    030      031
     True,  True,  True,  True,  True,    True,  True,  False, False, True,    True,  True,  True,  True,  True,    True,
+  // 032    033    034    035    036      037    038    039    040    041      042    043    044    045    046      047
     True,  True,  True,  True,  True,    True,  True,  True,  False, False,   False, False, True,  True,  True,    True,
+  // 048    049    050    051    052      053    054    055    056    057      058    059    060    061    062      063
     False, True,  False, False, True,    False, False, True,  True,  True,    True,  True,  True,  True,  True,    True,
+  // 064    065    066    067    068      069    070    071    072    073      074    075    076    077    078      079
     True,  True,  True,  True,  True,    True,  True,  True,  True,  True,    True,  True,  True,  True,  True,    True,
+  // 080    081    082    083    084      085    086    087    088    089      090    091    092    093    094      095
     True,  True,  True,  True,  True,    True,  True,  True,  True,  True,    True,  True,  True,  True,  True,    True,
+  // 096    097    098    099    100      101    102    103    104    105      106    107    108    109    110      111
     True,  True,  True,  True,  True,    True,  True,  True,  True,  False,   True,  True,  True,  True,  False,   True,
+  // 112    113    114    115    116      117    118    119    120    121      122    123    124    125    126      127
     True,  True,  False, False, True,    True,  False, False, True,  True,    True,  True,  True,  True,  False,   False,
+  // 128    129    130    131    132      133    134    135    136    137      138    139    140    141    142      143
     False, False, False, False, False,   False, False, False, False, False,   False, True,  False, False, False,   False,
+  // 144    145    146    147    148      149    150    151    152    153      154    155    156    157    158      159
     False, False, False, False, False,   False, False, False, True,  True,    True,  True,  False, False, False,   False,
+  // 160    161    162    163    164      165    166    167    168    169      170    171    172    173    174      175
     False, False, False, False, False,   False, True,  True,  True,  True,    True,  True,  True,  True,  True,    True,
+  // 176    177    178    179    180      181    182    183    184    185      186    187    188    189    190      191
     False, False, False, False, True,    True,  True,  True,  False, False,   False, False, True,  True,  True,    True,
+  // 192    193    194    195    196      197    198    199    200    201      202    203    204    205    206      207
     False, False, False, False, False,   True,  False, False, False, False,   True,  True,  True,  True,  False,   True,
+  // 208    209    210    211    212      213    214    215    216    217      218    219    220    221    222      223
     False, False, False, False, True,    True,  True,  True,  False, False,   False, False, True,  True,  True,    True,
+  // 224    225    226    227    228      229    230    231    232    233      234    235    236    237    238      239
     False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 240    241    242    243    244      245    246    247    248    249      250    251    252    253    254      255
     False, False, True,  True,  False,   False, True,  True,  True,  True,    True,  True,  True,  True,  True,    True,
-	  True,  True,  False, False, False,   True,  True,  False, False, False,   False, False, False, True,  True,    True,
+  // 256    257    258    259    260      261    262    263    264    265      266    267    268    269    270      271
+    True,  True,  False, False, False,   True,  True,  False, False, False,   False, False, False, True,  True,    True,
+  // 272    273    274    275    276      277    278    279    280    281      282    283    284    285    286      287
     False, True,  False, False, False,   False, True,  True,  True,  False,   True,  False, False, False, True,    True,
-    True,  False, True,  False, False,   False, True,  True,  True,  False,   True,  False, False, False, True,    True,
-    False, True,  True,  False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 288    289    290    291    292      293    294    295    296    297      298    299    200    301    302      303
+    True,  True,  True,  False, False,   False, True,  True,  True,  True,    True,  False, False, False, True,    True,
+  // 304    305    306    307    308      309    310    311    312    313      314    315    316    317    318      319
+    True,  True,  True,  False,  True,   False, False, True,  True,  True,    True,  True,  True,  True,   True,   False,
+  // 320    321    322    323    324      325    326    327    328    329      330    331    332    333    334      335
     False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 336    337    338    339    340      341    342    343    344    345      346    347    348    349    350      351
+    False,  True,  True, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 352    353    354    355    356      357    358    359    360    361      362    363    364    365    366      367
     False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 368    369    370    371    372      373    374    375    376    377      378    379    380    381    382      383
     False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
-    False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False,
+  // 384    385    386    387    388      389    390    391    392    393      394    395    396    397    398      399
     False, False, False, False, False,   False, False, False, False, False,   False, False, False, False, False,   False
   );
 
 implementation
-
 uses
-  SysUtils, KM_HandsCollection, KM_CommonClasses, KM_Game, KM_ResMapElements, KM_Hand, Dialogs;
-
+  SysUtils, KM_HandsCollection, KM_CommonClasses, KM_Game, KM_ResMapElements, KM_Hand, Dialogs,
+  KM_ResTypes;
 
 
 { TKMRandomMapGenerator }
-constructor TKMRandomMapGenerator.Create();
+constructor TKMRandomMapGenerator.Create;
 begin
+  inherited;
+
   fRNG := TKMRandomNumberGenerator.Create;
   fRes := TKMBalancedResources.Create;
 
-  // Default configuration
   with RMGSettings do
   begin
+    // Debug configuration
+    {$IFDEF DEBUG_RMG}
+    with Locs do
+    begin
+      Active := False;
+      Players := 4;
+      Layout := 0;
+      ProtectedRadius := 6;
+      with Resource do
+      begin
+        Active := True;
+        ConnectLocs := True;
+        MineFix := True;
+        Stone := 1000;
+        Gold := 300;
+        Iron := 250;
+      end;
+    end;
+    with Obstacle do
+    begin
+      Active := True;
+      Density := 20;
+      Size := 20;
+      Variance := 10;
+      Ratio[otEgold] := 4;
+      Ratio[otEIron] := 4;
+      Ratio[otSwamp] := 0;
+      Ratio[otWetland] := 0;
+      Ratio[otWater] := 4;
+    end;
+    with Walkable do
+    begin
+      Active := False;
+      Grass := True;
+      Ground := True;
+      Snow := True;
+      Sand := True;
+      FirstLayerStep := 5;
+      FirstLayerLimit := 6;
+      SecondLayerStep := 5;
+      SecondLayerLimit := 6;
+    end;
+    with OnePath do
+    begin
+      NoGoZones := True;
+      ReplaceTerrain := True;
+    end;
+    with Height do
+    begin
+      Active := False;
+      Step := 4;
+      Slope := 40;
+      Height := 10;
+      HideNonSmoothTransition := True;
+    end;
+    with Objects do
+    begin
+      Active := False;
+      ObjectDensity := 6;
+      ForestDensity := 70;
+      Trees := 20;
+      Animals := True;
+    end;
+    Seed := 0;
+    Decomposition := False;
+    BasicTiles := False;
+    CA := True;
+    // Default configuration
+    {$ELSE}
     with Locs do
     begin
       Active := True;
@@ -251,7 +345,7 @@ begin
         Active := True;
         ConnectLocs := True;
         MineFix := True;
-        Stone := 1000;
+        Stone := 1200;
         Gold := 350;
         Iron := 300;
       end;
@@ -259,9 +353,9 @@ begin
     with Obstacle do
     begin
       Active := True;
+      Size := 8;
       Density := 10;
-      Size := 10;
-      Variance := 10;
+      Variance := 5;
       Ratio[otEgold] := 8;
       Ratio[otEIron] := 7;
       Ratio[otSwamp] := 1;
@@ -290,25 +384,27 @@ begin
       Active := True;
       Step := 4;
       Slope := 40;
-      Height := 10;
+      Height := 70;
       HideNonSmoothTransition := True;
     end;
     with Objects do
     begin
       Active := True;
-      ObjectDensity := 6;
-      ForestDensity := 10;
-      Trees := 20;
       Animals := True;
+      ObjectDensity := 6;
+      ForestDensity := 5;
+      Trees := 17;
     end;
     Seed := 0;
+    Decomposition := False;
     BasicTiles := False;
     CA := True;
+    {$ENDIF}
   end;
 end;
 
 
-destructor TKMRandomMapGenerator.Destroy();
+destructor TKMRandomMapGenerator.Destroy;
 begin
   fRNG.Free;
   fRes.Free;
@@ -317,13 +413,13 @@ begin
 end;
 
 
-procedure TKMRandomMapGenerator.SaveSettings();
+procedure TKMRandomMapGenerator.SaveSettings;
 begin
 
 end;
 
 
-procedure TKMRandomMapGenerator.LoadSettings();
+procedure TKMRandomMapGenerator.LoadSettings;
 begin
 
 end;
@@ -398,9 +494,11 @@ begin
   fRNG.Seed := RMGSettings.Seed;
   TileTemplateArr := TileTemplate(A);
 
-  // Generate correct  tiles
+  // Generate correct tiles
   fRNG.Seed := RMGSettings.Seed;
-  if RMGSettings.BasicTiles then
+  if RMGSettings.Decomposition then
+    GenerateBasicTiles(TilesPartsArr,TileTemplateArr)
+  else if RMGSettings.BasicTiles then
     GenerateBasicTiles(TilesPartsArr,A)
   else
     GenerateTiles(TilesPartsArr, A, TileTemplateArr);
@@ -518,10 +616,10 @@ begin
   // Update game info
   if (gGame <> nil) then
   begin
-    //gGame.MissionMode := mmNormal;
+    //gGameParams.IsNormalMission;
 
     if (Length(gGame.MapTxtInfo.Author) = 0) then
-      gGame.MapTxtInfo.Author := 'Random number generator';
+      gGame.MapTxtInfo.Author := 'Random map generator';
     if (Length(gGame.MapTxtInfo.SmallDesc) = 0) then
       gGame.MapTxtInfo.SmallDesc := 'Randomly generated map';
     if (Length(gGame.MapTxtInfo.GetBigDesc) = 0) then
@@ -539,8 +637,6 @@ begin
     gGame.MapTxtInfo.BlockFullMapPreview := False;
   end;
 end;
-
-
 
 
 // Linear interpolation for grid of random points (for GenerateHeight or CreateBiomes functions)
@@ -608,7 +704,6 @@ begin
 
   Result := Output;
 end;
-
 
 
 // Create shapes using specific limits from TInteger2Array
@@ -749,8 +844,6 @@ begin
 
   Result := Output;
 end;
-
-
 
 
 // Generator of random points with best possible distance between them (quite slow algorithm, only for Locs)
@@ -899,7 +992,7 @@ function TKMRandomMapGenerator.RandomPlayerLocs(): TKMPointArray;
           break;
         end;
       if PointSelected then
-        continue;
+        Continue;
       // Try to replace the point
       for RemIdx := Low(LocIdx) to High(LocIdx) do
       begin
@@ -966,7 +1059,6 @@ begin
   end;
   Result := Output;
 end;
-
 
 
 // Generator of random points with minimal distance between them (algorithmic from division into areas with indetical size = very fast)
@@ -1048,7 +1140,6 @@ begin
   Result.X := Min(  aMax.X, Max( aMin.X,Round(aCenter.X + radius * cos(angle)) )  );
   Result.Y := Min(  aMax.Y, Max( aMin.Y,Round(aCenter.Y + radius * sin(angle)) )  );
 end;
-
 
 
 // Biomes generator (basic ACCESSIBLE terrain)
@@ -1453,7 +1544,6 @@ end;
 //}
 
 
-
 // Create obstacles (eIron, eGold, watter, swamp and wetland) - obstacles are created via seeds and array of probabilities it is basicaly RANDOM WALK in probability array
 // aLocs = expected player's position (those will have protected radius to secure that player have place for city)
 // A = TKMByte2Array for obstacles
@@ -1755,9 +1845,6 @@ begin
 end;
 
 
-
-
-
 // Fixer of mountains with iron or gold to be able to place mines there
 procedure TKMRandomMapGenerator.MineFix(var A: TKMByte2Array);
 type
@@ -1907,16 +1994,13 @@ begin
     else if (Resources[I].Resource = Byte(btIron)) then
       RESOURCE := 3
     else // Coal and Stone are always fine
-      continue;
+      Continue;
     for K := Low(Resources[I].Points) to High(Resources[I].Points) do
       if not Visited[ Resources[I].Points[K].Y, Resources[I].Points[K].X ]
          AND (A[ Resources[I].Points[K].Y, Resources[I].Points[K].X ] = Resources[I].Resource) then
         Fixer(RESOURCE, Resources[I].Resource, Resources[I].MinesCnt, Resources[I].Points[K], Visited);
   end;
 end;
-
-
-
 
 
 // Cellular automaton - CA will secure that each tile has in his surrounding at leas another 3 tiles and together they make square
@@ -2023,7 +2107,6 @@ begin
     end;
   end;
 end;
-
 
 
 // This function will try to create smooth transitions with special decomposition of basic tiles
@@ -2165,10 +2248,10 @@ begin
     begin
       X := X1 shl 1;
       // Create mask
-      sum := (Byte(B[Y1,X1,1,1] = B[Y1,X1,1,0]) shl 0) OR
-             (Byte(B[Y1,X1,1,1] = B[Y1,X1,0,1]) shl 1) OR
-             (Byte(B[Y1,X1,1,1] = B[Y1,X1,1,2]) shl 2) OR
-             (Byte(B[Y1,X1,1,1] = B[Y1,X1,2,1]) shl 3);
+      sum := (Byte(B[Y1,X1,1,1] = B[Y1,X1,1,0]) shl 0) OR // 0001 Left
+             (Byte(B[Y1,X1,1,1] = B[Y1,X1,0,1]) shl 1) OR // 0010 Top
+             (Byte(B[Y1,X1,1,1] = B[Y1,X1,1,2]) shl 2) OR // 0100 Right
+             (Byte(B[Y1,X1,1,1] = B[Y1,X1,2,1]) shl 3);   // 1000 Down
 
       case sum of
       // 1 side is equal
@@ -2193,27 +2276,31 @@ begin
       // Note: conditions are for special transitions between iron and gold mountains
         // Left Top Right %0111
         7: begin
-          if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
-            begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,2,1]; LD := B[Y1,X1,2,1]; end else
-            begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,2,2]; LD := B[Y1,X1,2,0]; end;
+          LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,2,1]; LD := B[Y1,X1,2,1];
+          //if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
+          //  begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,2,1]; LD := B[Y1,X1,2,1]; end else
+          //  begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,2,2]; LD := B[Y1,X1,2,0]; end;
         end;
         // Left Down Right %1101
        13: begin
-         if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
-           begin LT := B[Y1,X1,0,1]; RT := B[Y1,X1,0,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,1]; end else
-           begin LT := B[Y1,X1,0,0]; RT := B[Y1,X1,0,2]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,1]; end;
+         LT := B[Y1,X1,0,1]; RT := B[Y1,X1,0,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,1];
+         //if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
+         //  begin LT := B[Y1,X1,0,1]; RT := B[Y1,X1,0,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,1]; end else
+         //  begin LT := B[Y1,X1,0,0]; RT := B[Y1,X1,0,2]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,1]; end;
        end;
         // Top Right Down %1110
        14: begin
-         if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
-           begin LT := B[Y1,X1,1,0]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,0]; end else
-           begin LT := B[Y1,X1,0,0]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,2,0]; end;
+         LT := B[Y1,X1,1,0]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,0];
+         //if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
+         //  begin LT := B[Y1,X1,1,0]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,1,0]; end else
+         //  begin LT := B[Y1,X1,0,0]; RT := B[Y1,X1,1,1]; RD := B[Y1,X1,1,1]; LD := B[Y1,X1,2,0]; end;
        end;
         // Top Left Down %1011
        11: begin
-         if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
-           begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,2]; RD := B[Y1,X1,1,2]; LD := B[Y1,X1,1,1]; end else
-           begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,0,2]; RD := B[Y1,X1,2,2]; LD := B[Y1,X1,1,1]; end;
+         LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,2]; RD := B[Y1,X1,1,2]; LD := B[Y1,X1,1,1];
+         //if (B[Y1,X1,1,1] <= Byte(btStone)) OR (B[Y1,X1,1,1] = Byte(btDark)) then
+         //  begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,1,2]; RD := B[Y1,X1,1,2]; LD := B[Y1,X1,1,1]; end else
+         //  begin LT := B[Y1,X1,1,1]; RT := B[Y1,X1,0,2]; RD := B[Y1,X1,2,2]; LD := B[Y1,X1,1,1]; end;
         end;
       // All sides are equal
         else // or 15: begin end;
@@ -2410,7 +2497,6 @@ begin
 end;
 
 
-
 // Replace textures which are surrounded by mountains by snow biome
 // A = TKMByte2Array of biomes
 procedure TKMRandomMapGenerator.SnowMountains(var A: TKMByte2Array);
@@ -2529,7 +2615,6 @@ begin
     FillObject.Free;
   end;
 end;
-
 
 
 // Converts biomes into numbers which represents specific tiles with right direction and nice variance, it also make balanced resources
@@ -2694,15 +2779,26 @@ const
       Output[I,K] := count[I];
       cntRes := cntRes + count[I];
     end;
+    // At the moment there is no 5x stone texture
+    if (Resource = Byte(btStone)) then
+    begin
+      for I := Low(Output) to High(Output) do
+      begin
+        Output[I,4] := Output[I,5];
+        Output[I,5] := 0;
+      end;
+      K := Max(1,K-1);
+    end;
+
     cntRes := cntRes * (K * incPerATile + 3*Byte(Resource = Byte(btStone))); // Maximal capacity of shape
 
     // Decrease maximal resource capacity of shape by move specific tiles into lower levels of Output array
-    incK := High(Output[0]);
+    incK := K;
     while (cntRes > Quantity) AND (incK >= -5) do // incK anti overflow condition
     begin
       I := 0;
       K := incK;
-      while (cntRes > Quantity) AND (I <= High(Output)) AND (K <= High(Output[I])) do
+      while (cntRes > Quantity) AND (I <= High(Output)) AND (K <= High(Output[I])-Byte(Resource = Byte(btStone))) do // 5x stone is missing
       begin
         if (K >= 1) then
         begin
@@ -2776,7 +2872,7 @@ begin
               if (B[Y1,X1] = Byte(btStone)) OR (B[Y1,X1] = Byte(btGold)) OR (B[Y1,X1] = Byte(btIron)) OR (B[Y1,X1] = Byte(btCoal)) then
               begin
                 S[Y1 shr 1,X1 shr 1] := B[Y1,X1];
-                //Terrain := GetFullTexture(FT[ B[Y1,X1] ,4]); // Place empty resources there and replace them with full variants later
+                Terrain := FT[ B[Y1,X1],3 ]; // Place dummy resources there and replace them with full variants later
               end
             // Other textures
               else
@@ -2837,7 +2933,7 @@ begin
           Resources[I].Points[K].X := X1;
           Resources[I].Points[K].Y := Y1;
           K := K + 1;
-          continue;
+          Continue;
         end
         // Already scanned tile from different shape (make 1 big shape with sum of all needed resources)
         // (for example coal tiles created as a part of gold tiles and coal tiles created as a part of iron tiles can be sometimes merged together but GenerateResources doesn't see it because CA can change it)
@@ -3055,14 +3151,13 @@ begin
   //  else if (Resources[I].Resource = Byte(btIron)) then
   //    RESOURCE := 3
   //  else // Coal and Stone are always fine
-  //    continue;
+  //    Continue;
   //  for K := Low(Resources[I].Points) to High(Resources[I].Points) do
   //    if not Visited[ Resources[I].Points[K].Y, Resources[I].Points[K].X ]
   //       AND (A[ Resources[I].Points[K].Y, Resources[I].Points[K].X ] = Resources[I].Resource) then
   //      Fixer(RESOURCE, Resources[I].Resource, Resources[I].MinesCnt, Resources[I].Points[K], Visited);
   //end;
 end;
-
 
 
 // Debug function (only full textures without transitions)
@@ -3108,7 +3203,6 @@ begin
 end;
 
 
-
 // Height generator
 // aLocs = player's locs
 // TilesPartsArr = tiles composition array
@@ -3124,7 +3218,7 @@ procedure TKMRandomMapGenerator.GenerateHeight(var aLocs: TKMPointArray; var Til
     X := aStartPoint.X;
     Y := aStartPoint.Y;
     v := aInitDir; // Init vector
-    //Dir := ifthen(aRightHanded, -1, 1); // Determine direction of rotation
+    //Dir := IfThen(aRightHanded, -1, 1); // Determine direction of rotation
     Counter := 0;
     aPointsCnt := 0;
     Overflow := 0;
@@ -3228,7 +3322,7 @@ procedure TKMRandomMapGenerator.GenerateHeight(var aLocs: TKMPointArray; var Til
                 P1 := Points[I];
                 P2 := Points[K];
                 if (Abs(H[P1.Y,P1.X]) > 10) OR (Abs(H[P2.Y,P2.X]) > 10) then
-                  continue;
+                  Continue;
                 if (H[P1.Y,P1.X] > H[P2.Y,P2.X]) // Make sure that cliff is just on 1 side
                    OR (H[P1.Y,P1.X] = 0) AND (H[P2.Y,P2.X] = 0) AND (fRNG.Random > 0.5) then // Random element
                   KMSwapPoints(P1,P2);
@@ -3409,13 +3503,13 @@ begin
     for X1 := 1 to fMapX-1 do
       TilesPartsArr.Height[Y1,X1] := Min(100, Min(90,Max(5, -H1[Y1,X1] + H2[Y1,X1] + H3[Y1,X1])) + fRNG.RandomI(HeightVariance[ A[Y1,X1] ]));
 
-  for Y_1 := 1 to fMapY-1 do
+  for Y_1 := 1 to fMapY do
   begin
     Y2 := Y_1 shl 1;
     Y1 := Y2 - 1;
     Y_0 := Max(0, Y_1 - 2);
     Y_2 := Min(fMapY, Y_1 + 1);
-    for X_1 := 1 to fMapX-1 do
+    for X_1 := 1 to fMapX do
     begin
       X2 := X_1 shl 1;
       X1 := X2 - 1;
@@ -3461,7 +3555,6 @@ begin
     end;
   end;
 end;
-
 
 
 // Objects generator
@@ -3679,7 +3772,6 @@ begin
   //}
   end;
 end;
-
 
 
 // TileTemplate with Cellular automaton (developed but unfinished because of performance impact and results)
@@ -4046,7 +4138,6 @@ end;
 //end;
 
 
-
 // Old version of TileTemplate (version with CA and actual version provides better results)
 //function TKMRandomMapGenerator.TileTemplateOLD(var A: TKMByte2Array; const Settings: Byte): TKMByte2Array;
 //var
@@ -4313,7 +4404,6 @@ end;
 //
 //  Result := B;
 //end;
-
 
 
 // JUNK
@@ -4600,7 +4690,7 @@ begin
         else if (Output[I].Resource = Byte(btIron)) then
           RESOURCE := 3
         else // Coal and Stone are always fine
-          continue;
+          Continue;
         for K := Low(Output[I].Points) to High(Output[I].Points) do
           if not Visited[ Output[I].Points[K].Y , Output[I].Points[K].X ] then
             MineFix(Output[I].Points[K], RESOURCE, Output[I].Resource, Visited, A);
@@ -4675,9 +4765,6 @@ end;
 //}
 
 
-
-
-
 {
 // Generator of random points in 2d grid with minimal distance between them (brute force)
 function TKMRandomMapGenerator.RNDPointsInGridBF(const cnt: Integer; Minimum,Maximum: TKMPoint): TKMPointArray;
@@ -4738,8 +4825,6 @@ begin
   end;
 end;
 //}
-
-
 
 
 {
@@ -4855,9 +4940,6 @@ begin
   end;
 end;
 //}
-
-
-
 
 
 {
@@ -5075,7 +5157,7 @@ var
     for i := Low(CenterPoints) to High(CenterPoints) do
     begin
       if BASE_PROBABILITY < fRNG.Random() then
-        continue;
+        Continue;
       TP_S := CenterPoints[I];
       len := 9 - fRNG.RandomI(9);
       TP_E.X := Min(High(PointsArr[0]), CenterPoints[I].X + len);
@@ -5288,16 +5370,12 @@ begin
       else if Result[I].Resource = Byte(btIron) then
         RESOURCE := 3
       else // Coal and Stone are always fine
-        continue;
+        Continue;
       if not Visited[ Result[I].Point.Y , Result[I].Point.X ] then
         MinerFixer(Result[I].Point, RESOURCE, Result[I].Resource, Visited, A);
     end;
 end;
 //}
-
-
-
-
 
 
 {

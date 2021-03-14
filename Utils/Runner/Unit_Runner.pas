@@ -3,14 +3,15 @@ unit Unit_Runner;
 interface
 uses
   Classes, Math, SysUtils,
-  KM_Defaults, KM_CommonClasses, KM_CommonTypes, KromUtils,
-  KM_GameApp, KM_ResLocales, KM_Log, KM_ResTexts, KM_CommonUtils, KM_RenderControl, ComInterface;
+  KM_Defaults, KM_CommonClasses, KM_CommonTypes, KromUtils, KM_GameTypes,
+  KM_GameApp, KM_Log, KM_CommonUtils, KM_RenderControl, ComInterface;
 
 
 type
   TKMRunnerCommon = class;
   TKMRunnerClass = class of TKMRunnerCommon;
   TKMRunnerMapsType = (rmtClassic, rmtMP8, rmtFight, rmtCoop);
+  TKMRunnerTeamsType = (rttFFA, rttRngAlliances, rttRngTeams);
 
   TKMRunResults = record
     ChartsCount: Integer; //How many charts return
@@ -43,6 +44,7 @@ type
     Seed: Integer;
     AIType: TKMAIType;
     MapsType: TKMRunnerMapsType;
+    TeamType: TKMRunnerTeamsType;
     OnProgress: TUnicodeStringEvent;
     OnProgress_Left: TUnicodeStringEvent;
     OnProgress_Left2: TUnicodeStringEvent;
@@ -62,7 +64,7 @@ var
 
 implementation
 uses
-  KM_HouseInn, KM_HouseBarracks, KM_HandsCollection;
+  KM_MainSettings, KM_GameSettings, KM_GameAppSettings;
 
 
 procedure RegisterRunner(aRunner: TKMRunnerClass);
@@ -176,8 +178,13 @@ begin
     tgtHeight := fRenderTarget.Height;
   end;
 
+  // Init settings global variables
+  TKMGameAppSettings.Create;
+  TKMainSettings.Create(tgtWidth, tgtHeight);
+
   gGameApp := TKMGameApp.Create(fRenderTarget, tgtWidth, tgtHeight, False, nil, nil, nil, True);
-  gGameApp.GameSettings.Autosave := False;
+  gGameSettings.Autosave := False;
+  gGameSettings.SaveCheckpoints := False;
   gGameApp.PreloadGameResources;
 end;
 
@@ -216,7 +223,7 @@ end;
 
 procedure TKMRunnerCommon.SimulateGame(aStartTick: Integer = 0; aEndTick: Integer = -1);
 var
-  I, IntParam, TestParam: Integer;
+  I: Integer;
 begin
   if (aEndTick = -1) then
     aEndTick := fResults.TimesCount - 1
@@ -245,7 +252,7 @@ begin
     fResults.Times[fRun, I] := TimeGet - fResults.Times[fRun, I];
 
     if gGameApp.Game.IsPaused then
-      gGameApp.Game.GameHold(False, grWin);
+      gGameApp.Game.Hold(False, grWin);
 
     if (I mod 60*10 = 0) and Assigned(OnProgress) then
       OnProgress(Format('%d (%d min)', [fRun + 1, I div 600]));

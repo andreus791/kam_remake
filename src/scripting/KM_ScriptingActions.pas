@@ -191,11 +191,13 @@ type
 
 implementation
 uses
-  TypInfo, KM_AI, KM_Game, KM_FogOfWar, KM_HandsCollection, KM_HandLogistics,
+  TypInfo, KM_AI, KM_Game, KM_GameParams, KM_FogOfWar, KM_HandsCollection, KM_HandLogistics,
   KM_HouseBarracks, KM_HouseSchool, KM_ResUnits, KM_CommonUtils, KM_HouseMarket,
   KM_Resource, KM_Hand, KM_AIDefensePos, KM_CommonClasses,
-  KM_PathFindingRoad, KM_ResMapElements, KM_BuildList,
-  KM_HouseWoodcutters, KM_HouseTownHall;
+  KM_PathFindingRoad, KM_ResMapElements, KM_HandConstructions,
+  KM_HouseWoodcutters, KM_HouseTownHall,
+  KM_UnitGroupTypes,
+  KM_ResTypes;
 
 const
   MIN_SOUND_AT_LOC_RADIUS = 28;
@@ -208,8 +210,8 @@ const
 
 function HouseTypeValid(aHouseType: Integer): Boolean; inline;
 begin
-  Result := (aHouseType in [Low(HouseIndexToType)..High(HouseIndexToType)])
-            and (HouseIndexToType[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
+  Result := (aHouseType in [Low(HOUSE_ID_TO_TYPE)..High(HOUSE_ID_TO_TYPE)])
+            and (HOUSE_ID_TO_TYPE[aHouseType] <> htNone); //KaM index 26 is unused (htNone)
 end;
 
 
@@ -428,13 +430,13 @@ end;
 procedure TKMScriptActions.PlayerWareDistribution(aPlayer, aWareType, aHouseType, aAmount: Byte);
 begin
   try
-    if (aWareType in [Low(WareIndexToType) .. High(WareIndexToType)])
-    and (WareIndexToType[aWareType] in [wtSteel, wtCoal, wtWood, wtCorn])
+    if (aWareType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)])
+    and (WARE_ID_TO_TYPE[aWareType] in [wtSteel, wtCoal, wtWood, wtCorn])
     and HouseTypeValid(aHouseType)
     and InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and InRange(aAmount, 0, 5) then
     begin
-      gHands[aPlayer].Stats.WareDistribution[WareIndexToType[aWareType], HouseIndexToType[aHouseType]] := aAmount;
+      gHands[aPlayer].Stats.WareDistribution[WARE_ID_TO_TYPE[aWareType], HOUSE_ID_TO_TYPE[aHouseType]] := aAmount;
       gHands[aPlayer].Houses.UpdateResRequest;
     end
     else
@@ -919,13 +921,13 @@ begin
     Result := UID_NONE;
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aType in [UnitTypeToIndex[WARRIOR_MIN]..UnitTypeToIndex[WARRIOR_MAX]])
+    and (aType in [UNIT_TYPE_TO_ID[WARRIOR_MIN]..UNIT_TYPE_TO_ID[WARRIOR_MAX]])
     and gTerrain.TileInMapCoords(X,Y)
     and (TKMDirection(aDir+1) in [dirN..dirNW])
     and (aCount > 0)
     and (aColumns > 0) then
     begin
-      G := gHands[aPlayer].AddUnitGroup(UnitIndexToType[aType],
+      G := gHands[aPlayer].AddUnitGroup(UNIT_ID_TO_TYPE[aType],
                                           KMPoint(X,Y),
                                           TKMDirection(aDir+1),
                                           aColumns,
@@ -953,11 +955,11 @@ begin
 
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aType in [UnitTypeToIndex[CITIZEN_MIN] .. UnitTypeToIndex[CITIZEN_MAX]])
+    and (aType in [UNIT_TYPE_TO_ID[CITIZEN_MIN] .. UNIT_TYPE_TO_ID[CITIZEN_MAX]])
     and gTerrain.TileInMapCoords(X, Y)
     and (TKMDirection(aDir + 1) in [dirN .. dirNW]) then
     begin
-      U := gHands[aPlayer].AddUnit(UnitIndexToType[aType], KMPoint(X,Y));
+      U := gHands[aPlayer].AddUnit(UNIT_ID_TO_TYPE[aType], KMPoint(X,Y));
       if U = nil then Exit;
       Result := U.UID;
       U.Direction := TKMDirection(aDir + 1);
@@ -988,9 +990,9 @@ begin
     and HouseTypeValid(aHouseType)
     and gTerrain.TileInMapCoords(X, Y) then
     begin
-      if gTerrain.CanPlaceHouseFromScript(HouseIndexToType[aHouseType], KMPoint(X - gRes.Houses[HouseIndexToType[aHouseType]].EntranceOffsetX, Y)) then
+      if gTerrain.CanPlaceHouseFromScript(HOUSE_ID_TO_TYPE[aHouseType], KMPoint(X - gRes.Houses[HOUSE_ID_TO_TYPE[aHouseType]].EntranceOffsetX, Y)) then
       begin
-        H := gHands[aPlayer].AddHouse(HouseIndexToType[aHouseType], X, Y, True);
+        H := gHands[aPlayer].AddHouse(HOUSE_ID_TO_TYPE[aHouseType], X, Y, True);
         if H = nil then Exit;
         Result := H.UID;
       end;
@@ -1021,10 +1023,10 @@ begin
     and HouseTypeValid(aHouseType)
     and gTerrain.TileInMapCoords(X,Y) then
     begin
-      NonEntranceX := X - gRes.Houses[HouseIndexToType[aHouseType]].EntranceOffsetX;
-      if gTerrain.CanPlaceHouseFromScript(HouseIndexToType[aHouseType], KMPoint(NonEntranceX, Y)) then
+      NonEntranceX := X - gRes.Houses[HOUSE_ID_TO_TYPE[aHouseType]].EntranceOffsetX;
+      if gTerrain.CanPlaceHouseFromScript(HOUSE_ID_TO_TYPE[aHouseType], KMPoint(NonEntranceX, Y)) then
       begin
-        H := gHands[aPlayer].AddHouseWIP(HouseIndexToType[aHouseType], KMPoint(NonEntranceX, Y));
+        H := gHands[aPlayer].AddHouseWIP(HOUSE_ID_TO_TYPE[aHouseType], KMPoint(NonEntranceX, Y));
         if (H = nil) or (H.IsDestroyed) then
           Exit;
 
@@ -1053,7 +1055,7 @@ begin
           gHands[aPlayer].Deliveries.Queue.AddDemand(H, nil, wtWood, gRes.Houses[H.HouseType].WoodCost, dtOnce, diHigh4);
           gHands[aPlayer].Deliveries.Queue.AddDemand(H, nil, wtStone, gRes.Houses[H.HouseType].StoneCost, dtOnce, diHigh4);
         end;
-        gHands[aPlayer].BuildList.HouseList.AddHouse(H);
+        gHands[aPlayer].Constructions.HouseList.AddHouse(H);
       end;
     end
     else
@@ -1119,7 +1121,7 @@ begin
         AttackType := aatOnce;
 
       //Attack delay should be counted from the moment attack was added from script
-      Delay := aDelay + gGame.GameTick;
+      Delay := aDelay + gGameParams.Tick;
       Result := gHands[aPlayer].AI.General.Attacks.AddAttack(AttackType, Delay, aTotalMen, aMelleCount, aAntiHorseCount, aRangedCount, aMountedCount, aRandomGroups, aTarget, 0, aCustomPosition);
     end else
       LogParamWarning('Actions.AIAttackAdd', [aPlayer, aDelay, aTotalMen, aMelleCount, aAntiHorseCount, aRangedCount, aMountedCount]);
@@ -1470,10 +1472,10 @@ begin
     Result := UID_NONE;
 
     //Verify all input parameters
-    if (aType in [UnitTypeToIndex[ANIMAL_MIN] .. UnitTypeToIndex[ANIMAL_MAX]])
+    if (aType in [UNIT_TYPE_TO_ID[ANIMAL_MIN] .. UNIT_TYPE_TO_ID[ANIMAL_MAX]])
     and gTerrain.TileInMapCoords(X, Y) then
     begin
-      U := gHands.PlayerAnimals.AddUnit(UnitIndexToType[aType], KMPoint(X,Y));
+      U := gHands.PlayerAnimals.AddUnit(UNIT_ID_TO_TYPE[aType], KMPoint(X,Y));
       if U <> nil then
         Result := U.UID;
     end
@@ -1580,14 +1582,14 @@ begin
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and InRange(aCount, 0, High(Word))
-    and (aType in [Low(WareIndexToType) .. High(WareIndexToType)]) then
+    and (aType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)]) then
     begin
       H := gHands[aPlayer].FindHouse(htStore, 1);
       if H <> nil then
       begin
-        H.ResAddToIn(WareIndexToType[aType], aCount);
-        gHands[aPlayer].Stats.WareProduced(WareIndexToType[aType], aCount);
-        gScriptEvents.ProcWareProduced(H, WareIndexToType[aType], aCount);
+        H.ResAddToIn(WARE_ID_TO_TYPE[aType], aCount);
+        gHands[aPlayer].Stats.WareProduced(WARE_ID_TO_TYPE[aType], aCount);
+        gScriptEvents.ProcWareProduced(H, WARE_ID_TO_TYPE[aType], aCount);
       end;
     end
     else
@@ -1609,15 +1611,15 @@ begin
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and InRange(aCount, 0, High(Word))
-    and (aType in [Low(WareIndexToType) .. High(WareIndexToType)])
-    and (WareIndexToType[aType] in [WARFARE_MIN .. WARFARE_MAX]) then
+    and (aType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)])
+    and (WARE_ID_TO_TYPE[aType] in [WARFARE_MIN .. WARFARE_MAX]) then
     begin
       H := gHands[aPlayer].FindHouse(htBarracks, 1);
       if H <> nil then
       begin
-        H.ResAddToIn(WareIndexToType[aType], aCount);
-        gHands[aPlayer].Stats.WareProduced(WareIndexToType[aType], aCount);
-        gScriptEvents.ProcWareProduced(H, WareIndexToType[aType], aCount);
+        H.ResAddToIn(WARE_ID_TO_TYPE[aType], aCount);
+        gHands[aPlayer].Stats.WareProduced(WARE_ID_TO_TYPE[aType], aCount);
+        gScriptEvents.ProcWareProduced(H, WARE_ID_TO_TYPE[aType], aCount);
       end;
     end
     else
@@ -1894,7 +1896,7 @@ begin
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and HouseTypeValid(aHouseType) then
-      gHands[aPlayer].Locks.HouseGranted[HouseIndexToType[aHouseType]] := True
+      gHands[aPlayer].Locks.HouseGranted[HOUSE_ID_TO_TYPE[aHouseType]] := True
     else
       LogParamWarning('Actions.HouseUnlock', [aPlayer, aHouseType]);
   except
@@ -1913,7 +1915,7 @@ begin
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and HouseTypeValid(aHouseType) then
-      gHands[aPlayer].Locks.HouseBlocked[HouseIndexToType[aHouseType]] := not aAllowed
+      gHands[aPlayer].Locks.HouseBlocked[HOUSE_ID_TO_TYPE[aHouseType]] := not aAllowed
     else
       LogParamWarning('Actions.HouseAllow', [aPlayer, aHouseType, Byte(aAllowed)]);
   except
@@ -1974,8 +1976,8 @@ begin
   try
     //Verify all input parameters
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aResType in [Low(WareIndexToType)..High(WareIndexToType)]) then
-      gHands[aPlayer].Locks.AllowToTrade[WareIndexToType[aResType]] := aAllowed
+    and (aResType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
+      gHands[aPlayer].Locks.AllowToTrade[WARE_ID_TO_TYPE[aResType]] := aAllowed
     else
       LogParamWarning('Actions.SetTradeAllowed', [aPlayer, aResType, Byte(aAllowed)]);
   except
@@ -2125,9 +2127,9 @@ var
   Res: TKMWareType;
 begin
   try
-    if (aHouseID > 0) and (aType in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    if (aHouseID > 0) and (aType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aType];
+      Res := WARE_ID_TO_TYPE[aType];
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil) and not H.IsDestroyed and H.IsComplete then
         if H.ResCanAddToIn(Res) or H.ResCanAddToOut(Res) then
@@ -2161,9 +2163,9 @@ var
   Res: TKMWareType;
 begin
   try
-    if (aHouseID > 0) and (aType in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    if (aHouseID > 0) and (aType in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aType];
+      Res := WARE_ID_TO_TYPE[aType];
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil) and not H.IsDestroyed and H.IsComplete then
         //Store/barracks mix input/output (add to input, take from output) so we must process them together
@@ -2200,12 +2202,12 @@ begin
   try
     Result := 0;
     if (aHouseID > 0)
-      and ((aUnitType = UnitTypeToIndex[utMilitia])
-        or (aUnitType in [UnitTypeToIndex[WARRIOR_EQUIPABLE_TH_MIN]..UnitTypeToIndex[WARRIOR_EQUIPABLE_TH_MAX]])) then
+      and ((aUnitType = UNIT_TYPE_TO_ID[utMilitia])
+        or (aUnitType in [UNIT_TYPE_TO_ID[WARRIOR_EQUIPABLE_TH_MIN]..UNIT_TYPE_TO_ID[WARRIOR_EQUIPABLE_TH_MAX]])) then
     begin
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil) and (H is TKMHouseTownHall) and not H.IsDestroyed and H.IsComplete then
-        Result := TKMHouseTownHall(H).Equip(UnitIndexToType[aUnitType], aCount);
+        Result := TKMHouseTownHall(H).Equip(UNIT_ID_TO_TYPE[aUnitType], aCount);
     end
     else
       LogParamWarning('Actions.HouseTownHallEquip', [aHouseID, aUnitType]);
@@ -2401,9 +2403,9 @@ var
 begin
   try
     if (aHouseID > 0)
-    and (aWareType in [Low(WareIndexToType) .. High(WareIndexToType)]) then
+    and (aWareType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aWareType];
+      Res := WARE_ID_TO_TYPE[aWareType];
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil)
         and (H is TKMHouseStore)
@@ -2435,9 +2437,9 @@ var
 begin
   try
     if (aHouseID > 0) and InRange(aAmount, 0, MAX_WARES_ORDER)
-    and (aWareType in [Low(WareIndexToType) .. High(WareIndexToType)]) then
+    and (aWareType in [Low(WARE_ID_TO_TYPE) .. High(WARE_ID_TO_TYPE)]) then
     begin
-      Res := WareIndexToType[aWareType];
+      Res := WARE_ID_TO_TYPE[aWareType];
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil)
         and not H.IsDestroyed
@@ -2494,14 +2496,14 @@ begin
   try
     Result := 0;
     if (aHouseID > 0)
-    and (aUnitType in [UnitTypeToIndex[CITIZEN_MIN]..UnitTypeToIndex[CITIZEN_MAX]]) then
+    and (aUnitType in [UNIT_TYPE_TO_ID[CITIZEN_MIN]..UNIT_TYPE_TO_ID[CITIZEN_MAX]]) then
     begin
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil)
         and (H is TKMHouseSchool)
         and not H.IsDestroyed
         and H.IsComplete then
-        Result := TKMHouseSchool(H).AddUnitToQueue(UnitIndexToType[aUnitType], aCount);
+        Result := TKMHouseSchool(H).AddUnitToQueue(UNIT_ID_TO_TYPE[aUnitType], aCount);
     end
     else
       LogParamWarning('Actions.HouseSchoolQueueAdd', [aHouseID, aUnitType]);
@@ -2522,14 +2524,14 @@ begin
   try
     Result := 0;
     if (aHouseID > 0)
-    and (aUnitType in [UnitTypeToIndex[WARRIOR_EQUIPABLE_BARRACKS_MIN]..UnitTypeToIndex[WARRIOR_EQUIPABLE_BARRACKS_MAX]]) then
+    and (aUnitType in [UNIT_TYPE_TO_ID[WARRIOR_EQUIPABLE_BARRACKS_MIN]..UNIT_TYPE_TO_ID[WARRIOR_EQUIPABLE_BARRACKS_MAX]]) then
     begin
       H := fIDCache.GetHouse(aHouseID);
       if (H <> nil)
         and (H is TKMHouseBarracks)
         and not H.IsDestroyed
         and H.IsComplete then
-        Result := TKMHouseBarracks(H).Equip(UnitIndexToType[aUnitType], aCount);
+        Result := TKMHouseBarracks(H).Equip(UNIT_ID_TO_TYPE[aUnitType], aCount);
     end
     else
       LogParamWarning('Actions.HouseBarracksEquip', [aHouseID, aUnitType]);
@@ -2724,7 +2726,7 @@ end;
 //* aRandomTiles: use random tiles
 //* aOverrideCustomTiles: override tiles, that were manually set from tiles table
 //* aBrushMask: brush mask type
-//* aBlendingLvl: blending level for masks. Allowed values are from 0 to 100
+//* aBlendingLvl: blending level for masks. Allowed values are from 0 to 15
 //* aUseMagicBrush: enable/disable magic brush to change/remove brush mask from the area
 procedure TKMScriptActions.MapBrushWithMask(X, Y: Integer; aSquare: Boolean; aSize: Integer; aTerKind: TKMTerrainKind; aRandomTiles, aOverrideCustomTiles: Boolean; aBrushMask: TKMTileMaskKind; aBlendingLvl: Integer; aUseMagicBrush: Boolean);
 begin
@@ -3069,12 +3071,12 @@ var
 begin
   try
     if (aMarketID > 0)
-    and (aFrom in [Low(WareIndexToType)..High(WareIndexToType)])
-    and (aTo in [Low(WareIndexToType)..High(WareIndexToType)]) then
+    and (aFrom in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)])
+    and (aTo in [Low(WARE_ID_TO_TYPE)..High(WARE_ID_TO_TYPE)]) then
     begin
       H := fIDCache.GetHouse(aMarketID);
-      ResFrom := WareIndexToType[aFrom];
-      ResTo := WareIndexToType[aTo];
+      ResFrom := WARE_ID_TO_TYPE[aFrom];
+      ResTo := WARE_ID_TO_TYPE[aTo];
       if (H is TKMHouseMarket)
         and not H.IsDestroyed
         and H.IsComplete
@@ -3201,7 +3203,7 @@ begin
       if gHands[aPlayer].CanAddFieldPlan(KMPoint(X, Y), ftRoad) then
       begin
         Result := True;
-        gHands[aPlayer].BuildList.FieldworksList.AddField(KMPoint(X, Y), ftRoad);
+        gHands[aPlayer].Constructions.FieldworksList.AddField(KMPoint(X, Y), ftRoad);
       end;
     end
     else
@@ -3219,7 +3221,7 @@ end;
 procedure TKMScriptActions.Peacetime(aPeacetime: Cardinal);
 begin
   try
-    gGame.GameOptions.Peacetime := aPeacetime div 600; //PT in minutes
+    gGame.Options.Peacetime := aPeacetime div 600; //PT in minutes
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -3241,7 +3243,7 @@ begin
       if gHands[aPlayer].CanAddFieldPlan(KMPoint(X, Y), ftCorn) then
       begin
         Result := True;
-        gHands[aPlayer].BuildList.FieldworksList.AddField(KMPoint(X, Y), ftCorn);
+        gHands[aPlayer].Constructions.FieldworksList.AddField(KMPoint(X, Y), ftCorn);
       end;
     end
     else
@@ -3267,7 +3269,7 @@ begin
       if gHands[aPlayer].CanAddFieldPlan(KMPoint(X, Y), ftWine) then
       begin
         Result := True;
-        gHands[aPlayer].BuildList.FieldworksList.AddField(KMPoint(X, Y), ftWine);
+        gHands[aPlayer].Constructions.FieldworksList.AddField(KMPoint(X, Y), ftWine);
       end;
     end
     else
@@ -3310,7 +3312,7 @@ begin
         for I := 0 to Points.Count - 1 do
           if gHands[aPlayer].CanAddFieldPlan(Points[I], ftRoad) then
             if not aCompleted then
-              gHands[aPlayer].BuildList.FieldworksList.AddField(Points[I], ftRoad)
+              gHands[aPlayer].Constructions.FieldworksList.AddField(Points[I], ftRoad)
             else
             begin
               gTerrain.SetRoad(Points[I], aPlayer);
@@ -3346,15 +3348,15 @@ begin
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
     and gTerrain.TileInMapCoords(X,Y) then
     begin
-      if gHands[aPlayer].BuildList.HousePlanList.TryGetPlan(KMPoint(X, Y), HPlan) then
+      if gHands[aPlayer].Constructions.HousePlanList.TryGetPlan(KMPoint(X, Y), HPlan) then
       begin
-        gHands[aPlayer].BuildList.HousePlanList.RemPlan(KMPoint(X, Y));
+        gHands[aPlayer].Constructions.HousePlanList.RemPlan(KMPoint(X, Y));
         gHands[aPlayer].Stats.HousePlanRemoved(HPlan.HouseType);
         Result := True;
       end;
-      if gHands[aPlayer].BuildList.FieldworksList.HasField(KMPoint(X, Y)) <> ftNone then
+      if gHands[aPlayer].Constructions.FieldworksList.HasField(KMPoint(X, Y)) <> ftNone then
       begin
-        gHands[aPlayer].BuildList.FieldworksList.RemFieldPlan(KMPoint(X, Y));
+        gHands[aPlayer].Constructions.FieldworksList.RemFieldPlan(KMPoint(X, Y));
         Result := True;
       end;
     end
@@ -3379,10 +3381,10 @@ begin
     and HouseTypeValid(aHouseType)
     and gTerrain.TileInMapCoords(X,Y) then
     begin
-      if gHands[aPlayer].CanAddHousePlan(KMPoint(X, Y), HouseIndexToType[aHouseType]) then
+      if gHands[aPlayer].CanAddHousePlan(KMPoint(X, Y), HOUSE_ID_TO_TYPE[aHouseType]) then
       begin
         Result := True;
-        gHands[aPlayer].AddHousePlan(HouseIndexToType[aHouseType], KMPoint(X, Y));
+        gHands[aPlayer].AddHousePlan(HOUSE_ID_TO_TYPE[aHouseType], KMPoint(X, Y));
       end;
     end
     else
@@ -3400,8 +3402,8 @@ procedure TKMScriptActions.UnitBlock(aPlayer: Byte; aType: Word; aBlock: Boolean
 begin
   try
     if InRange(aPlayer, 0, gHands.Count - 1) and (gHands[aPlayer].Enabled)
-    and (aType in [Low(UnitIndexToType) .. High(UnitIndexToType)]) then
-      gHands[aPlayer].Locks.SetUnitBlocked(aBlock, UnitIndexToType[aType])
+    and (aType in [Low(UNIT_ID_TO_TYPE) .. High(UNIT_ID_TO_TYPE)]) then
+      gHands[aPlayer].Locks.SetUnitBlocked(aBlock, UNIT_ID_TO_TYPE[aType])
     else
       LogParamWarning('Actions.UnitBlock', [aPlayer, aType, Byte(aBlock)]);
   except
@@ -3641,12 +3643,12 @@ var
   Speed: Single;
 begin
   try
-    if gGame.IsMultiplayer then
+    if gGameParams.IsMultiplayer then
       Speed := EnsureRange(aSpeed, GAME_SPEED_NORMAL, GAME_MP_SPEED_MAX)
     else
       Speed := EnsureRange(aSpeed, GAME_SPEED_NORMAL, GAME_SP_SPEED_MAX);
 
-    gGame.SetGameSpeedGIP(Speed, True);
+    gGame.SetSpeedGIP(Speed, True);
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
@@ -3659,12 +3661,11 @@ end;
 procedure TKMScriptActions.GameSpeedChangeAllowed(aAllowed: Boolean);
 begin
   try
-    gGame.GameSpeedChangeAllowed := aAllowed;
+    gGame.SpeedChangeAllowed := aAllowed;
   except
     gScriptEvents.ExceptionOutsideScript := True; //Don't blame script for this exception
     raise;
   end;
-
 end;
 
 

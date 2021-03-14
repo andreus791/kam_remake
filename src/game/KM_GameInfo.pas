@@ -2,7 +2,8 @@ unit KM_GameInfo;
 {$I KaM_Remake.inc}
 interface
 uses
-  KM_Hand, KM_CommonClasses, KM_MapTypes, KM_Defaults;
+  KM_CommonClasses, KM_MapTypes, KM_Defaults,
+  KM_HandTypes;
 
 
 type
@@ -30,6 +31,7 @@ type
     MissionMode: TKMissionMode; //Fighting or Build-a-City map
     MissionDifficulty: TKMMissionDifficulty;
     MapSizeX, MapSizeY: Integer;
+    BlockColorSelection: Boolean;
 
     PlayerCount: Byte;
     Enabled: array [0..MAX_HANDS-1] of Boolean;
@@ -102,6 +104,7 @@ procedure TKMGameInfo.Load(LoadStream: TKMemoryStream);
     LoadStream.Read(MissionDifficulty, SizeOf(MissionDifficulty));
     LoadStream.Read(MapSizeX);
     LoadStream.Read(MapSizeY);
+    LoadStream.Read(BlockColorSelection);
 
     LoadStream.Read(PlayerCount);
     for I := 0 to PlayerCount - 1 do
@@ -116,13 +119,13 @@ procedure TKMGameInfo.Load(LoadStream: TKMemoryStream);
   end;
 
 var
-  s: AnsiString;
+  ansiStr: AnsiString;
 begin
   ResetParseError;
-  LoadStream.ReadA(s);
-  if s <> 'KaM_GameInfo' then
+  LoadStream.ReadA(ansiStr);
+  if ansiStr <> 'KaM_GameInfo' then
   begin
-    fParseError.ErrorString := Format(gResTexts[TX_SAVE_UNSUPPORTED_FORMAT], [Copy(s, 1, 8)]);
+    fParseError.ErrorString := Format(gResTexts[TX_SAVE_UNSUPPORTED_FORMAT], [Copy(ansiStr, 1, 8)]);
     fParseError.ErrorType := gipetUnsupportedFormat;
     Exit;
   end;
@@ -151,7 +154,8 @@ end;
 
 
 procedure TKMGameInfo.Save(SaveStream: TKMemoryStream);
-var I: Integer;
+var
+  I: Integer;
 begin
   SaveStream.WriteA('KaM_GameInfo');
   SaveStream.WriteA(GAME_REVISION); //Save current revision
@@ -165,13 +169,15 @@ begin
   // Game times differ for game and replay
   // Set default value there in that case
   if GAME_SAVE_STRIP_FOR_CRC then
-    SaveStream.Write(TDateTime(0))
+    SaveStream.Write(DATE_TIME_ZERO)
   else
     SaveStream.Write(SaveTimestamp);
+
   SaveStream.Write(MissionMode, SizeOf(MissionMode));
   SaveStream.Write(MissionDifficulty, SizeOf(MissionDifficulty));
   SaveStream.Write(MapSizeX);
   SaveStream.Write(MapSizeY);
+  SaveStream.Write(BlockColorSelection);
 
   SaveStream.Write(PlayerCount);
   for I := 0 to PlayerCount - 1 do

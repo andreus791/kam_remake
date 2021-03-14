@@ -3,11 +3,12 @@ unit KM_HandLocks;
 interface
 uses
   KM_ResHouses, KM_ResWares,
-  KM_CommonClasses, KM_Defaults;
+  KM_CommonClasses, KM_Defaults,
+  KM_ResTypes;
 
 
 type
-  // Permissions
+  // Permissions to build, trade and train
   TKMHandLocks = class
   private
     fHouseUnlocked: array [TKMHouseType] of Boolean; //If building requirements performed

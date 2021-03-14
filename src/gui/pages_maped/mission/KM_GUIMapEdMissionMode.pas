@@ -60,7 +60,7 @@ implementation
 uses
   {$IFDEF MSWindows} Windows, {$ENDIF}
   {$IFDEF Unix} LCLType, {$ENDIF}
-  KM_ResTexts, KM_Game, KM_RenderUI, KM_ResFonts, KM_InterfaceGame, KM_HandsCollection, KM_Hand;
+  KM_ResTexts, KM_Game, KM_GameParams, KM_RenderUI, KM_ResFonts, KM_InterfaceGame, KM_HandsCollection, KM_Hand;
 
 
 { TKMMapEdMissionMode }
@@ -150,7 +150,6 @@ begin
 
       CheckBox_BlockFullMapPreview := TKMCheckBox.Create(Panel_CheckBoxes, CHK_W + 10, 60, CHK_W, 20, gResTexts[TX_MAPED_MISSION_BLOCK_FULL_MAP_PREVIEW], fntMetal);
       CheckBox_BlockFullMapPreview.Hint := gResTexts[TX_MAPED_MISSION_BLOCK_FULL_MAP_PREVIEW_HINT];
-
 
 
     Inc(Top, 90);
@@ -267,7 +266,7 @@ end;
 
 procedure TKMMapEdMissionMode.Mission_ModeChange(Sender: TObject);
 begin
-  gGame.MissionMode := TKMissionMode(Radio_MissionMode.ItemIndex);
+  gGameParams.MissionMode := TKMissionMode(Radio_MissionMode.ItemIndex);
 end;
 
 
@@ -305,7 +304,7 @@ end;
 
 procedure TKMMapEdMissionMode.Mission_ModeUpdate;
 begin
-  Radio_MissionMode.ItemIndex := Byte(gGame.MissionMode);
+  Radio_MissionMode.ItemIndex := Byte(gGameParams.MissionMode);
 end;
 
 
@@ -411,8 +410,8 @@ procedure TKMMapEdMissionMode.UpdateMapParams;
 var
   MD: TKMMissionDifficulty;
 begin
-  Edit_Author.Text := gGame.MapTxtInfo.Author;
-  Edit_Version.Text := gGame.MapTxtInfo.Version;
+  Edit_Author.SetTextSilently(gGame.MapTxtInfo.Author);   // Will not trigger OnChange event
+  Edit_Version.SetTextSilently(gGame.MapTxtInfo.Version); // Will not trigger OnChange event
 
   if gGame.MapTxtInfo.IsSmallDescLibxSet then
     Radio_SmallDescType.ItemIndex := 1
@@ -424,9 +423,9 @@ begin
   else
     Radio_BigDescType.ItemIndex := 0;
 
-  Edit_SmallDesc.Text     := gGame.MapTxtInfo.SmallDesc;
+  Edit_SmallDesc.SetTextSilently(gGame.MapTxtInfo.SmallDesc); // Will not trigger OnChange event
   NumEdit_SmallDesc.Value := gGame.MapTxtInfo.SmallDescLibx;
-  Edit_BigDesc.Text       := gGame.MapTxtInfo.GetBigDesc;
+  Edit_BigDesc.SetTextSilently(gGame.MapTxtInfo.GetBigDesc);  // Will not trigger OnChange event
   NumEdit_BigDesc.Value   := gGame.MapTxtInfo.BigDescLibx;
   Memo_BigDesc.Text       := Edit_BigDesc.Text;
 

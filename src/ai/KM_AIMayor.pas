@@ -6,7 +6,8 @@ uses
   KM_PathfindingRoad,
   KM_ResHouses, KM_HouseCollection,
   KM_CommonClasses, KM_Defaults, KM_Points,
-  KM_NavMeshDefences;
+  KM_NavMeshDefences,
+  KM_ResTypes;
 
 
 type
@@ -361,7 +362,7 @@ begin
       PL1 := gAIFields.Influences.GetBestAllianceOwner(fOwner, Point1, atAlly);
       PL2 := gAIFields.Influences.GetBestAllianceOwner(fOwner, Point2, atAlly);
       if (PL1 <> fOwner) AND (PL2 <> fOwner) AND (PL1 <> PLAYER_NONE) AND (PL2 <> PLAYER_NONE) then
-        continue;
+        Continue;
       DefCount := Ceil( KMLength(Point1, Point2) / DISTANCE_BETWEEN_TOWERS );
       for K := 0 to DefCount - 1 do
       begin
@@ -492,7 +493,7 @@ begin
     for I := 0 to NodeList.Count - 1 do
       //We must check if we can add the plan ontop of plans placed earlier in this turn
       if P.CanAddFieldPlan(NodeList[I], ftRoad) then
-         P.BuildList.FieldworksList.AddField(NodeList[I], ftRoad);
+         P.Constructions.FieldworksList.AddField(NodeList[I], ftRoad);
     Result := True;
   finally
     NodeList.Free;
@@ -540,8 +541,8 @@ begin
   
   //I tried to use this when the bug occured but it didn't always work because AI places multiple house/field plans at once (if P.CanAddFieldPlan(KMPointBelow(Loc), ftRoad) then)
   //Fixes Classical AI bug related to houses never being finished/connected to road network
-   P.BuildList.FieldworksList.RemFieldPlan(KMPointBelow(Loc)); //Make sure our entrance to the house has no plan (vine/corn) in front of it
-   P.BuildList.FieldworksList.AddField(KMPointBelow(Loc), ftRoad); //Place a road below house entrance to make sure it is connected to our city!
+   P.Constructions.FieldworksList.RemFieldPlan(KMPointBelow(Loc)); //Make sure our entrance to the house has no plan (vine/corn) in front of it
+   P.Constructions.FieldworksList.AddField(KMPointBelow(Loc), ftRoad); //Place a road below house entrance to make sure it is connected to our city!
 
   //Build fields for Farm
   if aHouse = htFarm then
@@ -565,7 +566,7 @@ begin
 
       NodeTagList.SortByTag;
       for I := 0 to Min(NodeTagList.Count, 16) - 1 do
-        P.BuildList.FieldworksList.AddField(NodeTagList[I], ftCorn);
+        P.Constructions.FieldworksList.AddField(NodeTagList[I], ftCorn);
     finally
       NodeTagList.Free;
     end;
@@ -593,7 +594,7 @@ begin
 
       NodeTagList.SortByTag;
       for I := 0 to Min(NodeTagList.Count, 10) - 1 do
-        P.BuildList.FieldworksList.AddField(NodeTagList[I], ftWine);
+        P.Constructions.FieldworksList.AddField(NodeTagList[I], ftWine);
     finally
       NodeTagList.Free;
     end;
@@ -608,7 +609,7 @@ begin
     for I := Max(Loc.Y - 3, 1) to Min(Loc.Y + 2, gTerrain.MapY - 1) do
     for K := Max(Loc.X - 2, 1) to Min(Loc.X + 2, gTerrain.MapY - 1) do
     if P.CanAddFieldPlan(KMPoint(K, I), ftRoad) then
-      P.BuildList.FieldworksList.AddField(KMPoint(K, I), ftRoad);
+      P.Constructions.FieldworksList.AddField(KMPoint(K, I), ftRoad);
 
   Result := True;
 end;
@@ -724,7 +725,7 @@ begin
   //Build towers if village is done, or peacetime is nearly over
   if P.Locks.HouseCanBuild(htWatchTower) then
     if ((fBalance.Peek = htNone) and (P.Stats.GetHouseWip(htAny) = 0)) //Finished building
-    or ((gGame.GameOptions.Peacetime <> 0) and gGame.CheckTime(600 * Max(0, gGame.GameOptions.Peacetime - 15))) then
+    or ((gGame.Options.Peacetime <> 0) and gGame.CheckTime(600 * Max(0, gGame.Options.Peacetime - 15))) then
       PlanDefenceTowers;
 
   if fDefenceTowersPlanned then
@@ -786,7 +787,7 @@ begin
     for I := Max(StoreLoc.Y - 3, 1) to Min(StoreLoc.Y + 2, gTerrain.MapY - 1) do
     for K := StoreLoc.X - 2 to StoreLoc.X + 2 do
     if P.CanAddFieldPlan(KMPoint(K, I), ftRoad) then
-      P.BuildList.FieldworksList.AddField(KMPoint(K, I), ftRoad);
+      P.Constructions.FieldworksList.AddField(KMPoint(K, I), ftRoad);
   end;
 
   //Check if we need to connect separate branches of road network
@@ -821,7 +822,7 @@ begin
             for K := 0 to NodeList.Count - 1 do
               //We must check if we can add the plan ontop of plans placed earlier in this turn
               if P.CanAddFieldPlan(NodeList[K], ftRoad) then
-                P.BuildList.FieldworksList.AddField(NodeList[K], ftRoad);
+                P.Constructions.FieldworksList.AddField(NodeList[K], ftRoad);
           end;
         end;
     end;
@@ -879,7 +880,7 @@ procedure TKMayor.SetArmyDemand(aFootmen, aPikemen, aHorsemen, aArchers: Single)
       Result := 0 //This warrior is blocked
     else
       if (fSetup.ArmyType = atIronAndLeather)
-      and GroupBlocked(UnitGroups[aUT], not (aUT in WARRIORS_IRON)) then
+      and GroupBlocked(UNIT_TO_GROUP_TYPE[aUT], not (aUT in WARRIORS_IRON)) then
         Result := 2 //In mixed army type, if our compliment is blocked we need to make double
       else
         Result := 1;
@@ -965,7 +966,7 @@ procedure TKMayor.CheckAutoRepair;
 var I: Integer;
 begin
   with gHands[fOwner] do
-    if HandType = hndComputer then
+    if IsComputer then
       for I := 0 to Houses.Count - 1 do
         Houses[I].BuildingRepair := fSetup.AutoRepair;
 end;
@@ -980,7 +981,7 @@ end;
 procedure TKMayor.UpdateState(aTick: Cardinal);
 begin
   {$IFDEF PERFLOG}
-  gPerfLogs.SectionEnter(psAICityCls, aTick);
+  gPerfLogs.SectionEnter(psAICityCls);
   {$ENDIF}
   try
     //Checking mod result against MAX_HANDS causes first update to happen ASAP

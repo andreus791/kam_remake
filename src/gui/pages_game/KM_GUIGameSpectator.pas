@@ -227,9 +227,10 @@ type
 implementation
 
 uses
-  KM_InterfaceGame, KM_Game, KM_RenderUI, KM_ResFonts, KM_Resource, KM_ResTexts, KM_ResUnits,
+  KM_InterfaceGame, KM_GameParams, KM_RenderUI, KM_ResFonts, KM_Resource, KM_ResTexts, KM_ResUnits,
   KM_UnitGroup, KM_HouseTownhall,
-  KM_CommonUtils;
+  KM_CommonUtils,
+  KM_ResTypes;
 
 const
   GUI_SPEC_ITEM_WIDTH = 28;
@@ -450,8 +451,8 @@ end;
 
 procedure TKMGUIGameSpectatorItemLine.PaintPanel(aPaintLayer: Integer);
 begin
-  Image.TexId := GUI_SPEC_HEADER_FLAG + gGame.GameTick mod GUI_SPEC_HEADER_FLAG_FRAME;
-  Label_Text.Caption := gHands[FHandIndex].OwnerName(not gGame.IsSingleplayer);
+  Image.TexId := GUI_SPEC_HEADER_FLAG + gGameParams.Tick mod GUI_SPEC_HEADER_FLAG_FRAME;
+  Label_Text.Caption := gHands[FHandIndex].OwnerName(not gGameParams.IsSingleplayer);
 
   inherited;
 end;
@@ -969,7 +970,6 @@ begin
   for I := Low(FLinesAggregator) to High(FLinesAggregator) do
     if FLinesAggregator[I] <> nil then
       FreeAndNil(FLinesAggregator[I]);
-
 end;
 
 procedure TKMGUIGameSpectator.AddLineType(aParent: TKMPanel; AIndex: Integer; ALineClass: TKMGUIGameSpectatorItemLineClass);

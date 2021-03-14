@@ -4,7 +4,8 @@ interface
 uses
   Classes, Controls, Math, StrUtils, SysUtils,
   KM_CommonTypes, KM_Controls, KM_Defaults, KM_Pics,
-  KM_InterfaceDefaults, KM_ResWares, KM_HandStats;
+  KM_InterfaceDefaults, KM_ResWares, KM_HandStats,
+  KM_ResTypes;
 
 
 type
@@ -178,7 +179,7 @@ implementation
 uses
   KM_Main, KM_ResTexts, KM_Game, KM_HandsCollection, KM_CommonUtils, KM_Resource, KM_ResFonts,
   KM_RenderUI, KM_Hand, KM_ResUnits, KM_MapTypes,
-  KM_GameTypes;
+  KM_GameParams, KM_GameTypes;
 
 
 const
@@ -218,7 +219,7 @@ end;
 
 function GetOwnerName(aHandId: Integer): String;
 begin
-  Result := gHands[aHandId].OwnerName(not gGame.IsSingleplayer);
+  Result := gHands[aHandId].OwnerName(not gGameParams.IsSingleplayer);
 end;
 
 
@@ -1144,7 +1145,7 @@ begin
     and (
       (fGameResultMsg <> grGameContinues)
       or SHOW_ENEMIES_STATS
-      or (gGame.GameMode in [gmMultiSpectate, gmReplaySingle, gmReplayMulti])
+      or gGameParams.IsReplayOrSpectate
       or (gHands[aHandId].Alliances[gMySpectator.HandID] = atAlly)
       or gMySpectator.Hand.AI.HasWon);
 end;
@@ -1172,7 +1173,7 @@ end;
 
 function TKMGameResultsMP.DoAdjoinSameColorHand(aHandId: Integer): Boolean;
 begin
-  Result := gHands[aHandId].IsComputer and (gGame.GameMode in [gmSingle, gmCampaign, gmReplaySingle]); //Adjoin only AI's in SP games
+  Result := gHands[aHandId].IsComputer and gGameParams.IsSingleplayer; //Adjoin only AI's in SP games
 end;
 
 
@@ -1358,7 +1359,7 @@ var
   ResultsLabelCap: UnicodeString;
 begin
   //MP Stats can be shown from SP stats page. We have to hide AI players then, depending on game result
-  fShowAIResults := not (gGame.GameMode in [gmSingle, gmCampaign])
+  fShowAIResults := not gGameParams.IsSingleplayerGame
                     or (fGameResultMsg in [grWin, grReplayEnd])
                     or ((fGameResultMsg = grGameContinues) and (gMySpectator.Hand.AI.HasWon));
 
@@ -1383,11 +1384,11 @@ begin
   if ResultsLabelCap <> '' then
     Label_ResultsMP.Caption := Label_ResultsMP.Caption + ' - ';
 
-  Label_ResultsMP.Caption := Label_ResultsMP.Caption + gGame.GameName;
+  Label_ResultsMP.Caption := Label_ResultsMP.Caption + gGameParams.Name;
 
   //Append difficulty level to game results caption
-  if gGame.MissionDifficulty <> mdNone then
-    Label_ResultsMP.Caption := Label_ResultsMP.Caption + ' (' + gResTexts[DIFFICULTY_LEVELS_TX[gGame.MissionDifficulty]] + ')';
+  if gGameParams.MissionDifficulty <> mdNone then
+    Label_ResultsMP.Caption := Label_ResultsMP.Caption + ' (' + gResTexts[DIFFICULTY_LEVELS_TX[gGameParams.MissionDifficulty]] + ')';
 
   //Append mission time
   Label_ResultsMP.Caption := Label_ResultsMP.Caption + ' - ' + TimeToString(gGame.MissionTime);
@@ -1399,13 +1400,13 @@ begin
   ReinitChartWares;
   ReinitChartArmy;
 
-  Button_Wares.Enabled := (gGame.MissionMode = mmNormal);
-  Button_Economy.Enabled := (gGame.MissionMode = mmNormal);
+  Button_Wares.Enabled := gGameParams.IsNormalMission;
+  Button_Economy.Enabled := gGameParams.IsNormalMission;
 
   if fGameResultMsg = grGameContinues then
   begin
     Button_BackToGame.DoSetVisible;
-    case gGame.GameMode of
+    case gGameParams.Mode of
       gmSingle,
       gmCampaign,
       gmReplaySingle: begin
@@ -1423,7 +1424,7 @@ begin
   begin
     Button_BackToGame.Hide;
     Button_Back.DoSetVisible;
-    case gGame.GameMode of
+    case gGameParams.Mode of
       gmSingle,
       gmCampaign,
       gmReplaySingle: begin
@@ -1528,8 +1529,8 @@ procedure TKMGameResultsMP.ReinitChartEconomy;
     Chart := GetEconomyChart(aStatType, aEcoStatKind);
     Chart^.Clear;
     Chart^.MaxLength := 0;
-    Chart^.MaxTime   := gGame.GameTick div 10;
-    Chart^.Peacetime := 60*gGame.GameOptions.Peacetime;
+    Chart^.MaxTime   := gGameParams.Tick div 10;
+    Chart^.Peacetime := 60*gGame.Options.Peacetime;
     Chart^.SetSeparatorPositions(fChartSeparatorsPos[aStatType]);
   end;
 
@@ -1606,8 +1607,8 @@ const
   begin
     aChart^.Clear;
     aChart^.MaxLength := 0;
-    aChart^.MaxTime   := gGame.GameTick div 10;
-    aChart^.Peacetime := 60*gGame.GameOptions.Peacetime;
+    aChart^.MaxTime   := gGameParams.Tick div 10;
+    aChart^.Peacetime := 60*gGame.Options.Peacetime;
     aChart^.SetSeparatorPositions(fChartSeparatorsPos[aStatType]);
 
     if aUseGDP then
@@ -1755,8 +1756,8 @@ begin
         Chart := @ChartArmy^.Chart;
         Chart^.Clear;
         Chart^.MaxLength := 0;
-        Chart^.MaxTime := gGame.GameTick div 10;
-        Chart^.Peacetime := 60*gGame.GameOptions.Peacetime;
+        Chart^.MaxTime := gGameParams.Tick div 10;
+        Chart^.Peacetime := 60*gGame.Options.Peacetime;
         Chart^.SetSeparatorPositions(fChartSeparatorsPos[ST]);
         Chart^.Caption := ChartArmy^.ChartType.GUIName + ' - ' + gResTexts[CHART_ARMY_CAPTION_INDEX[CKind]];
 
@@ -1992,7 +1993,7 @@ begin
   //Results SP             -> ResultsMP -> ResultsSP
   if Sender = Button_Back then
   begin
-    if gGame.GameMode in [gmSingle, gmCampaign, gmReplaySingle] then
+    if gGameParams.IsSingleplayer then
       fOnShowSPStats
     else begin
       fReinitedLastTime := False; //Reset to default Value for next game (before game stop)

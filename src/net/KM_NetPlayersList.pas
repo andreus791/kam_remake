@@ -3,7 +3,8 @@ unit KM_NetPlayersList;
 interface
 uses
   Classes, KromUtils, StrUtils, Math, SysUtils,
-  KM_CommonClasses, KM_CommonTypes, KM_Defaults, KM_Hand, KM_ResLocales, KM_NetworkTypes;
+  KM_CommonClasses, KM_CommonTypes, KM_Defaults, KM_Hand, KM_ResLocales, KM_NetworkTypes,
+  KM_HandTypes;
 
 const
   PING_COUNT = 20; //Number of pings to store and take the maximum over for latency calculation (pings are measured once per second)
@@ -92,7 +93,7 @@ type
     procedure Clear;
     property Count: Integer read fCount;
 
-    procedure AddPlayer(const aNik: AnsiString; aIndexOnServer: TKMNetHandleIndex; const aLang: AnsiString);
+    procedure AddPlayer(const aNik: AnsiString; aIndexOnServer: TKMNetHandleIndex; const aLang: AnsiString; aAsSpectator: Boolean = False);
     procedure AddAIPlayer(aAdvancedAI: Boolean; aSlot: Integer = -1);
     procedure AddClosedPlayer(aSlot: Integer = -1);
     procedure DisconnectPlayer(aIndexOnServer: TKMNetHandleIndex);
@@ -141,7 +142,7 @@ type
 
     //Import/Export
     procedure SaveToStream(aStream: TKMemoryStream); //Gets all relevant information as text string
-    procedure LoadFromStream(aStream: TKMemoryStreamBinary); //Sets all relevant information
+    procedure LoadFromStream(aStream: TKMemoryStream); //Sets all relevant information
     function GetSlotNames: UnicodeString; //Gets just names as a text string seperated by |
     function GetPlayersWithIDs: UnicodeString;
   end;
@@ -261,7 +262,6 @@ function TKMNetPlayerInfo.IsComputer: Boolean;
 begin
   Result := PlayerNetType in [nptComputerClassic, nptComputerAdvanced];
 end;
-
 
 
 function TKMNetPlayerInfo.IsClassicComputer: Boolean;
@@ -396,10 +396,11 @@ var
   I: Integer;
 begin
   inherited;
-  SpectatorSlotsOpen := MAX_LOBBY_SPECTATORS;
 
   for I := 1 to MAX_LOBBY_SLOTS do
     fNetPlayers[I] := TKMNetPlayerInfo.Create;
+
+  Clear;
 end;
 
 
@@ -417,7 +418,7 @@ procedure TKMNetPlayersList.Clear;
 begin
   HostDoesSetup := False;
   RandomizeTeamLocations := False;
-  SpectatorsAllowed := False;
+  SpectatorsAllowed := LOBBY_SET_SPECS_DEFAULT;
   SpectatorSlotsOpen := MAX_LOBBY_SPECTATORS;
   ResetVote;
   fCount := 0;
@@ -549,7 +550,7 @@ begin
 end;
 
 
-procedure TKMNetPlayersList.AddPlayer(const aNik: AnsiString; aIndexOnServer: TKMNetHandleIndex; const aLang: AnsiString);
+procedure TKMNetPlayersList.AddPlayer(const aNik: AnsiString; aIndexOnServer: TKMNetHandleIndex; const aLang: AnsiString; aAsSpectator: Boolean = False);
 begin
   Assert(fCount <= MAX_LOBBY_SLOTS, 'Can''t add player');
   Inc(fCount);
@@ -569,7 +570,7 @@ begin
   fNetPlayers[fCount].DownloadInProgress := False;
   fNetPlayers[fCount].ResetPingRecord;
   //Check if this player must go in a spectator slot
-  if fCount - GetSpectatorCount > MAX_LOBBY_PLAYERS then
+  if aAsSpectator or (fCount - GetSpectatorCount > MAX_LOBBY_PLAYERS) then
     fNetPlayers[fCount].StartLocation := LOC_SPECTATE
   else
     fNetPlayers[fCount].StartLocation := LOC_RANDOM;
@@ -1675,7 +1676,7 @@ begin
 end;
 
 
-procedure TKMNetPlayersList.LoadFromStream(aStream: TKMemoryStreamBinary);
+procedure TKMNetPlayersList.LoadFromStream(aStream: TKMemoryStream);
 var
   I: Integer;
 begin
