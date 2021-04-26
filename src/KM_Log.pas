@@ -2,7 +2,11 @@ unit KM_Log;
 {$I KaM_Remake.inc}
 interface
 uses
-  SyncObjs, KM_CommonTypes;
+  SyncObjs, KM_CommonTypes, KM_CommonClasses
+  {$IFDEF KMR_GAME} // No need for server and other tools
+  , Generics.Collections
+  {$ENDIF}
+  ;
 
 
 type
@@ -29,12 +33,17 @@ type
     fFirstTick: cardinal;
     fPreviousTick: cardinal;
     fPreviousDate: TDateTime;
-    fOnLogMessage: TUnicodeStringEvent;
+
+    {$IFDEF KMR_GAME}
+    fOnLogMessageList: TList<TUnicodeStringEvent>;
+    {$ENDIF}
 
     procedure Lock;
     procedure Unlock;
 
     procedure InitLog;
+
+    procedure NotifyLogSubs(aText: UnicodeString);
 
     procedure AddLineTime(const aText: UnicodeString; aLogType: TKMLogMessageType; aDoCloseFile: Boolean = True); overload;
     procedure AddLineTime(const aText: UnicodeString; aFlushImmidiately: Boolean = True); overload;
@@ -80,7 +89,9 @@ type
     procedure AddNoTimeNoFlush(const aText: UnicodeString);
     procedure DeleteOldLogs;
     property LogPath: UnicodeString read fLogPath; //Used by dedicated server
-    property OnLogMessage: TUnicodeStringEvent read fOnLogMessage write fOnLogMessage;
+//    property OnLogMessage: TUnicodeStringEvent read fOnLogMessage write fOnLogMessage;
+    procedure AddOnLogEventSub(const aOnLogMessage: TUnicodeStringEvent);
+    procedure RemoveOnLogEventSub(const aOnLogMessage: TUnicodeStringEvent);
   end;
 
 var
@@ -158,6 +169,10 @@ begin
     Include(MessageTypes, lmtDebug);
 
   CS := TCriticalSection.Create;
+  {$IFDEF KMR_GAME}
+  fOnLogMessageList := TList<TUnicodeStringEvent>.Create;
+  {$ENDIF}
+
   InitLog;
 end;
 
@@ -171,6 +186,10 @@ end;
 destructor TKMLog.Destroy;
 begin
   CS.Free;
+  {$IFDEF KMR_GAME}
+  fOnLogMessageList.Free;
+  {$ENDIF}
+
   inherited;
 end;
 
@@ -191,14 +210,22 @@ procedure TKMLog.InitLog;
 begin
   if BLOCK_FILE_WRITE then Exit;
 
-  ForceDirectories(ExtractFilePath(fLogPath));
+  try
+    ForceDirectories(ExtractFilePath(fLogPath));
 
-  AssignFile(fl, fLogPath);
-  Rewrite(fl);
-  //           hh:nn:ss.zzz 12345.678s 1234567ms     text-text-text
-  WriteLn(fl, '   Timestamp    Elapsed     Delta     Description');
-  CloseFile(fl);
+    AssignFile(fl, fLogPath);
+    Rewrite(fl);
+    //           hh:nn:ss.zzz 12345.678s 1234567ms     text-text-text
+    WriteLn(fl, '   Timestamp    Elapsed     Delta     Description');
+    CloseFile(fl);
+  except
+    on Ex: Exception do
+    begin
+      Ex.Message := Ex.Message + '. Tried to init Log on path ''' + fLogPath + '''';
+      raise Ex;
+    end;
 
+  end;
   AddLineTime('Log is up and running. Game version: ' + UnicodeString(GAME_VERSION));
 end;
 
@@ -210,6 +237,36 @@ begin
 
   //No need to remember the instance, it's set to FreeOnTerminate
   TKMOldLogsDeleter.Create(ExtractFilePath(fLogPath));
+end;
+
+
+procedure TKMLog.AddOnLogEventSub(const aOnLogMessage: TUnicodeStringEvent);
+begin
+  {$IFDEF KMR_GAME}
+  fOnLogMessageList.Add(aOnLogMessage);
+  {$ENDIF}
+end;
+
+
+procedure TKMLog.RemoveOnLogEventSub(const aOnLogMessage: TUnicodeStringEvent);
+begin
+  {$IFDEF KMR_GAME}
+  fOnLogMessageList.Remove(aOnLogMessage);
+  {$ENDIF}
+end;
+
+
+procedure TKMLog.NotifyLogSubs(aText: UnicodeString);
+{$IFDEF KMR_GAME}
+var
+  I: Integer;
+{$ENDIF}
+begin
+  {$IFDEF KMR_GAME}
+  for I := 0 to fOnLogMessageList.Count - 1  do
+    if Assigned(fOnLogMessageList[I]) then
+      fOnLogMessageList[I](aText);
+  {$ENDIF}
 end;
 
 
@@ -255,8 +312,7 @@ begin
       UnLock;
   end;
 
-  if Assigned(fOnLogMessage) then
-    fOnLogMessage(aText);
+  NotifyLogSubs(aText);
 end;
 
 
@@ -297,8 +353,7 @@ begin
       UnLock;
   end;
 
-  if Assigned(fOnLogMessage) then
-    fOnLogMessage(aText);
+  NotifyLogSubs(aText);
 end;
 
 

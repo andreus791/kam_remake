@@ -2,7 +2,7 @@ unit KM_HouseCollection;
 {$I KaM_Remake.inc}
 interface
 uses
-  Classes,
+  Classes, Generics.Collections,
   KM_Houses,
   KM_ResHouses,
   KM_CommonClasses, KM_Defaults, KM_Points,
@@ -28,7 +28,7 @@ type
     property Houses[aIndex: Integer]: TKMHouse read GetHouse; default;
     function HitTest(X, Y: Integer): TKMHouse;
     function GetHouseByUID(aUID: Integer): TKMHouse;
-    procedure GetHousesInRect(const aRect: TKMRect; List: TList);
+    procedure GetHousesInRect(const aRect: TKMRect; List: TList<TKMHouse>);
     function FindEmptyHouse(aUnitType: TKMUnitType; const Loc: TKMPoint): TKMHouse;
     function FindHouse(aType: TKMHouseType; X,Y: Word; const aIndex: Byte = 1; aOnlyCompleted: Boolean = True): TKMHouse; overload;
     function FindHouse(const aTypes: THouseTypeSet; X,Y: Word; const aIndex: Byte = 1; aOnlyCompleted: Boolean = True): TKMHouse; overload;
@@ -83,23 +83,23 @@ end;
 
 function TKMHousesCollection.AddToCollection(aHouseType: TKMHouseType; PosX,PosY: Integer; aOwner: TKMHandID; aHBS: TKMHouseBuildState): TKMHouse;
 var
-  id: Cardinal;
+  uid: Cardinal;
 begin
-  id := gGame.GetNewUID;
+  uid := gGame.GetNewUID;
 
   case aHouseType of
     htSwine,
-    htStables:       Result := TKMHouseSwineStable.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htInn:           Result := TKMHouseInn.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htMarketplace:   Result := TKMHouseMarket.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htSchool:        Result := TKMHouseSchool.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htBarracks:      Result := TKMHouseBarracks.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htTownHall:      Result := TKMHouseTownHall.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htStore:         Result := TKMHouseStore.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htWatchTower:    Result := TKMHouseTower.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htWoodcutters:   Result := TKMHouseWoodcutters.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    htArmorWorkshop: Result := TKMHouseArmorWorkshop.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
-    else              Result := TKMHouse.Create(id, aHouseType,PosX,PosY, aOwner, aHBS);
+    htStables:       Result := TKMHouseSwineStable.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htInn:           Result := TKMHouseInn.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htMarketplace:   Result := TKMHouseMarket.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htSchool:        Result := TKMHouseSchool.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htBarracks:      Result := TKMHouseBarracks.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htTownHall:      Result := TKMHouseTownHall.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htStore:         Result := TKMHouseStore.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htWatchTower:    Result := TKMHouseTower.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htWoodcutters:   Result := TKMHouseWoodcutters.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    htArmorWorkshop: Result := TKMHouseArmorWorkshop.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
+    else              Result := TKMHouse.Create(uid, aHouseType,PosX,PosY, aOwner, aHBS);
   end;
 
   if Result <> nil then
@@ -221,7 +221,7 @@ begin
 end;
 
 
-procedure TKMHousesCollection.GetHousesInRect(const aRect: TKMRect; List: TList);
+procedure TKMHousesCollection.GetHousesInRect(const aRect: TKMRect; List: TList<TKMHouse>);
 var
   I: Integer;
 begin

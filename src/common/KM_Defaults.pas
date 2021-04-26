@@ -56,6 +56,8 @@ const
   DEL_LOGS_OLDER_THAN   = 14;           //in days
 
   TEMPLATE_LIBX_FILE_TEXT = 'text.%s.libx';
+
+  DEFAULT_WATER_LIGHT_MULTIPLIER = 1.3; // Default multiplier for terrain water light
 const
   //Max number of ticks, played on 1 game update.
   //We must limit number of ticks per update to be able to leave update cycle fast (when turn off ultra fast speedup, f.e.)
@@ -68,6 +70,7 @@ const
 {$ENDIF}
 var
   // These should be True (we can occasionally turn them Off to speed up the debug)
+  // We keep them as `var` to keep compiler happy (otherwise it sees a lot of "unused var usage" around)
   CALC_EXPECTED_TICK    :Boolean = not DEBUG_CFG;  //Do we calculate expected tick and try to be in-time (send as many tick as needed to get to expected tick)
   MAKE_ANIM_TERRAIN     :Boolean = True;  //Should we animate water and swamps
   MAKE_TEAM_COLORS      :Boolean = True;  //Whenever to make team colors or not, saves RAM for debug
@@ -98,11 +101,13 @@ var
   //Not fully implemented yet
   USE_CCL_WALKCONNECT   :Boolean = False; //Use CCL instead of FloodFill for walk-connect (CCL is generaly worse. It's a bit slower, counts 1 tile areas and needs more AreaIDs to work / makes sparsed IDs)
   DYNAMIC_FOG_OF_WAR    :Boolean = False; //Whenever dynamic fog of war is enabled or not
-  SHOW_DISMISS_GROUP_BTN:Boolean = False; //The button to kill group
+  SHOW_DISMISS_GROUP_BTN:Boolean = DEBUG_CFG; //The button to kill group
   CHECK_8087CW          :Boolean = False; //Check that 8087CW (FPU flags) are set correctly each frame, in case some lib/API changed them
   SCROLL_ACCEL          :Boolean = False; //Acceleration for viewport scrolling
   ALLOW_INTERPOLATED_RENDER :Boolean = True; //Interpolate positions/animations in render between game ticks
   PATHFINDER_TO_USE     :Byte = 1;        //Use TPathfindingAStarNew
+
+  ENABLE_VIDEOS_UNDER_WINE: Boolean = DEBUG_CFG; //Do we enable videos under wine
 
   //Cache / delivery / pathfinding
   CACHE_PATHFINDING                       :Boolean = True; //Cache routes incase they are needed soon (Vortamic PF runs x4 faster even with lame approach)
@@ -129,8 +134,8 @@ var
   DEBUG_LOGS              :Boolean = True;  //Log debug info
   DEBUG_SCRIPTING_EXEC    :Boolean = False; //Use slow debug executor (about 3 times slower! never use on release version). Using it we can find exact position of execution time error (row/col/pos/module)
   SKIP_RNG_CHECKS_FOR_SOME_GIC: Boolean = True; //Skip rng checks for Autosave and few other commands to have same AI city with predefined seed + mapconfig
-  ALLOW_SELECT_ALLY_UNITS :Boolean = DEBUG_CFG; //Do we allow to select ally units or groups
-  ALLOW_SELECT_ENEMIES    :Boolean = DEBUG_CFG; //Do we allow to select enemies houses/units/groups
+  ALLOW_SELECT_ALLIES     :Boolean = True;  //Do we allow to select ally units or groups
+  ALLOW_SELECT_ALL        :Boolean = DEBUG_CFG; //Do we allow to select all entities (allies and enemies)
   GAME_NO_UPDATE_ON_TIMER :Boolean = False; //Block game update by timer (only allow to update it manually)
   GAME_SAVE_STRIP_FOR_CRC :Boolean = False; //Strip unsynced data from Game saves, to compare saves CRC
   ALLOW_LOAD_UNSUP_VERSION_SAVE:
@@ -139,14 +144,16 @@ var
   SHOW_DEBUG_CONTROLS     :Boolean = False; //Show debug panel / Form1 menu (F11)
   SHOW_CONTROLS_OVERLAY   :Boolean = False; //Draw colored overlays ontop of controls! always Off here
   SHOW_CONTROLS_ID        :Boolean = False; //Draw controls ID
-  SHOW_FOCUSED_CONTROL     :Boolean = False; //Outline focused control
+  SHOW_FOCUSED_CONTROL    :Boolean = False; //Outline focused control
   SHOW_CONTROL_OVER       :Boolean = False; //Outline control with mouse over
   SHOW_TEXT_OUTLINES      :Boolean = False; //Display text areas outlines
+  SKIP_RENDER_TEXT        :Boolean = False; //Skip painting labels
   ENABLE_DESIGN_CONTORLS  :Boolean = False; //Enable special mode to allow to move/edit controls
   MODE_DESIGN_CONTROLS    :Boolean = False; //Special mode to move/edit controls activated by F7, it must block OnClick events! always Off here
+
   OVERLAY_RESOLUTIONS     :Boolean = False; //Render constraining frame
   LOCAL_SERVER_LIST       :Boolean = False; //Instead of loading server list from master server, add localhost:56789 (good for testing)
-  SHOW_LOGS_IN_CHAT       :Boolean = False; //Show log messages in MP game chat
+  SHOW_LOG_IN_CHAT        :Boolean = False; //Show log messages in MP game chat
   LOG_GAME_TICK           :Boolean = False; //Log game tick
   SAVE_RANDOM_CHECKS      :Boolean = True; //Save random checks data to separate file
   MAPED_SHOW_CONDITION_UNIT_BTNS: Boolean = True; //Show condition Inc/Dec buttons for citizen units in MapEd
@@ -193,6 +200,7 @@ var
   RENDER_3D               :Boolean = False; //Experimental 3D render
   LINEAR_FILTER_SPRITES   :Boolean = False; //To check pixel sampling alignment issues (bouncing) at 100% zoom
   HOUSE_BUILDING_STEP     :Single = 0;
+  WATER_LIGHT_MULTIPLIER  :Single = DEFAULT_WATER_LIGHT_MULTIPLIER; //Terrain light multiplier
   OVERLAY_NAVMESH         :Boolean = False; //Show navmesh
   OVERLAY_DEFENCES        :Boolean = False; //Show AI defence perimeters
   OVERLAY_DEFENCES_A      :Boolean = False; //Show AI defence perimeters (Animation)
@@ -230,8 +238,10 @@ var
   DO_PERF_LOGGING         :Boolean = False; //Write each ticks time to log (DEPRECATED PERF_LOGGER)
   MP_RESULTS_IN_SP        :Boolean = False; //Display each players stats in SP
   SHOW_DEBUG_OVERLAY_BEVEL:Boolean = True;  //Show debug text overlay Bevel (for better text readability)
-  DEBUG_TEXT_FONT_ID      :Integer = 4;     //Debug font ID (4 is fntMini)
-  DEBUG_TEXT_MONOSPACED   :Boolean = True;  //Debug font is drawn as monospaced
+  SHOW_LOG_IN_GUI         :Boolean = False; //Show log in GUI
+  UPDATE_LOG_FOR_GUI      :Boolean = False; //Update log to be shown in GUI
+  DEBUG_TEXT_FONT_ID      :Integer = 7;     //Debug font ID (7 is fntMonospaced)
+
   {Gameplay}
   LOBBY_SET_SPECS_DEFAULT :Boolean = DEBUG_CFG; //Set 'Allow spectators' flag in the lobby by default
   LOBBY_HOST_AS_SPECTATOR :Boolean = DEBUG_CFG; //Host lobby as spectator by default
@@ -240,7 +250,7 @@ var
   PAUSE_GAME_BEFORE_TICK  :Integer = -1;    //Pause after specified game tick
   MAKE_SAVEPT_BEFORE_TICK :Integer = -1;    //Make savepoint after a certain tick (for both game and replay)
   ALLOW_SAVE_IN_REPLAY    :Boolean = DEBUG_CFG; //Allow to save game from replay, good for debug
-  SAVE_GAME_AS_TEXT       :Boolean = True; //Save game serialized //Todo DEBUG. set to False before releases
+  SAVE_GAME_AS_TEXT       :Boolean = True; {Save game serialized} //todo: DEBUG. set to False before releases
 
   DEBUG_TEXT              :String = '';    //Debug text
   DEBUG_VALUE             :Integer = 0;    //Debug value
@@ -251,7 +261,7 @@ var
   DEBUG_CHEATS            :Boolean = DEBUG_CFG; //Cheats for debug (place scout and reveal map) which can be turned On from menu
   MULTIPLAYER_SPEEDUP     :Boolean = DEBUG_CFG; //Allow you to use F8 to speed up multiplayer for debugging (only effects local client)
   SKIP_EXE_CRC            :Boolean = False; //Don't check KaM_Remake.exe CRC before MP game (useful for testing with different versions)
-  ALLOW_MP_MODS           :Boolean = False; //Don't let people enter MP mode if they are using mods (unit.dat, house.dat, etc.)
+  ALLOW_MP_MODS           :Boolean = DEBUG_CFG; //Don't let people enter MP mode if they are using mods (unit.dat, house.dat, etc.)
   ALLOW_TAKE_AI_PLAYERS   :Boolean = False; //Allow to load SP maps without Human player (usefull for AI testing)
   {Data output}
   BLOCK_SAVE              :Boolean = False; //Block saving game (used in parallel Runner)
@@ -261,6 +271,7 @@ var
   WriteResourceInfoToTXT  :Boolean = False; //Whenever to write txt files with defines data properties on loading
   EXPORT_SPRITE_ATLASES   :Boolean = False; //Whenever to write all generated textures to BMP on loading (extremely time consuming)
   EXPORT_INFLUENCE        :Boolean = False;
+  LOG_FONTS_RAM_USAGE     :Boolean = False;
   {Statistic}
   CtrlPaintCount: Word; //How many Controls were painted in last frame
 
@@ -296,6 +307,8 @@ const
   AUTOSAVE_FREQUENCY_MAX  = 3000;
   AUTOSAVE_FREQUENCY_DEFAULT      = 600; //How often to do autosave, every N ticks
   AUTOSAVE_ATTACH_TO_CRASHREPORT_MAX = 5; //Max number of autosaves to be included into crashreport
+  AUTOSAVE_SAVE_NAME = 'autosave';
+  CRASHREPORT_SAVE_NAME = 'crashreport';
 
   // Checkpoint, which are made in the memory while watching replay
   REPLAY_SAVEPOINT_FREQUENCY_MIN = 30*10; //30 sec
@@ -443,9 +456,12 @@ type
     //Map Editor
     cmElevate, //Height elevation
     cmEqualize, //Height equalization
+    cmConstHeight, //Constant height brush
+    cmElevateAll, //Terrain kind elevation
     cmBrush, //Terrain brush
     cmTiles, // Individual tiles
     cmObjects, //Terrain objects
+    cmObjectsBrush, //Objects brush
     cmMagicWater, //Magic water
     cmSelection, //Selection manipulations
     cmUnits, //Units
@@ -501,9 +517,6 @@ type
   TKMissionMode = (mmNormal, mmTactic);
 
   TKMAllianceType = (atEnemy, atAlly);
-
-  TKMapFolder = (mfSP, mfMP, mfDL);
-  TKMapFolderSet = set of TKMapFolder;
 
 const
   FOG_OF_WAR_MIN  = 80;           //Minimum value for explored but FOW terrain, MIN/ACT determines FOW darkness

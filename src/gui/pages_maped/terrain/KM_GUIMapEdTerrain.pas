@@ -17,7 +17,7 @@ type
   TKMTerrainTab = (ttBrush, ttHeights, ttTile, ttOverlays, ttObject, ttSelection);
 
   //Collection of terrain editing controls
-  TKMMapEdTerrain = class (TKMMapEdMenuPage)
+  TKMMapEdTerrain = class(TKMMapEdMenuPage)
   private
     fOnPageChange: TNotifyEvent;
 
@@ -75,7 +75,7 @@ const
   TB_PAD_TERRAIN_BTN_L = 9;
 
 var
-  I: TKMTerrainTab;
+  TT: TKMTerrainTab;
 begin
   inherited Create;
 
@@ -83,12 +83,12 @@ begin
 
   Panel_Terrain := TKMPanel.Create(aParent, 0, 45, aParent.Width, aParent.Height - 45);
   Panel_Terrain.AnchorsStretch;
-    for I := Low(TKMTerrainTab) to High(TKMTerrainTab) do
+    for TT := Low(TKMTerrainTab) to High(TKMTerrainTab) do
     begin
-      Button_Terrain[I] := TKMButton.Create(Panel_Terrain, TB_PAD_TERRAIN_BTN_L + (SMALL_PAD_W + 4) * Byte(I), 0,
-                                            SMALL_TAB_W + 4, SMALL_TAB_H + 4, BtnGlyph[I], rxGui, bsGame);
-      Button_Terrain[I].Hint := GetHintWHotKey(BtnHint[I], MAPED_SUBMENU_HOTKEYS[Ord(I)]);
-      Button_Terrain[I].OnClick := PageChange;
+      Button_Terrain[TT] := TKMButton.Create(Panel_Terrain, TB_PAD_TERRAIN_BTN_L + (SMALL_PAD_W + 4) * Byte(TT), 0,
+                                            SMALL_TAB_W + 4, SMALL_TAB_H + 4, BtnGlyph[TT], rxGui, bsGame);
+      Button_Terrain[TT].Hint := GetHintWHotKey(BtnHint[TT], MAPED_SUBMENU_HOTKEYS[Ord(TT)]);
+      Button_Terrain[TT].OnClick := PageChange;
     end;
 
     fGuiBrushes := TKMMapEdTerrainBrushes.Create(Panel_Terrain);
@@ -134,6 +134,7 @@ procedure TKMMapEdTerrain.MouseWheel(Shift: TShiftState; WheelSteps, X, Y: Integ
 begin
   fGuiBrushes.MouseWheel(Shift, WheelSteps, X, Y, aHandled);
   fGuiHeights.MouseWheel(Shift, WheelSteps, X, Y, aHandled);
+  fGuiObjects.MouseWheel(Shift, WheelSteps, X, Y, aHandled);
 end;
 
 

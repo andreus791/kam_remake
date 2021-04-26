@@ -38,7 +38,10 @@ type
 
   TKMTileMaskSubType = (mstMain, mstExtra);
 
-  TKMTileMaskKind = (mkNone, mkSoft1, mkSoft2, mkSoft3, mkStraight);
+  TKMTileMaskKind = (mkNone, mkSoft1, mkSoft2, mkSoft3, mkStraight, mkGradient);
+
+  // Mask usage: as a pixel mask, or as a gradient mask
+  TKMTileMaskKindUse = (mkuPixel, mkuAlpha);
 
   TKMMaskFullType = record
     Kind: TKMTileMaskKind;
@@ -50,36 +53,36 @@ type
 
   TKMTerrainKind = (
 //    tkNone,
-    tkCustom,
-    tkGrass,
-    tkMoss,
-    tkPaleGrass,
-    tkCoastSand,
-    tkGrassSand1,
-    tkGrassSand2,
-    tkGrassSand3,
+    tkCustom,     //0
+    tkGrass,      //1
+    tkMoss,       //2
+    tkPaleGrass,  //3
+    tkCoastSand,  //4
+    tkGrassSand1, //5
+    tkGrassSand2, //6
+    tkGrassSand3, //7
     tkSand,       //8
-    tkGrassDirt,
+    tkGrassDirt,  //9
     tkDirt,       //10
-    tkCobbleStone,
+    tkCobbleStone,//11
     tkGrassyWater,//12
     tkSwamp,      //13
     tkIce,        //14
-    tkSnowOnGrass,
-    tkSnowOnDirt,
-    tkSnow,
-    tkDeepSnow,
-    tkStone,
-    tkGoldMount,
+    tkSnowOnGrass,//15
+    tkSnowOnDirt, //16
+    tkSnow,       //17
+    tkDeepSnow,   //18
+    tkStone,      //19
+    tkGoldMount,  //20
     tkIronMount,  //21
-    tkAbyss,
-    tkGravel,
-    tkCoal,
-    tkGold,
-    tkIron,
-    tkWater,
-    tkFastWater,
-    tkLava);
+    tkAbyss,      //22
+    tkGravel,     //23
+    tkCoal,       //24
+    tkGold,       //25
+    tkIron,       //26
+    tkWater,      //27
+    tkFastWater,  //28
+    tkLava);      //29
 
 
   TKMTerrainKindsArray = array of TKMTerrainKind;
@@ -108,9 +111,15 @@ const
     (1, 2, 2, 2, 2, 3, 3, 4);
 
   TILE_MASK_KINDS_PREVIEW: array[TKMTileMaskKind] of Integer =
-    (-1, 5551, 5561, 5571, 5581); //+1 here, so -1 is no image, and not grass
+    (-1, 5551, 5561, 5571, 5581, 5591); //+1 here, so -1 is no image, and not grass
 
-  TILE_MASKS_FOR_LAYERS: array[mkSoft1..mkStraight] of array[mt_2Straight..mt_4Square] of array[TKMTileMaskSubType] of Integer =
+  TILE_MASK_KIND_USAGE: array [TKMTileMaskKind] of TKMTileMaskKindUse =
+    (mkuPixel, mkuPixel, mkuPixel, mkuPixel, mkuPixel, mkuAlpha);
+
+
+  TILE_MASKS_FOR_LAYERS:  array[Succ(Low(TKMTileMaskKind))..High(TKMTileMaskKind)]
+                            of array[Succ(Low(TKMTileMaskType))..High(TKMTileMaskType)]
+                              of array[TKMTileMaskSubType] of Integer =
      //Softest
     (((5549, -1),
       (5550, -1),
@@ -142,7 +151,15 @@ const
       (5582, -1),
       (5581, 5579),
       (5581, 5582),
-      (5581, -1))
+      (5581, -1)),
+     //Gradient
+     ((5589, -1),
+      (5590, -1),
+      (5591, -1),
+      (5592, -1),
+      (5591, 5589),
+      (5591, 5592),
+      (5591, -1))
       //Hard2
      {((569, -1),
       (570, -1),
@@ -582,7 +599,7 @@ var
   // Mirror tiles arrays, according to the tiles corners terrain kinds
   // If no mirror tile is found, then self tile is set by default
   // for tiles below 256 we set default tiles (themselfs)
-  ResTileset_MirrorTilesH: array [0..TILES_CNT-1] of Integer; // mirror horisontally
+  ResTileset_MirrorTilesH: array [0..TILES_CNT-1] of Integer; // mirror horizontally
   ResTileset_MirrorTilesV: array [0..TILES_CNT-1] of Integer; // mirror vertically
 
 type
@@ -647,9 +664,9 @@ uses
   KM_CommonUtils, KM_CommonClassesExt;
 
 const
-  TILES_NOT_ALLOWED_TO_SET: array [0..16] of Word = (
+  TILES_NOT_ALLOWED_TO_SET: array [0..13] of Word = (
     55,59,60,61,62,63,              // wine and corn
-    189,169,185,                    // duplicates of 108,109,110
+    //189,169,185,                  // duplicates of 108,109,110
     248,249,250,251,252,253,254,255 // roads and overlays
   );
 
@@ -1032,7 +1049,7 @@ end;
 function TKMResTileset.TileIsWalkable(aTile: Word): Boolean;
 begin
   //Includes 1/2 and 3/4 walkable as walkable
-  //Result := Land[Loc.Y,Loc.X].BaseLayer.Terrain in [0..6, 8..11,13,14, 16..22, 25..31, 32..39, 44..47, 49,52,55, 56..63,
+  //Result := Land^[Loc.Y,Loc.X].BaseLayer.Terrain in [0..6, 8..11,13,14, 16..22, 25..31, 32..39, 44..47, 49,52,55, 56..63,
   //                                        64..71, 72..79, 80..87, 88..95, 96..103, 104,106..109,111, 112,113,116,117, 123..125,
   //                                        138..139, 152..155, 166,167, 168..175, 180..183, 188..191,
   //                                        197, 203..205,207, 212..215, 220..223, 242,243,247];
@@ -1045,7 +1062,7 @@ end;
 function TKMResTileset.TileIsRoadable(aTile: Word): Boolean;
 begin
   //Do not include 1/2 and 1/4 walkable as roadable
-  //Result := Land[Loc.Y,Loc.X].BaseLayer.Terrain in [0..3,5,6, 8,9,11,13,14, 16..21, 26..31, 32..39, 45..47, 49, 52, 55, 56..63,
+  //Result := Land^[Loc.Y,Loc.X].BaseLayer.Terrain in [0..3,5,6, 8,9,11,13,14, 16..21, 26..31, 32..39, 45..47, 49, 52, 55, 56..63,
   //                                        64..71, 72..79, 80..87, 88..95, 96..103, 104,108,111, 112,113,
   //                                        152..155,180..183,188..191,
   //                                        203..205, 212,213,215, 220, 247];

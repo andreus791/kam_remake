@@ -4,10 +4,11 @@ interface
 uses
   {$IFDEF MSWindows} Windows, {$ENDIF}
   {$IFDEF Unix} LCLIntf, LCLType, {$ENDIF}
-  StrUtils, SysUtils, KromUtils, Math, Classes, Controls, TypInfo,
-  KM_Controls, KM_CommonClasses, KM_CommonTypes, KM_Defaults, KM_Pics, KM_Points,
-  KM_InterfaceDefaults, KM_InterfaceGame, KM_Terrain, KM_Houses, KM_Units, KM_Minimap, KM_Viewport, KM_Render,
+  StrUtils, SysUtils, KromUtils, Math, Classes, Controls, TypInfo, Generics.Collections,
+  KM_Controls, KM_CommonClasses, KM_CommonTypes, KM_Defaults, KM_Pics, KM_Points, KM_CommonClassesExt,
+  KM_InterfaceTypes, KM_InterfaceGame, KM_Terrain, KM_Houses, KM_Units, KM_Minimap, KM_Viewport, KM_Render,
   KM_UnitGroup, KM_UnitWarrior, KM_Saves, KM_MessageStack, KM_ResHouses, KM_Alerts, KM_Networking,
+  KM_HandEntity,
   KM_GUIGameResultsSP,
   KM_GUIGameResultsMP,
   KM_GUIGameBuild, KM_GUIGameChat, KM_GUIGameHouse, KM_GUIGameUnit, KM_GUIGameRatios, KM_GUIGameStats,KM_GUIGameMenuSettings,
@@ -23,10 +24,10 @@ const
 
 type
   //tbNone is the last, since we use Byte(Value) at some places
-  //TODO refactor
+  //todo: refactor
   TKMTabButtons = (tbBuild, tbRatio, tbStats, tbMenu, tbNone);
 
-  TKMGamePlayInterface = class (TKMUserInterfaceGame)
+  TKMGamePlayInterface = class(TKMUserInterfaceGame)
   private
     fAlerts: TKMAlerts;
 
@@ -57,9 +58,9 @@ type
     SelectingTroopDirection: Boolean;
     SelectingDirPosition: TPoint;
     fSaves: TKMSavesCollection;
-    fUnitsTeamNames: TList;
-    fGroupsTeamNames: TList;
-    fHousesTeamNames: TList;
+    fUnitsTeamNames: TList<TKMUnit>;
+    fGroupsTeamNames: TList<TKMUnitGroup>;
+    fHousesTeamNames: TList<TKMHouse>;
     fLastSyncedMessage: Word; // Last message that we synced with MessageLog
     fLastKbdSelectionTime: Cardinal; //Last we select object from keyboard
 
@@ -70,6 +71,8 @@ type
     fLastSaveName: UnicodeString; // The file name we last used to save this file (used as default in Save menu)
     fMessageStack: TKMMessageStack;
     fSelection: array [0..DYNAMIC_HOTKEYS_NUM - 1] of Integer;
+
+    fLogStringList: TKMLimitedList<string>;
 
     procedure Create_Controls;
     procedure Create_Replay;
@@ -150,7 +153,6 @@ type
     procedure DirectionCursorShow(X,Y: Integer; Dir: TKMDirection);
     procedure DirectionCursorHide;
     function HasLostMPGame: Boolean;
-    procedure UpdateDebugInfo;
     procedure UpdateSelectedObject;
     procedure HidePages;
     procedure HideOverlay(Sender: TObject);
@@ -176,6 +178,8 @@ type
     procedure UpdateReplayBar;
 
     function CanUpdateClockUI: Boolean;
+    function GetLogString(aLimit: Integer): string;
+    procedure LogMessageHappened(const aLogMessage: UnicodeString);
   protected
     Sidebar_Top: TKMImage;
     Sidebar_Middle: TKMImage;
@@ -304,6 +308,7 @@ type
   public
     constructor Create(aRender: TRender; aUIMode: TUIMode); reintroduce;
     destructor Destroy; override;
+
     procedure MessageIssue(aKind: TKMMessageKind; const aText: UnicodeString); overload;
     procedure MessageIssue(aKind: TKMMessageKind; const aText: UnicodeString; const aLoc: TKMPoint); overload;
     procedure UpdateUI;
@@ -333,7 +338,8 @@ type
     property GuiGameSpectator: TKMGUIGameSpectator read fGuiGameSpectator;
 
     function StatsOpened: Boolean;
-    procedure SelectEntityByUID(aUID: Integer);
+    procedure SelectEntity(aEntity: TKMHandEntity);
+    procedure SelectNHighlightEntityByUID(aUID: Integer);
 
     property Alerts: TKMAlerts read fAlerts;
 
@@ -352,6 +358,7 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
     procedure Resize(X,Y: Word); override;
     procedure SyncUI(aMoveViewport: Boolean = True); override;
+    procedure UpdateDebugInfo;
     procedure UpdateState(aTickCount: Cardinal); override;
     procedure UpdateStateIdle(aFrameTime: Cardinal); override;
     procedure Paint; override;
@@ -360,7 +367,6 @@ type
 
 implementation
 uses
-  Generics.Collections,
   KM_Main, KM_GameInputProcess, KM_GameInputProcess_Multi, KM_AI, KM_RenderUI, KM_GameCursor, KM_Maps,
   KM_HandsCollection, KM_Hand, KM_RenderPool, KM_ResTexts, KM_Game, KM_GameApp, KM_HouseBarracks, KM_HouseTownHall,
   KM_ScriptingEvents, KM_AIFields, KM_GameSettings,
@@ -368,10 +374,9 @@ uses
   KM_Sound, KM_NetPlayersList, KM_MessageLog, KM_NetworkTypes,
   KM_InterfaceMapEditor, KM_HouseWoodcutters, KM_MapTypes,
   KM_GameTypes, KM_GameParams, KM_Video, KM_Music,
-  KM_HandEntity,
   KM_HandEntityHelper,
   KM_ResTypes,
-  KM_Utils;
+  KM_Utils, KM_MapUtils;
 
 const
   ALLIES_ROWS = 7;
@@ -791,6 +796,9 @@ begin
 
   fAlerts := TKMAlerts.Create(fViewport);
 
+  gLog.AddOnLogEventSub(LogMessageHappened);
+  fLogStringList := TKMLimitedList<string>.Create(80); // 50 lines max
+
   // Instruct to use global Terrain
   fLastSaveName := '';
   fLastKbdSelectionTime := 0;
@@ -805,9 +813,9 @@ begin
   fMessageStack := TKMMessageStack.Create;
   fSaves := TKMSavesCollection.Create;
 
-  fUnitsTeamNames := TList.Create;
-  fGroupsTeamNames := TList.Create;
-  fHousesTeamNames := TList.Create;
+  fUnitsTeamNames := TList<TKMUnit>.Create;
+  fGroupsTeamNames := TList<TKMUnitGroup>.Create;
+  fHousesTeamNames := TList<TKMHouse>.Create;
 
   Label_TeamName := TKMLabel.Create(Panel_Main, 0, 0, '', fntGrey, taCenter);
 
@@ -838,8 +846,7 @@ begin
   Bevel_DebugInfo.BackAlpha := 0.5;
   Bevel_DebugInfo.Hitable := False;
   Bevel_DebugInfo.Hide;
-  Label_DebugInfo := TKMLabel.Create(Panel_Main, 224+8, 133, '', fntMini, taLeft);
-  Label_DebugInfo.Monospaced := True;
+  Label_DebugInfo := TKMLabel.Create(Panel_Main, 224+8, 133, '', fntMonospaced, taLeft);
   Label_DebugInfo.Hide;
 
 { I plan to store all possible layouts on different pages which gets displayed one at a time }
@@ -921,6 +928,10 @@ begin
   FreeAndNil(fGroupsTeamNames);
   FreeAndNil(fUnitsTeamNames);
   fAlerts.Free;
+
+  gLog.RemoveOnLogEventSub(LogMessageHappened);
+  fLogStringList.Free;
+
   inherited;
 end;
 
@@ -1152,7 +1163,7 @@ begin
     Button_ReplaySaveAt     := TKMButton.Create(Panel_ReplayCtrl,125, 0, 24, 24, 592, rxGui, bsGame);
 
     Button_ShowStatsReplay  := TKMButton.Create(Panel_ReplayCtrl, 185 - 24, 0, 24, 24, 669, rxGui, bsGame);
-    //TODO: Button_ReplayFF       := TKMButton.Create(Panel_ReplayCtrl,125, 24, 24, 24, 393, rxGui, bsGame);
+    //todo: Button_ReplayFF       := TKMButton.Create(Panel_ReplayCtrl,125, 24, 24, 24, 393, rxGui, bsGame);
     Button_ReplayRestart.OnClick := ReplayClick;
     Button_ReplayPause.OnClick   := ReplayClick;
     Button_ReplayStep.OnClick    := ReplayClick;
@@ -1707,8 +1718,8 @@ begin
   if gGameParams.IsNormalGame then // Don't play Victory / Defeat videos for specs
   begin
     case aMsg of
-      grWin:              gVideoPlayer.AddMissionVideo(gGameParams.MissionFile, 'Victory');
-      grDefeat, grCancel: gVideoPlayer.AddMissionVideo(gGameParams.MissionFile, 'Defeat');
+      grWin:              gVideoPlayer.AddMissionVideo(gGameParams.MissionFileRel, 'Victory');
+      grDefeat, grCancel: gVideoPlayer.AddMissionVideo(gGameParams.MissionFileRel, 'Defeat');
     end;
     gVideoPlayer.Play;
   end;
@@ -1761,15 +1772,25 @@ end;
 
 procedure TKMGamePlayInterface.Menu_ReturnToMapEd(Sender: TObject);
 var
-  mapPath, gameName: UnicodeString;
+  missionFullPath: UnicodeString;
   isMultiplayer: Boolean;
+  mapFullCRC, mapSimpleCRC: Cardinal;
 begin
   isMultiplayer := gGame.StartedFromMapEdAsMPMap;
-  mapPath := TKMapsCollection.FullPath(gGameParams.Name, '.dat', isMultiplayer);
-  gameName := gGameParams.Name;
+
+  mapSimpleCRC := 0;
+  mapFullCRC := 0;
+  // Save locally CRC's if they were calculated, to skip further calculations of CRC's
+  if gGameParams.IsCRCCalculated then
+  begin
+    mapSimpleCRC := gGameParams.MapSimpleCRC;
+    mapFullCRC := gGameParams.MapFullCRC;
+  end;
+
+  missionFullPath := gGameParams.MissionFullFilePath;
   FreeThenNil(gGame);
-  gGameApp.NewMapEditor(mapPath, 0, 0, TKMapsCollection.GetMapCRC(gameName, isMultiplayer));
-  TKMapEdInterface(gGame.ActiveInterface).SetLoadMode(isMultiplayer);
+  // current TKMGamePlayInterface object is destroyed, use only local variables here
+  gGameApp.NewMapEditor(missionFullPath, 0, 0, mapFullCRC, mapSimpleCRC, isMultiplayer);
 end;
 
 
@@ -1901,7 +1922,25 @@ begin
 end;
 
 
-procedure TKMGamePlayInterface.SelectEntityByUID(aUID: Integer);
+procedure TKMGamePlayInterface.SelectEntity(aEntity: TKMHandEntity);
+begin
+  if Self = nil then Exit;
+  if gHands = nil then Exit;
+
+  if (aEntity = nil) or not aEntity.IsSelectable then Exit;
+
+  fViewport.Position := aEntity.PositionF;
+
+  if aEntity is TKMUnitWarrior then
+    gMySpectator.Selected := aEntity.AsUnitWarrior.Group
+  else
+    gMySpectator.Selected := aEntity;
+
+  UpdateSelectedObject;
+end;
+
+
+procedure TKMGamePlayInterface.SelectNHighlightEntityByUID(aUID: Integer);
 var
   entity: TKMHandEntity;
 begin
@@ -1909,18 +1948,8 @@ begin
   if gHands = nil then Exit;
 
   entity := gHands.GetObjectByUID(aUID);
-  gMySpectator.HighlightDebug := entity;
-
-  if (entity = nil) or not entity.IsSelectable then Exit;
-
-  fViewport.Position := entity.PositionF;
-
-  if entity is TKMUnitWarrior then
-    gMySpectator.Selected := entity.AsUnitWarrior.Group
-  else
-    gMySpectator.Selected := entity;
-
-  UpdateSelectedObject;
+  SelectEntity(entity);
+  gMySpectator.HighlightDebug := TKMHighlightEntity.New(entity, icCyan);
 end;
 
 
@@ -2038,6 +2067,7 @@ begin
     gGame.StepOneFrame;
     gGame.IsPaused := False;
     UpdateReplayButtons(False);
+    UpdateDebugInfo;
   end;
 
   if Sender = Button_ReplayResume then
@@ -2254,8 +2284,10 @@ var
   I: Integer;
   pad: Integer;
 begin
-  pad := Byte(fUIMode in [umMP, umSpectate]) * 2 +
-         Byte(Image_MessageLog.Visible);
+  pad := Ord(CanShowChat) +
+         Ord(CanShowAllies) +
+         Ord(Image_MessageLog.Visible);
+
   for I := 0 to MAX_VISIBLE_MSGS do
     Image_Message[I].Top := Panel_Main.Height - 48 - (I + pad) * 48;
 end;
@@ -2467,6 +2499,10 @@ procedure TKMGamePlayInterface.UpdateMessageImages;
 var
   I: Integer;
 begin
+  Image_MessageLog.Top := Panel_Main.Height - 48
+                                            - IfThen(CanShowAllies, 48)
+                                            - IfThen(CanShowChat, 48);
+
   for I := 0 to MAX_VISIBLE_MSGS do
     Image_Message[I].Top := Panel_Main.Height - 48 - I * 48
                             - IfThen(CanShowChat, 48)
@@ -3067,6 +3103,26 @@ begin
 
   if not fGuiGameChat.Visible then
     Label_ChatUnread.Caption := IntToStr(StrToIntDef(Label_ChatUnread.Caption, 0) + 1); // New message
+end;
+
+
+function TKMGamePlayInterface.GetLogString(aLimit: Integer): string;
+var
+  I: Integer;
+begin
+  Result := '';  
+  // attach from the end, the most fresh log lines, till the limit
+  for I := fLogStringList.Count - 1 downto Max(fLogStringList.Count - aLimit - 1, 0) do
+    Result := fLogStringList[I] + '|' + Result;
+end;
+
+
+procedure TKMGamePlayInterface.LogMessageHappened(const aLogMessage: UnicodeString);
+begin
+  if Self = nil then Exit;
+  
+  if SHOW_LOG_IN_GUI or UPDATE_LOG_FOR_GUI then
+    fLogStringList.Add(ReplaceStr(DeleteDoubleSpaces(aLogMessage), EolW, '|'));
 end;
 
 
@@ -3683,6 +3739,8 @@ var
   windowRect: TRect;
   {$ENDIF}
 begin
+  inherited;
+
   fMyControls.MouseDown(X, Y, Shift, Button);
 
   if (gGame.IsPaused and (fUIMode in [umSP, umMP])) or (fMyControls.CtrlOver <> nil)
@@ -3714,7 +3772,8 @@ begin
     and not HasLostMPGame
     and not fGuiGameUnit.JoiningGroups
     and not fPlacingBeacon
-    and (gMySpectator.Selected is TKMUnitGroup) then
+    and (gMySpectator.Selected is TKMUnitGroup)
+    and gMySpectator.IsSelectedMyObj then
   begin
     group := TKMUnitGroup(gMySpectator.Selected);
     obj := gMySpectator.HitTestCursor;
@@ -3892,10 +3951,8 @@ begin
     // Only own and ally units/houses can be selected
     if (entity.Owner <> -1) and
       ((entity.Owner = gMySpectator.HandID)
-      or ((ALLOW_SELECT_ALLY_UNITS
-          or ((entity is TKMHouse) and TKMHouse(entity).AllowAllyToView))
-        and (gMySpectator.Hand.Alliances[entity.Owner] = atAlly))
-      or (ALLOW_SELECT_ENEMIES and (gMySpectator.Hand.Alliances[entity.Owner] = atEnemy)) // Enemies can be selected for debug
+      or ALLOW_SELECT_ALL
+      or (entity.AllowAllyToSelect and (gMySpectator.Hand.Alliances[entity.Owner] = atAlly))
       or (fUIMode in [umReplay, umSpectate])) then
     begin
       gRes.Cursors.Cursor := kmcInfo;
@@ -3903,7 +3960,8 @@ begin
     end;
   end;
 
-  if (gMySpectator.Selected.IsGroup)
+  if gMySpectator.Selected.IsGroup
+    and gMySpectator.IsSelectedMyObj
     and (fUIMode in [umSP, umMP]) and not HasLostMPGame
     and not gMySpectator.Hand.InCinematic
     and (gMySpectator.FogOfWar.CheckTileRevelation(gGameCursor.Cell.X, gGameCursor.Cell.Y) > 0) then
@@ -4052,6 +4110,8 @@ begin
                     and ((oldSelected <> group) or (oldSelectedUnit <> group.SelectedUnit)) then
                       gSoundPlayer.PlayWarrior(group.SelectedUnit.UnitType, spSelect);
                 end;
+
+                UpdateDebugInfo;
               end;
 
             cmRoad:  gGameCursor.Tag1 := Ord(cfmNone);
@@ -4297,6 +4357,7 @@ procedure TKMGamePlayInterface.UpdateState(aTickCount: Cardinal);
 var
   I, lastTick: Integer;
   rect: TKMRect;
+  str: string;
 begin
   inherited;
   // Update minimap every 1000ms
@@ -4317,17 +4378,18 @@ begin
   // Update replay counters
   if fUIMode = umReplay then
   begin
-    lastTick := Max4(gGame.LastReplayTick,
-                     gGame.GameInputProcess.GetLastTick,
-                     gGameParams.Tick,
-                     gGame.SavePoints.LastTick);
+    lastTick := gGame.GetReplayLastTick;
     // Replays can continue after end, keep the bar in 0..1 range
     ReplayBar_Replay.SetParameters(gGameParams.Tick,
                                    gGame.Options.Peacetime*60*10,
                                    lastTick);
 
-    Label_ReplayBar.Caption := TimeToString(gGame.MissionTime) + ' / ' +
-                            TickToTimeStr(lastTick);
+    if lastTick = gGameParams.Tick then
+      str := TickToTimeStr(lastTick)
+    else
+      str := TimeToString(gGame.MissionTime) + ' / ' + TickToTimeStr(lastTick);
+
+    Label_ReplayBar.Caption := str;
   end;
 
   // Update speedup clocks
@@ -4435,12 +4497,15 @@ end;
 
 
 procedure TKMGamePlayInterface.UpdateDebugInfo;
+const
+  BEVEL_PAD = 20;
 var
   mKind: TKMessageKind;
   received, sent, receivedTotal, sentTotal, period: Cardinal;
   S, sPackets, S2: String;
   textSize: TKMPoint;
   objToShowInfo: TObject;
+  linesCnt: Integer;
 begin
   S := '';
 
@@ -4550,20 +4615,26 @@ begin
   if SHOW_HANDS_INFO then
     S := S + gHands.ObjToString;
 
+  if SHOW_LOG_IN_GUI then
+  begin
+    linesCnt := (Bevel_DebugInfo.Parent.Height 
+                  - Bevel_DebugInfo.Top 
+                  - BEVEL_PAD 
+                  - gRes.Fonts[Label_DebugInfo.Font].GetTextSize(S).Y) 
+                div gRes.Fonts[Label_DebugInfo.Font].LineHeight;
+    S := S + '|Logs:|' + GetLogString(linesCnt - 1);
+  end;
+
   Label_DebugInfo.Caption := S;
   Label_DebugInfo.Visible := (Trim(S) <> '');
-  Label_DebugInfo.Monospaced := DEBUG_TEXT_MONOSPACED;
 
-  Assert(InRange(DEBUG_TEXT_FONT_ID, Byte(Low(TKMFont)), Byte(High(TKMFont))));
+  Assert(InRange(DEBUG_TEXT_FONT_ID, Ord(Low(TKMFont)), Ord(High(TKMFont))));
   Label_DebugInfo.Font := TKMFont(DEBUG_TEXT_FONT_ID);
 
-  if Label_DebugInfo.Monospaced then
-    textSize := gRes.Fonts[Label_DebugInfo.Font].GetMonospacedTextSize(S)
-  else
-    textSize := gRes.Fonts[Label_DebugInfo.Font].GetTextSize(S);
+  textSize := gRes.Fonts[Label_DebugInfo.Font].GetTextSize(S);
 
-  Bevel_DebugInfo.Width := IfThen(textSize.X <= 1, 0, textSize.X + 20);
-  Bevel_DebugInfo.Height := IfThen(textSize.Y <= 1, 0, textSize.Y + 20);
+  Bevel_DebugInfo.Width := IfThen(textSize.X <= 1, 0, textSize.X + BEVEL_PAD);
+  Bevel_DebugInfo.Height := IfThen(textSize.Y <= 1, 0, textSize.Y + BEVEL_PAD);
 
   Bevel_DebugInfo.Visible := SHOW_DEBUG_OVERLAY_BEVEL and (Trim(S) <> '') ;
 end;
@@ -4584,14 +4655,11 @@ begin
     Label_TeamName.Visible := True; // Only visible while we're using it, otherwise it shows up in other places
     for I := 0 to fUnitsTeamNames.Count - 1 do
       try
-        if not (TObject(fUnitsTeamNames[I]) is TKMUnit)
-          or (TKMUnit(fUnitsTeamNames[I]) = nil)
-          or TKMUnit(fUnitsTeamNames[I]).IsDeadOrDying then
+        if (fUnitsTeamNames[I] = nil)
+          or fUnitsTeamNames[I].IsDeadOrDying then
           Continue;
 
-        U := TKMUnit(fUnitsTeamNames[I]);
-        if U.IsDeadOrDying then
-          Continue;
+        U := fUnitsTeamNames[I];
 
         if SHOW_UIDs
           or (U.Visible and (gMySpectator.FogOfWar.CheckRevelation(U.PositionF) > FOG_OF_WAR_MIN)) then
@@ -4625,10 +4693,7 @@ begin
     begin
       for I := 0 to fGroupsTeamNames.Count - 1 do
         try
-          if not (TObject(fGroupsTeamNames[I]) is TKMUnitGroup) then
-            Continue;
-
-          G := TKMUnitGroup(fGroupsTeamNames[I]);
+          G := fGroupsTeamNames[I];
           if (G = nil) or G.IsDead then
             Continue;
 
@@ -4662,10 +4727,7 @@ begin
 
       for I := 0 to fHousesTeamNames.Count - 1 do
         try
-          if not (TObject(fHousesTeamNames[I]) is TKMHouse) then
-            Continue;
-
-          H := TKMHouse(fHousesTeamNames[I]);
+          H := fHousesTeamNames[I];
           if H.IsDestroyed then
             Continue;
 

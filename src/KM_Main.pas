@@ -89,16 +89,18 @@ uses
   Classes, Forms,
   {$IFDEF MSWindows} MMSystem, {$ENDIF}
   {$IFDEF USE_MAD_EXCEPT} KM_Exceptions, {$ENDIF}
-  SysUtils, StrUtils, Math, KromUtils, KM_FileIO,
+  SysUtils, SysConst, StrUtils, Math, KromUtils, KM_FileIO,
   KM_GameApp, KM_Helpers,
   KM_Log, KM_CommonUtils, KM_Defaults, KM_Points, KM_DevPerfLog,
-  KM_CommonExceptions;
+  KM_CommonExceptions,
+  KM_Utils, KM_MapTypes;
 
 
 const
   // Mutex is used to block duplicate app launch on the same PC
   // Random GUID generated in Delphi by Ctrl+G
   KAM_MUTEX = '07BB7CC6-33F2-44ED-AD04-1E255E0EDF0D';
+
 
 { TKMMain }
 constructor TKMMain.Create;
@@ -138,6 +140,24 @@ begin
 end;
 
 
+// Assertion error handler
+procedure CustomAssertErrorHandler(const Message, Filename: string; LineNumber: Integer; ErrorAddr: Pointer);
+var
+  fileNameOnly: string;
+begin
+  // Show only filename in the error message
+  fileNameOnly := ExtractFileName(Filename);
+
+  if Message <> '' then
+    raise EAssertionFailed.CreateFmt(SAssertError,
+      [Message, fileNameOnly, LineNumber]) at ErrorAddr
+  else
+    raise EAssertionFailed.CreateFmt(SAssertError,
+      [SAssertionFailed, fileNameOnly, LineNumber]) at ErrorAddr;
+end;
+
+
+
 // Return False in case we had difficulties on the start
 function TKMMain.Start: Boolean;
 
@@ -153,8 +173,16 @@ function TKMMain.Start: Boolean;
     end;
   end;
 
+var
+  logsPath: UnicodeString;
 begin
   Result := True;
+
+  ExeDir := ExtractFilePath(ParamStr(0));
+
+  // Set custom AssertErrorhandler to avoid dev paths in the error messages, which could be seen by players
+  AssertErrorProc := @CustomAssertErrorHandler;
+
   //Random is only used for cases where order does not matter, e.g. shuffle tracks
   Randomize;
 
@@ -166,17 +194,16 @@ begin
   TimeBeginPeriod(1); //initialize timer precision
   {$ENDIF}
 
-  ExeDir := ExtractFilePath(ParamStr(0));
-
   if not BLOCK_FILE_WRITE then
   begin
     try
       CreateDir(ExeDir + 'Logs' + PathDelim);
-      gLog := TKMLog.Create(ExeDir + 'Logs' + PathDelim + 'KaM_' + FormatDateTime('yyyy-mm-dd_hh-nn-ss-zzz', Now) + '.log'); //First thing - create a log
+      logsPath := ExeDir + 'Logs' + PathDelim + 'KaM_' + FormatDateTime('yyyy-mm-dd_hh-nn-ss-zzz', Now) + '.log';
+      gLog := TKMLog.Create(logsPath); //First thing - create a log
       gLog.DeleteOldLogs;
     except
       on E: Exception do
-        raise EGameInitError.Create('Error initializing logging:' + sLineBreak + E.Message);
+        raise EGameInitError.Create('Error initializing logging into file: ''' + logsPath + ''':' + sLineBreak + E.Message);
     end;
   end;
 
@@ -195,7 +222,7 @@ begin
       fMainSettings.FullScreen := False;
   end;
 
-  gVideoPlayer := TKMVideoPlayer.Create;
+  gVideoPlayer := TKMVideoPlayer.Create(ENABLE_VIDEOS_UNDER_WINE or not IsUnderWine);
 
   fFormMain.Caption := 'KaM Remake - ' + UnicodeString(GAME_VERSION);
   //Will make the form slightly higher, so do it before ReinitRender so it is reset
@@ -206,7 +233,7 @@ begin
      fMainSettings.WindowParams.NeedResetToDefaults := True;
 
   // Stop app if we did not ReinitRender properly (didn't pass game folder permissions test)
-  // TODO refactor. Separate folder permissions check and render initialization
+  //todo: refactor. Separate folder permissions check and render initialization
   // Locale and texts could be loaded separetely to show proper translated error message
   if not ReinitRender(False) then
   begin
@@ -235,7 +262,7 @@ begin
   Application.ProcessMessages;
   fFormLoading.Hide;
 
-  fFormMain.LoadDevSettings;
+  fFormMain.AfterFormCreated;
 end;
 
 
@@ -425,12 +452,16 @@ function TKMMain.DoHaveGenericPermission: Boolean;
 const
   GRANTED: array[Boolean] of string = ('blocked', 'granted');
 var
-  readAcc, writeAcc, execAcc: Boolean;
+  readAcc, writeAcc, execAcc, dirWritable: Boolean;
 begin
   CheckFolderPermission(ExeDir, readAcc, writeAcc, execAcc);
-  gLog.AddTime(Format('Check game folder ''%s'' generic permissions: READ: %s; WRITE: %s; EXECUTE: %s',
-                      [ExeDir, GRANTED[readAcc], GRANTED[writeAcc], GRANTED[execAcc]]));
-  Result := readAcc and writeAcc and execAcc;
+
+  dirWritable := IsDirectoryWriteable(ExeDir);
+
+  gLog.AddTime(Format('Check game folder ''%s'' generic permissions: READ: %s; WRITE: %s; EXECUTE: %s; folder is writable: ',
+                      [ExeDir, GRANTED[readAcc], GRANTED[writeAcc], GRANTED[execAcc], BoolToStr(dirWritable, True)]));
+
+  Result := dirWritable and readAcc and writeAcc and execAcc;
 end;
 
 
@@ -463,11 +494,11 @@ begin
 
   // Check if player has all permissions on game folder. Close the app if not
   // Check is done after gGameApp creating because we want to load texts first to shw traslated error message
-  // TODO refactor. Separate folder permissions check and render initialization
+  //todo: refactor. Separate folder permissions check and render initialization
   // Locale and texts could be loaded separetely to show proper translated error message
   if (gLog = nil)
     or (not aReturnToOptions and not DoHaveGenericPermission) then
-    Exit(False);
+    Exit(False); // Will show 'You have not enough permissions' message to the player
 
   gGameApp.OnGameSpeedActualChange := GameSpeedChange;
   gGameApp.AfterConstruction(aReturnToOptions);

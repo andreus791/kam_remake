@@ -83,7 +83,7 @@ type
     chkLogDelivery: TCheckBox;
     chkLogNetConnection: TCheckBox;
     RGLogNetPackets: TRadioGroup;
-    chkLogsShowInChat: TCheckBox;
+    chkLogShowInChat: TCheckBox;
     chkUIControlsID: TCheckBox;
     Debug_ShowLogistics: TMenuItem;
     chkShowTerrainIds: TCheckBox;
@@ -156,6 +156,40 @@ type
     chkShowHouses: TCheckBox;
     chkShowObjects: TCheckBox;
     chkShowFlatTerrain: TCheckBox;
+
+    sePauseBeforeTick: TSpinEdit;
+    Label8: TLabel;
+    Label9: TLabel;
+    seMakeSaveptBeforeTick: TSpinEdit;
+    Label12: TLabel;
+    seCustomSeed: TSpinEdit;
+    chkUIFocusedControl: TCheckBox;
+    chkUIControlOver: TCheckBox;
+    chkPaintSounds: TCheckBox;
+    cpMisc: TCategoryPanel;
+    chkBevel: TCheckBox;
+    rgDebugFont: TRadioGroup;
+    mnExportRPL: TMenuItem;
+    chkPathfinding: TCheckBox;
+    chkGipAsBytes: TCheckBox;
+    cpDebugInput: TCategoryPanel;
+    gbFindObjByUID: TGroupBox;
+    Label14: TLabel;
+    Label15: TLabel;
+    Label13: TLabel;
+    seFindObjByUID: TSpinEdit;
+    btFindObjByUID: TButton;
+    seEntityUID: TSpinEdit;
+    seWarriorUID: TSpinEdit;
+    GroupBox2: TGroupBox;
+    Label10: TLabel;
+    Label11: TLabel;
+    seDebugValue: TSpinEdit;
+    edDebugText: TEdit;
+    chkFindObjByUID: TCheckBox;
+    tbWaterLight: TTrackBar;
+    lblWaterLight: TLabel;
+    chkSkipRenderText: TCheckBox;
     {$ENDIF}
     {$IFDEF FPC}
     mainGroup: TGroupBox;
@@ -176,35 +210,9 @@ type
     N11: TMenuItem;
     mnExportRngChecks: TMenuItem;
     chkGIP: TCheckBox;
-    sePauseBeforeTick: TSpinEdit;
-    Label8: TLabel;
-    Label9: TLabel;
-    seMakeSaveptBeforeTick: TSpinEdit;
-    Label12: TLabel;
-    seCustomSeed: TSpinEdit;
-    chkUIFocusedControl: TCheckBox;
-    chkUIControlOver: TCheckBox;
-    chkPaintSounds: TCheckBox;
-    GroupBox1: TGroupBox;
-    seFindObjByUID: TSpinEdit;
-    btFindObjByUID: TButton;
-    Label14: TLabel;
-    seEntityUID: TSpinEdit;
-    Label15: TLabel;
-    seWarriorUID: TSpinEdit;
-    GroupBox2: TGroupBox;
-    Label10: TLabel;
-    Label11: TLabel;
-    seDebugValue: TSpinEdit;
-    edDebugText: TEdit;
-    Label13: TLabel;
-    cpMisc: TCategoryPanel;
-    chkBevel: TCheckBox;
-    rgDebugFont: TRadioGroup;
-    chkMonospacedFont: TCheckBox;
-    mnExportRPL: TMenuItem;
-    chkPathfinding: TCheckBox;
-    chkGipAsBytes: TCheckBox;
+    chkLogShowInGUI: TCheckBox;
+    chkLogUpdateForGUI: TCheckBox;
+
 
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -268,10 +276,10 @@ type
     procedure mnExportRngChecksClick(Sender: TObject);
     procedure btFindObjByUIDClick(Sender: TObject);
     procedure mnExportRPLClick(Sender: TObject);
+    procedure radioGroupExit(Sender: TObject);
 
     procedure ControlsUpdate(Sender: TObject);
   private
-    fDevSettingsFilepath: string;
     fStartVideoPlayed: Boolean;
     fUpdating: Boolean;
     fMissionDefOpenPath: UnicodeString;
@@ -280,8 +288,20 @@ type
     procedure FormKeyUpProc(aKey: Word; aShift: TShiftState);
 //    function ConfirmExport: Boolean;
     function GetMouseWheelStepsCnt(aWheelData: Integer): Integer;
+
+    procedure ConstrolsDisableTabStops;
+    procedure ControlDisableTabStop(aCtrl: TControl);
+    procedure SubPanelDisableTabStop(aPanel: TWinControl);
+
     procedure ResetControl(aCtrl: TControl);
     procedure ResetSubPanel(aPanel: TWinControl);
+
+    function GetDevSettingsPath: UnicodeString;
+    procedure DoLoadDevSettings;
+    procedure DoSaveDevSettings;
+
+    procedure FindObjByUID(aUID: Integer);
+    function AllowFindObjByUID: Boolean;
     {$IFDEF MSWindows}
     function GetWindowParams: TKMWindowParamsRecord;
     procedure WMSysCommand(var Msg: TWMSysCommand); message WM_SYSCOMMAND;
@@ -304,8 +324,13 @@ type
     procedure ShowFolderPermissionError;
     procedure SetEntitySelected(aEntityUID: Integer; aEntity2UID: Integer = 0);
     property OnControlsUpdated: TObjectIntegerEvent read fOnControlsUpdated write fOnControlsUpdated;
+
     procedure LoadDevSettings;
     procedure SaveDevSettings;
+
+    procedure Defocus;
+
+    procedure AfterFormCreated;
   end;
 
 
@@ -334,6 +359,7 @@ uses
   KM_RandomChecks,
   KM_Log, KM_CommonClasses, KM_Helpers, KM_Video,
   KM_GameSettings,
+  KM_ServerSettings,
 
   KM_IoXML,
   KM_GameInputProcess,
@@ -348,8 +374,14 @@ begin
 end;
 
 
+function TFormMain.GetDevSettingsPath: UnicodeString;
+begin
+  Result := ExeDir + DEV_SETTINGS_XML_FILENAME;
+end;
+
+
 // Load dev settings from kmr_dev.xml
-procedure TFormMain.LoadDevSettings;
+procedure TFormMain.DoLoadDevSettings;
 
   procedure ManageSubPanel(aPanel: TWinControl; anParent: TXMLNode);
   var
@@ -393,6 +425,7 @@ procedure TFormMain.LoadDevSettings;
 
 var
   I: Integer;
+  devSettingsPath: UnicodeString;
   newXML: TKMXMLDocument;
   cp: TCategoryPanel;
   cpSurface: TCategoryPanelSurface;
@@ -400,21 +433,23 @@ var
   nRoot, nSection: TXMLNode;
 begin
   fUpdating := True;
-
+  devSettingsPath := GetDevSettingsPath;
   try
+    gLog.AddTime('Loading dev settings from file ''' + devSettingsPath + '''');
+
     // Apply default settings
-    if not FileExists(fDevSettingsFilepath) then
+    if not FileExists(devSettingsPath) then
     begin
       for I := 0 to mainGroup.Panels.Count - 1 do
         TCategoryPanel(mainGroup.Panels[I]).Collapsed := True;
-      
+
       cpGameControls.Collapsed := False; //The only not collapsed section
       Exit;
     end;
-  
+
     //Load dev data from XML
     newXML := TKMXMLDocument.Create;
-    newXML.LoadFromFile(ExeDir + DEV_SETTINGS_XML_FILENAME);
+    newXML.LoadFromFile(devSettingsPath);
     nRoot := newXML.Root;
 
     for I := 0 to mainGroup.Panels.Count - 1 do
@@ -444,7 +479,7 @@ end;
 
 
 // Save dev settings to kmr_dev.xml
-procedure TFormMain.SaveDevSettings;
+procedure TFormMain.DoSaveDevSettings;
 
   procedure ManageSubPanel(aPanel: TWinControl; anParent: TXMLNode);
   var
@@ -486,14 +521,19 @@ procedure TFormMain.SaveDevSettings;
 
 var
   I: Integer;
+  devSettingsPath: UnicodeString;
   newXML: TKMXMLDocument;
   cp: TCategoryPanel;
   cpSurface: TCategoryPanelSurface;
   nRoot, nSection: TXMLNode;
 begin
+  devSettingsPath := GetDevSettingsPath;
+
+  gLog.AddTime('Saving dev settings to file ''' + devSettingsPath + '''');
+
   //Save dev data to XML
   newXML := TKMXMLDocument.Create;
-  newXML.LoadFromFile(fDevSettingsFilepath);
+  newXML.LoadFromFile(devSettingsPath);
   nRoot := newXML.Root;
 
   for I := 0 to mainGroup.Panels.Count - 1 do
@@ -511,15 +551,58 @@ begin
     end;
   end;
 
-  newXML.SaveToFile(fDevSettingsFilepath);
+  newXML.SaveToFile(devSettingsPath);
   newXML.Free;
+end;
+
+
+// Load dev settings from kmr_dev.xml
+procedure TFormMain.LoadDevSettings;
+begin
+  {$IFDEF DEBUG}
+  // allow crash while debugging
+  DoLoadDevSettings;
+  {$ELSE}
+  try
+    // Skip crash on released version, only log the error
+    DoLoadDevSettings;
+  except
+    on E: Exception do
+    begin
+      gLog.AddTime('Error while loading dev settings from ''' + GetDevSettingsPath + ''':' + sLineBreak + E.Message
+          {$IFDEF WDC}+ sLineBreak + E.StackTrace{$ENDIF}
+        );
+    end;
+  end;
+  {$ENDIF}
+end;
+
+
+// Save dev settings to kmr_dev.xml
+procedure TFormMain.SaveDevSettings;
+begin
+  {$IFDEF DEBUG}
+  // allow crash while debugging
+  DoSaveDevSettings;
+  {$ELSE}
+  try
+    // Skip crash on released version, only log the error
+    DoSaveDevSettings;
+  except
+    on E: Exception do
+    begin
+      gLog.AddTime('Error while saving dev settings to ''' + GetDevSettingsPath + ''':' + sLineBreak + E.Message
+          {$IFDEF WDC}+ sLineBreak + E.StackTrace{$ENDIF}
+        );
+    end;
+  end;
+  {$ENDIF}
 end;
 
 
 //Remove VCL panel and use flicker-free TMyPanel instead
 procedure TFormMain.FormCreate(Sender: TObject);
 begin
-  fDevSettingsFilepath := ExeDir + DEV_SETTINGS_XML_FILENAME;
   fStartVideoPlayed := False;
   RenderArea := TKMRenderControl.Create(Self);
   RenderArea.Parent := Self;
@@ -555,6 +638,7 @@ begin
   {$ENDIF}
 
   chkShowFlatTerrain.Tag := Ord(dcFlatTerrain);
+  tbWaterLight.Tag := Ord(dcFlatTerrain);
 end;
 
 
@@ -583,7 +667,7 @@ begin
 
   if not fStartVideoPlayed and (gGameSettings <> nil) and gGameSettings.VideoStartup then
   begin
-    gVideoPlayer.AddVideo('Campaigns' + PathDelim + 'The Peasants Rebellion' + PathDelim + 'Logo', vfkStarting);
+    gVideoPlayer.AddVideo(CAMPAIGNS_FOLDER_NAME + PathDelim + 'The Peasants Rebellion' + PathDelim + 'Logo', vfkStarting);
     gVideoPlayer.AddVideo('KaM', vfkStarting);
     gVideoPlayer.Play;
     fStartVideoPlayed := True;
@@ -652,6 +736,7 @@ end;
 procedure TFormMain.ReloadSettingsClick(Sender: TObject);
 begin
   gGameAppSettings.ReloadSettings;
+  gServerSettings.ReloadSettings;
 end;
 
 
@@ -819,6 +904,13 @@ begin
 end;
 
 
+procedure TFormMain.Defocus;
+begin
+  if Assigned(Self.ActiveControl) then
+    Self.DefocusControl(Self.ActiveControl, True);
+end;
+
+
 //Exports
 procedure TFormMain.Export_TreesRXClick(Sender: TObject);
 begin
@@ -952,6 +1044,7 @@ end;
 procedure TFormMain.SaveSettingsClick(Sender: TObject);
 begin
   gGameAppSettings.SaveSettings(True);
+  gServerSettings.SaveSettings(True);
 end;
 
 
@@ -996,11 +1089,17 @@ begin
 end;
 
 
-procedure TFormMain.btFindObjByUIDClick(Sender: TObject);
+procedure TFormMain.FindObjByUID(aUID: Integer);
 begin
   if gGameApp.Game.GamePlayInterface = nil then Exit;
 
-  gGameApp.Game.GamePlayInterface.SelectEntityByUID(seFindObjByUID.Value);
+  gGameApp.Game.GamePlayInterface.SelectNHighlightEntityByUID(aUID);
+end;
+
+
+procedure TFormMain.btFindObjByUIDClick(Sender: TObject);
+begin
+  FindObjByUID(seFindObjByUID.Value);
 end;
 
 
@@ -1016,6 +1115,80 @@ begin
 end;
 
 
+procedure TFormMain.ConstrolsDisableTabStops;
+
+  {$IFDEF WDC}
+  procedure CategoryPanelDisableTabStops(aPanel: TCategoryPanel);
+  var
+    panelSurface: TCategoryPanelSurface;
+  begin
+    if (aPanel.ControlCount > 0) and (aPanel.Controls[0] is TCategoryPanelSurface) then
+    begin
+      panelSurface := TCategoryPanelSurface(aPanel.Controls[0]);
+      SubPanelDisableTabStop(panelSurface);
+    end;
+  end;
+
+  procedure GroupDisableTabStops(aGroup: TCategoryPanelGroup);
+  var
+    I: Integer;
+  begin
+    for I := 0 to aGroup.ControlCount - 1 do
+      if (aGroup.Controls[I] is TCategoryPanel) then
+        CategoryPanelDisableTabStops(TCategoryPanel(aGroup.Controls[I]));
+  end;
+  {$ENDIF}
+
+begin
+  {$IFDEF WDC}
+  GroupDisableTabStops(mainGroup);
+  {$ENDIF}
+end;
+
+
+procedure TFormMain.ControlDisableTabStop(aCtrl: TControl);
+begin
+  if aCtrl is TButton then
+    TButton(aCtrl).TabStop := False
+  else
+  if aCtrl is TCheckBox then
+    TCheckBox(aCtrl).TabStop := False
+  else
+  if aCtrl is TTrackBar then
+    TTrackBar(aCtrl).TabStop := False
+  else
+  if (aCtrl is TRadioGroup) then
+  begin
+// TRadioGroup.TabStop should not be accessed in the 'outside' code, its used for internal use
+    radioGroupExit(aCtrl); // Tricky way to disable TabStop on TRadioGroup
+  end
+  else
+  if (aCtrl is TSpinEdit) then
+    TSpinEdit(aCtrl).TabStop := False
+  else
+  if (aCtrl is TEdit) then
+    TEdit(aCtrl).TabStop := False
+  else
+  if (aCtrl is TGroupBox) then
+  begin
+    TGroupBox(aCtrl).TabStop := False;
+    SubPanelDisableTabStop(TGroupBox(aCtrl));
+  end;
+end;
+
+
+procedure TFormMain.SubPanelDisableTabStop(aPanel: TWinControl);
+var
+  I: Integer;
+begin
+  for I := 0 to aPanel.ControlCount - 1 do
+  begin
+    aPanel.TabStop := False;
+    ControlDisableTabStop(aPanel.Controls[I]);
+  end;
+end;
+
+
 procedure TFormMain.ResetControl(aCtrl: TControl);
 
   function SkipReset(aCtrl: TControl): Boolean;
@@ -1023,7 +1196,8 @@ procedure TFormMain.ResetControl(aCtrl: TControl);
     Result := {$IFDEF WDC}
                  (aCtrl = chkSnowHouses)
               or (aCtrl = chkLoadUnsupSaves)
-              or (aCtrl = chkDebugScripting);
+              or (aCtrl = chkDebugScripting)
+              or (aCtrl = tbWaterLight);
               {$ENDIF}
               {$IFDEF FPC} False; {$ENDIF}
   end;
@@ -1043,7 +1217,12 @@ begin
                                or (aCtrl = chkShowOverlays)
   else
   if aCtrl is TTrackBar then
-    TTrackBar(aCtrl).Position := 0
+  begin
+    if aCtrl = tbWaterLight then
+      TTrackBar(aCtrl).Position := Round(DEFAULT_WATER_LIGHT_MULTIPLIER * 100)
+    else
+      TTrackBar(aCtrl).Position := 0
+  end
   else
   if (aCtrl is TRadioGroup)
     and (aCtrl <> rgDebugFont) then
@@ -1138,17 +1317,31 @@ begin
 end;
 
 
+procedure TFormMain.AfterFormCreated;
+begin
+  LoadDevSettings;
+  ConstrolsDisableTabStops;
+end;
+
+
+function TFormMain.AllowFindObjByUID: Boolean;
+begin
+  Result := // Update values only if Debug panel is opened or if we are debugging
+        ((SHOW_DEBUG_CONTROLS and not cpDebugInput.Collapsed)
+          or {$IFDEF DEBUG} True {$ELSE} False {$ENDIF}) // But its ok if we are in Debug build
+        and chkFindObjByUID.Checked     // and checkbox is checked
+        and gMain.IsDebugChangeAllowed; // and not in MP
+end;
+
+
 procedure TFormMain.SetEntitySelected(aEntityUID: Integer; aEntity2UID: Integer = 0);
 begin
-  // Update values only if Debug panel is opened or if we are debugging
-  if not SHOW_DEBUG_CONTROLS and {$IFDEF DEBUG} False {$ELSE} True {$ENDIF} then Exit;
-  // Can't change anything if debug change is not allowed
-  if not gMain.IsDebugChangeAllowed then Exit;
+  if not AllowFindObjByUID then Exit;
 
   seEntityUID.SetValueWithoutChange(aEntityUID);
   seWarriorUID.SetValueWithoutChange(aEntity2UID);
-
-  if GetKeyState(VK_CONTROL) < 0 then
+                                                                {TODO -oOwner -cGeneral : ActionItem}
+  if GetKeyState(VK_MENU) < 0 then
     seFindObjByUID.Value := aEntityUID // will trigger OnChange
   else
   if GetKeyState(VK_SHIFT) < 0 then
@@ -1164,6 +1357,8 @@ procedure TFormMain.ControlsRefill;
 begin
   fUpdating := True;
 
+  //todo: Fill in rgDebugFont with font names on init, instead of hardcode
+
   try
     {$IFDEF WDC}
     chkSnowHouses.        SetCheckedWithoutClick(gGameSettings.AllowSnowHouses); // Snow houses checkbox could be updated before game
@@ -1175,7 +1370,6 @@ begin
     chkSkipSound.         SetCheckedWithoutClick(SKIP_SOUND);
     chkShowGameTick.      SetCheckedWithoutClick(SHOW_GAME_TICK);
     chkBevel.             SetCheckedWithoutClick(SHOW_DEBUG_OVERLAY_BEVEL);
-    chkMonospacedFont.    SetCheckedWithoutClick(DEBUG_TEXT_MONOSPACED);
     rgDebugFont.ItemIndex := DEBUG_TEXT_FONT_ID;
     {$ENDIF}
 
@@ -1279,7 +1473,7 @@ begin
   if allowDebugChange then
   begin
     I := tbPassability.Position;
-    tbPassability.Max := Byte(High(TKMTerrainPassability));
+    tbPassability.Max := Ord(High(TKMTerrainPassability));
     Label2.Caption := IfThen(I <> 0, PASSABILITY_GUI_TEXT[TKMTerrainPassability(I)], '');
     SHOW_TERRAIN_PASS := I;
     SHOW_TERRAIN_WIRES := chkShowWires.Checked;
@@ -1328,7 +1522,7 @@ begin
       UpdateVisibleLayers(chkShowUnitRadius,    mlUnitsAttackRadius);
       UpdateVisibleLayers(chkShowDefencePos,    mlDefencesAll);
       UpdateVisibleLayers(chkShowFlatTerrain,   mlFlatTerrain);
-    chkShowTowerRadius.Tag := 5;
+      chkShowTowerRadius.Tag := 5;
     end;
     {$ENDIF}
 
@@ -1336,7 +1530,12 @@ begin
     SKIP_SOUND := chkSkipSound.Checked;
     DISPLAY_SOUNDS := chkPaintSounds.Checked;
 
-    btFindObjByUIDClick(nil);
+    gbFindObjByUID.Enabled := chkFindObjByUID.Checked;
+
+    if AllowFindObjByUID then
+      btFindObjByUIDClick(nil)
+    else
+      FindObjByUID(0);
   end;
 
   //AI
@@ -1371,6 +1570,7 @@ begin
   SHOW_CONTROLS_ID := chkUIControlsID.Checked;
   SHOW_FOCUSED_CONTROL := chkUIFocusedControl.Checked;
   SHOW_CONTROL_OVER := chkUIControlOver.Checked;
+  SKIP_RENDER_TEXT := chkSkipRenderText.Checked;
 
   {$IFDEF WDC} //one day update .lfm for lazarus...
 //  ALLOW_SNOW_HOUSES := chkSnowHouses.Checked;
@@ -1395,10 +1595,15 @@ begin
       gMain.Render;
     end;
     HOUSE_BUILDING_STEP := tbBuildingStep.Position / tbBuildingStep.Max;
+
+    WATER_LIGHT_MULTIPLIER := tbWaterLight.Position / 100;
+    lblWaterLight.Caption := 'Water light x' + ReplaceStr(FormatFloat('0.##', WATER_LIGHT_MULTIPLIER), ',', '.');
   end;
 
   //Logs
-  SHOW_LOGS_IN_CHAT := chkLogsShowInChat.Checked;
+  SHOW_LOG_IN_CHAT := chkLogShowInChat.Checked;
+  SHOW_LOG_IN_GUI := chkLogShowInGUI.Checked;
+  UPDATE_LOG_FOR_GUI := chkLogUpdateForGUI.Checked;
   LOG_GAME_TICK := chkLogGameTick.Checked;
 
   if allowDebugChange then
@@ -1452,7 +1657,6 @@ begin
   if allowDebugChange then
   begin
     SHOW_DEBUG_OVERLAY_BEVEL := chkBevel.Checked;
-    DEBUG_TEXT_MONOSPACED := chkMonospacedFont.Checked;
     DEBUG_TEXT_FONT_ID := rgDebugFont.ItemIndex;
   end;
 
@@ -1800,6 +2004,16 @@ end;
 procedure TFormMain.ResourceValues1Click(Sender: TObject);
 begin
   gRes.Wares.ExportCostsTable('ResourceValues.txt');
+end;
+
+
+procedure TFormMain.radioGroupExit(Sender: TObject);
+var
+  I: Integer;
+begin
+  // Tricky way to disable TabStop on TRadioGroup
+  for I := 0 to TRadioGroup(Sender).ControlCount - 1 do
+    TRadioButton(TRadioGroup(Sender).Controls[I]).TabStop := False;
 end;
 
 

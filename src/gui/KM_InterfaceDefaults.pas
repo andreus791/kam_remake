@@ -6,30 +6,10 @@ uses
   {$IFDEF Unix} LCLType, {$ENDIF}
   Controls, Classes,
   KM_Controls, KM_Points, KM_ResFonts,
-  KM_ResTypes;
+  KM_ResTypes, KM_InterfaceTypes;
 
 
 type
-  TUIMode = (umSP, umMP, umReplay, umSpectate);
-  TUIModeSet = set of TUIMode;
-
-  TKMMenuPageType =  (gpMainMenu,
-                        gpSinglePlayer,
-                          gpCampaign,
-                          gpCampSelect,
-                          gpSingleMap,
-                          gpLoad,
-                        gpMultiplayer,
-                          gpLobby,
-                        gpReplays,
-                        gpMapEditor,
-                        gpOptions,
-                        gpCredits,
-                      gpLoading,
-                      gpError);
-  TGUIEvent = procedure (Sender: TObject; Dest: TKMMenuPageType) of object;
-  TKMMenuChangeEventText = procedure (Dest: TKMMenuPageType; const aText: UnicodeString = '') of object;
-
   TKMMenuPageCommon = class
   protected
     fMenuType: TKMMenuPageType;
@@ -75,7 +55,7 @@ type
     procedure KeyPress(Key: Char); virtual;
     procedure KeyUp(Key: Word; Shift: TShiftState; var aHandled: Boolean); virtual;
     //Child classes don't pass these events to controls depending on their state
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); virtual; abstract;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); virtual;
     procedure MouseMove(Shift: TShiftState; X,Y: Integer); overload;
     procedure MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean); overload; virtual; abstract;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); virtual; abstract;
@@ -113,25 +93,9 @@ type
   end;
 
 
-const
-  //Options sliders
-  OPT_SLIDER_MIN = 0;
-  OPT_SLIDER_MAX = 20;
-  MAX_SAVENAME_LENGTH = 50;
-
-  CHAT_MENU_ALL = -1;
-  CHAT_MENU_TEAM = -2;
-  CHAT_MENU_SPECTATORS = -3;
-
-  RESULTS_X_PADDING = 50;
-
 var
   MAPED_SUBMENU_HOTKEYS: array[0..5] of TKMKeyFunction;
   MAPED_SUBMENU_ACTIONS_HOTKEYS: array[0..SUB_MENU_ACTIONS_CNT - 1] of TKMKeyFunction;
-
-
-const
-  ITEM_NOT_LOADED = -100; // smth, but not -1, as -1 is used for ColumnBox.ItemIndex, when no item is selected
 
 
 implementation
@@ -139,7 +103,8 @@ uses
   SysUtils, KM_Resource, KM_ResKeys, KM_RenderUI, KM_Defaults, KM_DevPerfLog, KM_DevPerfLogTypes,
   KM_Music,
   KM_Sound,
-  KM_GameSettings;
+  KM_GameSettings,
+  KM_Main;
 
 
 { TKMUserInterface }
@@ -166,15 +131,15 @@ end;
 
 procedure TKMUserInterfaceCommon.AfterCreateComplete;
 var
-  HintBase: TKMPoint;
+  hintBase: TKMPoint;
 begin
-  HintBase := GetHintPositionBase;
+  hintBase := GetHintPositionBase;
   //Hints should be created last, as they should be above everything in UI, to be show on top of all other Controls
-  Bevel_HintBG := TKMBevel.Create(Panel_Main, HintBase.X + 35, HintBase.Y - 23, 300, 21);
+  Bevel_HintBG := TKMBevel.Create(Panel_Main, hintBase.X + 35, hintBase.Y - 23, 300, 21);
   Bevel_HintBG.BackAlpha := 0.5;
   Bevel_HintBG.EdgeAlpha := 0.5;
   Bevel_HintBG.Hide;
-  Label_Hint := TKMLabel.Create(Panel_Main, HintBase.X + 40, HintBase.Y - 21, 0, 0, '', GetHintFont, taLeft);
+  Label_Hint := TKMLabel.Create(Panel_Main, hintBase.X + 40, hintBase.Y - 21, 0, 0, '', GetHintFont, taLeft);
 
   // Controls without a hint will reset the Hint to ''
   fMyControls.OnHint := DisplayHint;
@@ -189,7 +154,7 @@ end;
 
 procedure TKMUserInterfaceCommon.DisplayHint(Sender: TObject);
 var
-  TxtSize: TKMPoint;
+  txtSize: TKMPoint;
 begin
   if (Label_Hint = nil) or (Bevel_HintBG = nil) then
     Exit;
@@ -213,9 +178,9 @@ begin
     if SHOW_CONTROLS_ID then
       Label_Hint.Caption := Label_Hint.Caption + ' ' + TKMControl(Sender).GetIDsStr;
 
-    TxtSize := gRes.Fonts[Label_Hint.Font].GetTextSize(Label_Hint.Caption);
-    Bevel_HintBG.Width := 10 + TxtSize.X;
-    Bevel_HintBG.Height := 2 + TxtSize.Y;
+    txtSize := gRes.Fonts[Label_Hint.Font].GetTextSize(Label_Hint.Caption);
+    Bevel_HintBG.Width := 10 + txtSize.X;
+    Bevel_HintBG.Height := 2 + txtSize.Y;
     Bevel_HintBG.Top := GetHintPositionBase.Y - Bevel_HintBG.Height - 2;
     Bevel_HintBG.Show;
     Label_Hint.Top := Bevel_HintBG.Top + 2;
@@ -223,6 +188,13 @@ begin
   end;
 
   fPrevHint := Sender;
+end;
+
+
+procedure TKMUserInterfaceCommon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  // Defocus debug controls on any inout in the player GUI
+  gMain.FormMain.Defocus;
 end;
 
 
@@ -320,9 +292,10 @@ end;
 
 
 procedure TKMUserInterfaceCommon.MouseMove(Shift: TShiftState; X, Y: Integer);
-var MouseMoveHandled: Boolean;
+var
+  mouseMoveHandled: Boolean;
 begin
-  MouseMove(Shift, X, Y, MouseMoveHandled);
+  MouseMove(Shift, X, Y, mouseMoveHandled);
 end;
 
 
@@ -334,7 +307,7 @@ end;
 
 procedure TKMUserInterfaceCommon.Resize(X, Y: Word);
 var
-  HintBase: TKMPoint;
+  hintBase: TKMPoint;
 begin
   Panel_Main.Width := X;
   Panel_Main.Height := Y;
@@ -342,17 +315,18 @@ begin
   if (Bevel_HintBG = nil) or (Label_Hint = nil) then
     Exit;
 
-  HintBase := GetHintPositionBase;
-  Bevel_HintBG.Left := HintBase.X + 35;
-  Bevel_HintBG.Top := HintBase.Y - 23;
-  Label_Hint.Left := HintBase.X + 40;
-  Label_Hint.Top := HintBase.Y - 21;
+  hintBase := GetHintPositionBase;
+  Bevel_HintBG.Left := hintBase.X + 35;
+  Bevel_HintBG.Top := hintBase.Y - 23;
+  Label_Hint.Left := hintBase.X + 40;
+  Label_Hint.Top := hintBase.Y - 21;
 end;
 
 
 procedure TKMUserInterfaceCommon.UpdateState(aTickCount: Cardinal);
 begin
   inherited;
+
   fMyControls.UpdateState(aTickCount);
 end;
 

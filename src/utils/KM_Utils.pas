@@ -11,7 +11,7 @@ uses
   {$IFDEF FPC} FileUtil, {$ENDIF}
   {$IFDEF WDC} IOUtils, {$ENDIF}
 	SysUtils, StrUtils, Classes, Controls,
-  KM_Terrain,
+  KM_TerrainTypes,
   KM_Defaults, KM_CommonTypes, KM_CommonClasses, KM_Points,
   KM_ResTypes;
 
@@ -37,6 +37,8 @@ uses
   function GetTerrainTileBasic(aTile: TKMTerrainTile): TKMTerrainTileBasic;
 
   procedure IterateOverArea(const aStartCell: TKMPoint; aSize: Integer; aIsSquare: Boolean; aOnCell: TPointEventSimple; aAroundArea: Boolean = False);
+
+  function IsUnderWine: Boolean;
 
 
 implementation
@@ -307,7 +309,7 @@ begin
 end;
 
 
-function GetHintWHotKey(const aText: String; aKeyFunc: TKMKeyFunction): String; overload;
+function GetHintWHotKey(const aText: String; aKeyFunc: TKMKeyFunction): String;
 var
   hotKeyStr: String;
 begin
@@ -332,6 +334,20 @@ end;
 function GetHintWHotKey(aTextId: Integer; aKeyFunc: TKMKeyFunction): String;
 begin
   Result := GetHintWHotKey(aTextId, gResKeys.GetKeyNameById(aKeyFunc));
+end;
+
+
+function IsUnderWine: Boolean;
+var
+  H: Cardinal;
+begin
+  Result := False;
+  H := LoadLibrary('ntdll.dll');
+  if H > HINSTANCE_ERROR then
+  begin
+    Result := Assigned(GetProcAddress(H, 'wine_get_version'));
+    FreeLibrary(H);
+  end;
 end;
 
 

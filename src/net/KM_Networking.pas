@@ -3,7 +3,8 @@ unit KM_Networking;
 interface
 uses
   {$IFDEF Unix} LCLIntf, {$ENDIF}
-  Classes, SysUtils, TypInfo, Forms, KromUtils,
+  Classes, SysUtils, TypInfo, Forms, Generics.Collections,
+  KromUtils,
   KM_Console,
   KM_CommonClasses, KM_CommonTypes, KM_NetworkClasses, KM_NetworkTypes, KM_Defaults, KM_Points,
   KM_Saves, KM_GameOptions, KM_ResLocales, KM_NetFileTransfer, KM_Maps, KM_MapTypes, KM_NetPlayersList,
@@ -50,7 +51,7 @@ type
     fJoinTimeout, fLastVoteTime: Cardinal;
     fReturnedToLobby: Boolean; //Did we get to the lobby by return to lobby feature?
     fNetPlayers: TKMNetPlayersList;
-    fMutedPlayersList: TList; // List of ServerIndexes of muted players.
+    fMutedPlayersList: TList<Integer>; // List of ServerIndexes of muted players.
     fMyPlayerCurrentFPS: Cardinal;
 
     fMapInfo: TKMapInfo; // Everything related to selected map
@@ -278,10 +279,10 @@ begin
   fServerQuery := TKMServerQuery.Create(aMasterServerAddress, aServerUDPScanPort);
   fNetGameOptions := TKMGameOptions.Create;
   fFileSenderManager := TKMFileSenderManager.Create;
-  fMutedPlayersList := TList.Create;
+  fMutedPlayersList := TList<Integer>.Create;
   fFileSenderManager.OnTransferCompleted := TransferOnCompleted;
   fFileSenderManager.OnTransferPacket := TransferOnPacket;
-  gLog.OnLogMessage := PostLogMessageToChat;
+  gLog.AddOnLogEventSub(PostLogMessageToChat);
   fVoteReturnToLobbySucceeded := False;
 
   gNetworking := Self;
@@ -290,6 +291,7 @@ end;
 
 destructor TKMNetworking.Destroy;
 begin
+  gLog.RemoveOnLogEventSub(PostLogMessageToChat);
   fNetPlayers.Free;
   fNetServer.Free;
   fNetClient.Free;
@@ -1592,7 +1594,9 @@ end;
 
 procedure TKMNetworking.PostLogMessageToChat(const aLogMessage: UnicodeString);
 begin
-  if SHOW_LOGS_IN_CHAT then
+  if Self = nil then Exit;
+
+  if SHOW_LOG_IN_CHAT then
     PostLocalMessage(DeleteDoubleSpaces(aLogMessage), csNone);
 end;
 
@@ -2224,7 +2228,7 @@ begin
               begin
                 PlayerIndex := fNetPlayers.ServerToLocal(aSenderIndex);
 
-                if not fVoteReturnToLobbySucceeded  // Do not allow late mkVote after we received enought votes (if it comes while still in game and receiveing mk_readyToReturnToLobby)
+                if not fVoteReturnToLobbySucceeded  // Do not allow late mkVote after we received enough votes (if it comes while still in game and receiveing mk_readyToReturnToLobby)
                   and not fNetPlayers[PlayerIndex].VotedYes //No need to vote more than once
                   and (fNetPlayers.HasOnlySpectators or not fNetPlayers[PlayerIndex].IsSpectator) //spectators don't get to vote unless there's only spectators left
                   then
@@ -2512,8 +2516,7 @@ end;
 // Return if specified NetPlayer is muted locally
 function TKMNetworking.IsMuted(aNetPlayerIndex: Integer): Boolean;
 begin
-  //Use cast to Pointer to be able to store Integer value in TList
-  Result := (aNetPlayerIndex <> -1) and (fMutedPlayersList.IndexOf(Pointer(fNetPlayers[aNetPlayerIndex].IndexOnServer)) <> -1);
+  Result := (aNetPlayerIndex <> -1) and (fMutedPlayersList.IndexOf(fNetPlayers[aNetPlayerIndex].IndexOnServer) <> -1);
 end;
 
 
@@ -2536,12 +2539,11 @@ begin
   if gLog.IsDegubLogEnabled then
     gLog.LogDebug(Format('TKMNetworking.ToggleMuted: IndexOnServer for NetPlayer %d [%s] = %d',
                          [aNetPlayerIndex, fNetPlayers[aNetPlayerIndex].Nikname, fNetPlayers[aNetPlayerIndex].IndexOnServer]));
-  //Use cast to Pointer to be able to store Integer value in TList
-  ListIndex := fMutedPlayersList.IndexOf(Pointer(fNetPlayers[aNetPlayerIndex].IndexOnServer));
+  ListIndex := fMutedPlayersList.IndexOf(fNetPlayers[aNetPlayerIndex].IndexOnServer);
   if ListIndex <> -1 then
     fMutedPlayersList.Delete(ListIndex)
   else
-    fMutedPlayersList.Add(Pointer(fNetPlayers[aNetPlayerIndex].IndexOnServer));
+    fMutedPlayersList.Add(fNetPlayers[aNetPlayerIndex].IndexOnServer);
 end;
 
 

@@ -22,7 +22,7 @@ type
     //- Mission does not knows to which CampaignName/Map it belongs
     //- PathName to mission and savegame (incase mission is missing we can load .bas)
     fRepeatGameName: UnicodeString;
-    fRepeatMission: UnicodeString;
+    fRepeatMissionFileRel: UnicodeString;
     fRepeatSave: UnicodeString;
     fRepeatCampName: TKMCampaignId;
     fRepeatCampMap: Byte;
@@ -75,7 +75,8 @@ uses
   KM_ResTexts, KM_Game, KM_GameApp, KM_GameParams, KM_HandsCollection,
   KM_CommonUtils, KM_Resource, KM_Hand, KM_RenderUI, KM_ResFonts,
   KM_ResWares, KM_HandStats,
-  KM_ResTypes;
+  KM_ResTypes,
+  KM_InterfaceTypes;
 
 
 { TKMGUIMenuResultsSP }
@@ -135,7 +136,7 @@ begin
 
   //Remember which map we played so we could restart it
   fRepeatGameName := gGameParams.Name;
-  fRepeatMission := gGameParams.MissionFile;
+  fRepeatMissionFileRel := gGameParams.MissionFileRel;
   fRepeatSave := gGame.SaveFile;
   fRepeatCampName := gGame.CampaignName;
   fRepeatCampMap := gGame.CampaignMap;
@@ -504,7 +505,7 @@ end;
 procedure TKMGameResultsSP.RepeatClick(Sender: TObject);
 begin
   // Means replay last map
-  gGameApp.NewRestartLast(fRepeatGameName, fRepeatMission, fRepeatSave, fGameMode, fRepeatCampName, fRepeatCampMap,
+  gGameApp.NewRestartLast(fRepeatGameName, fRepeatMissionFileRel, fRepeatSave, fGameMode, fRepeatCampName, fRepeatCampMap,
                           fRepeatLocation, fRepeatColor, fRepeatDifficulty, fRepeatAIType);
 end;
 

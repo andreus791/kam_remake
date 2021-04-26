@@ -312,12 +312,15 @@ begin
          GetEnumName(TypeInfo(TKMScriptEventType), Integer(aEventType)));
   for I := Low(fEventHandlers[aEventType]) to High(fEventHandlers[aEventType]) do
     if UpperCase(fEventHandlers[aEventType][I].ProcName) = UpperCase(aEventHandlerName) then
+    begin
       fOnScriptError(sePreprocessorError,
                      Format('Duplicate event handler declaration ''%s'' for event ''%s''',
                      [aEventHandlerName, GetEnumName(TypeInfo(TKMScriptEventType), Integer(aEventType))]));
+      Exit;
+    end;
 
   Len := Length(fEventHandlers[aEventType]);
-  //TODO: rewrite it not to enlarge array by 1 element
+  //todo: rewrite it not to enlarge array by 1 element
   SetLength(fEventHandlers[aEventType], Len + 1);
   fEventHandlers[aEventType][Len].ProcName := aEventHandlerName;
 end;
@@ -328,11 +331,13 @@ begin
   Assert((Trim(aCmdName) <> '') and (Trim(aProcName) <> ''),
          Format('Console command name and procedure name should be specified: [CmdName = %s] [ProcName = [', [aCmdName, aProcName]));
 
-
   if fConsoleCommands.ContainsKey(AnsiString(LowerCase(aCmdName))) then
+  begin
     fOnScriptError(sePreprocessorError,
                    Format('Duplicate command declaration: [%s] , command procedure: [%s]',
                    [aCmdName, aProcName]));
+    Exit;
+  end;
 
   fConsoleCommands.Add(AnsiString(LowerCase(aCmdName)), TKMConsoleCommand.Create(aCmdName, aProcName));
 end;
@@ -503,10 +508,13 @@ var
   e: Exception;
 begin
   e := Exception(AcquireExceptionObject);
-  e.Message := e.Message + ' raised in ' + AMethod;
+  e.Message := e.Message + ' raised in ' + aMethod;
   if ExceptionOutsideScript then
   begin
     ExceptionOutsideScript := False; //Reset
+    {$IFDEF WDC}
+    e.Message := e.Message + sLineBreak + 'stacktrace: ' + sLineBreak + e.StackTrace;
+    {$ENDIF}
     raise e at ExceptAddr; //Exception was in game code not script, so pass up to madExcept
   end
   else
